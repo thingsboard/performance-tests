@@ -29,16 +29,16 @@ class MqttSimulation extends Simulation {
   val deviceCredentialsIds: Array[String] = MqttStressTestTool.createDevices(testParams).asScala.toArray
 
   val mqttConf = mqtt
-    .host("tcp://localhost:1883")
+    .host(testParams.getMqttUrls.head)
     .userName("${deviceCredentialsId}")
 
   val connect = exec(mqtt("connect")
     .connect())
 
-  val publish = repeat(100) {
+  val publish = repeat(testParams.getPublishTelemetryCount.toInt) {
     exec(mqtt("publish")
       .publish("v1/devices/me/telemetry", "{\"key1\":\"value1\", \"key2\":\"value2\"}", QoS.AT_LEAST_ONCE, retain = false))
-      .pause(100 milliseconds)
+      .pause(testParams.getPublishTelemetryPause milliseconds)
   }
 
   val deviceCredentialsIdsFeeder = deviceCredentialsIds.map( x => {Map("deviceCredentialsId" -> x)})
