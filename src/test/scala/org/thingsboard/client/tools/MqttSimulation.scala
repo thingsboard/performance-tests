@@ -41,11 +41,14 @@ class MqttSimulation extends Simulation {
       .pause(testParams.getPublishTelemetryPause milliseconds)
   }
 
+  val disconnect = exec(mqtt("disconnect")
+    .disconnect())
+
   val deviceCredentialsIdsFeeder = deviceCredentialsIds.map( x => {Map("deviceCredentialsId" -> x)})
 
   val scn = scenario("Scenario Name")
     .feed(deviceCredentialsIdsFeeder)
-    .exec(connect, publish)
+    .exec(connect, publish, disconnect)
 
   setUp(
     scn
