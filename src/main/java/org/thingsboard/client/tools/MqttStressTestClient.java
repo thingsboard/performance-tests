@@ -69,7 +69,6 @@ public class MqttStressTestClient {
     }
 
 
-
     public void warmUp(byte[] data) throws MqttException {
         MqttMessage msg = new MqttMessage(data);
         client.publish("v1/devices/me/telemetry", msg, null, new IMqttActionListener() {
@@ -81,24 +80,5 @@ public class MqttStressTestClient {
             public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
             }
         }).waitForCompletion();
-    }
-
-
-    public void publishTelemetry(byte[] data) throws MqttException {
-        long sendTime = System.currentTimeMillis();
-        MqttMessage msg = new MqttMessage(data);
-        client.publish("v1/devices/me/telemetry", msg, null, new IMqttActionListener() {
-            @Override
-            public void onSuccess(IMqttToken asyncActionToken) {
-                long ackTime = System.currentTimeMillis();
-                results.onResult(true, ackTime - sendTime);
-            }
-
-            @Override
-            public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                long failTime = System.currentTimeMillis();
-                results.onResult(false, failTime - sendTime);
-            }
-        });
     }
 }

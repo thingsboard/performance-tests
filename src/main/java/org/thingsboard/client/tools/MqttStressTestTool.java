@@ -24,11 +24,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -42,61 +37,13 @@ public class MqttStressTestTool {
     private static List<MqttStressTestClient> clients = new ArrayList<>();
     private static List<IMqttToken> connectTokens = new ArrayList<>();
 
-    public static void main(String[] args) throws Exception {
-        TestParams params = new TestParams();
-        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(10);
-
-        if (params.getDuration() % params.getIterationInterval() != 0) {
-            throw new IllegalArgumentException("Test Duration % Iteration Interval != 0");
-        }
-
-        if ((params.getIterationInterval() * 1000) % params.getDeviceCount() != 0) {
-            throw new IllegalArgumentException("Iteration Interval % Device Count != 0");
-        }
-
-        createDevices(params);
-
-        long startTime = System.currentTimeMillis();
-        int iterationsCount = (int) (params.getDuration() / params.getIterationInterval());
-        int subIterationMicroSeconds = (int) ((params.getIterationInterval() * 1000) / params.getDeviceCount());
-
-        List<ScheduledFuture<Void>> iterationFutures = new ArrayList<>();
-        for (int i = 0; i < iterationsCount; i++) {
-            long delay = i * params.getIterationInterval();
-            iterationFutures.add(scheduler.schedule((Callable<Void>) () -> {
-                long sleepMicroSeconds = 0L;
-                for (MqttStressTestClient client : clients) {
-                    client.publishTelemetry(data);
-                    sleepMicroSeconds += subIterationMicroSeconds;
-                    if (sleepMicroSeconds > 1000) {
-                        Thread.sleep(sleepMicroSeconds / 1000);
-                        sleepMicroSeconds = sleepMicroSeconds % 1000;
-                    }
-                }
-                return null;
-            }, delay, TimeUnit.MILLISECONDS));
-        }
-
-        for (ScheduledFuture<Void> future : iterationFutures) {
-            future.get();
-        }
-
-        Thread.sleep(1000);
-
-        for (MqttStressTestClient client : clients) {
-            client.disconnect();
-        }
-        log.info("Results: {} took {}ms", results, System.currentTimeMillis() - startTime);
-        scheduler.shutdownNow();
-    }
-
-  /**
-   * Returns list of device credential IDs
-   *
-   * @param params
-   * @return
-   * @throws Exception
-   */
+    /**
+     * Returns list of device credential IDs
+     *
+     * @param params
+     * @return
+     * @throws Exception
+     */
     public static List<String> createDevices(TestParams params) throws Exception {
         AtomicLong value = new AtomicLong(Long.MAX_VALUE);
         log.info("value: {} ", value.incrementAndGet());
@@ -127,6 +74,10 @@ public class MqttStressTestTool {
         }
 
         Thread.sleep(1000);
+
+        for (MqttStressTestClient client : clients) {
+            client.disconnect();
+        }
 
         return deviceCredentialsIds;
     }

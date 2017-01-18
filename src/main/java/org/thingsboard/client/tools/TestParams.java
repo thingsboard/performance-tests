@@ -19,13 +19,10 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.util.Properties;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class TestParams {
     static final String TEST_PROPERTIES = "test.properties";
-    static final long DEFAULT_TEST_DURATION = TimeUnit.SECONDS.toMillis(1);
-    static final long DEFAULT_TEST_INTERVAL = TimeUnit.MILLISECONDS.toMillis(100);
     static final int DEFAULT_DEVICE_COUNT = 1000;
     static final int DEFAULT_PUBLISH_TELEMETRY_COUNT = 100;
     static final int DEFAULT_PUBLISH_TELEMETRY_PAUSE = 100;
@@ -42,14 +39,6 @@ public class TestParams {
         } catch (Exception e) {
             log.warn("Failed to read " + TEST_PROPERTIES);
         }
-    }
-
-    public long getDuration() {
-        return Long.valueOf(params.getProperty("durationMs", Long.toString(DEFAULT_TEST_DURATION)));
-    }
-
-    public long getIterationInterval() {
-        return Long.valueOf(params.getProperty("iterationIntervalMs", Long.toString(DEFAULT_TEST_INTERVAL)));
     }
 
     public int getDeviceCount() {
