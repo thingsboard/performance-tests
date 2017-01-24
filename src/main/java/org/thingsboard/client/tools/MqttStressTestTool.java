@@ -49,34 +49,27 @@ public class MqttStressTestTool {
         log.info("value: {} ", value.incrementAndGet());
 
         RestClient restClient = new RestClient(params.getRestApiUrl());
-        restClient.login(params.getUsername(), params.getPassword());
-
         List<String> deviceCredentialsIds = new ArrayList<>();
-        for (int i = 0; i < params.getDeviceCount(); i++) {
-            Device device = restClient.createDevice("Device " + UUID.randomUUID());
-            DeviceCredentials credentials = restClient.getCredentials(device.getId());
-            String[] mqttUrls = params.getMqttUrls();
-            String mqttURL = mqttUrls[i % mqttUrls.length];
-            MqttStressTestClient client = new MqttStressTestClient(results, mqttURL, credentials.getCredentialsId());
 
-            deviceCredentialsIds.add(credentials.getCredentialsId());
+        for (String credentialStr : params.getCredentials()) {
+            String userName = credentialStr.split("/")[0];
+            String password = credentialStr.split("/")[1];
+            restClient.login(userName, password);
 
-            connectTokens.add(client.connect());
-            clients.add(client);
-        }
+            for (int i = 0; i < params.getDeviceCount(); i++) {
+                Device device = restClient.createDevice("Device " + UUID.randomUUID());
+                DeviceCredentials credentials = restClient.getCredentials(device.getId());
+                String[] mqttUrls = params.getMqttUrls();
+                String mqttURL = mqttUrls[i % mqttUrls.length];
+                MqttStressTestClient client = new MqttStressTestClient(results, mqttURL, credentials.getCredentialsId());
 
-        for (IMqttToken tokens : connectTokens) {
-            tokens.waitForCompletion();
-        }
+                deviceCredentialsIds.add(credentials.getCredentialsId());
+                client.connect().waitForCompletion();
+                client.warmUp(data);
+                client.disconnect();
+            }
 
-        for (MqttStressTestClient client : clients) {
-            client.warmUp(data);
-        }
-
-        Thread.sleep(1000);
-
-        for (MqttStressTestClient client : clients) {
-            client.disconnect();
+            Thread.sleep(1000);
         }
 
         return deviceCredentialsIds;
