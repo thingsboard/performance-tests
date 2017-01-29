@@ -34,8 +34,6 @@ public class MqttStressTestTool {
 
     private static byte[] data = "{\"longKey\":73}".getBytes(StandardCharsets.UTF_8);
     private static ResultAccumulator results = new ResultAccumulator();
-    private static List<MqttStressTestClient> clients = new ArrayList<>();
-    private static List<IMqttToken> connectTokens = new ArrayList<>();
 
     /**
      * Returns list of device credential IDs
@@ -48,15 +46,16 @@ public class MqttStressTestTool {
         AtomicLong value = new AtomicLong(Long.MAX_VALUE);
         log.info("value: {} ", value.incrementAndGet());
 
-        RestClient restClient = new RestClient(params.getRestApiUrl());
+
         List<String> deviceCredentialsIds = new ArrayList<>();
 
         for (String credentialStr : params.getCredentials()) {
+            RestClient restClient = new RestClient(params.getRestApiUrl());
             String userName = credentialStr.split("/")[0];
             String password = credentialStr.split("/")[1];
             restClient.login(userName, password);
 
-            for (int i = 0; i < params.getDeviceCount(); i++) {
+            for (int i = 0; i < params.getDeviceCount() / params.getCredentials().length; i++) {
                 Device device = restClient.createDevice("Device " + UUID.randomUUID());
                 DeviceCredentials credentials = restClient.getCredentials(device.getId());
                 String[] mqttUrls = params.getMqttUrls();
@@ -68,7 +67,6 @@ public class MqttStressTestTool {
                 client.warmUp(data);
                 client.disconnect();
             }
-
             Thread.sleep(1000);
         }
 

@@ -37,7 +37,7 @@ class MqttSimulation extends Simulation {
 
   val publish = repeat(testParams.getPublishTelemetryCount.toInt) {
     exec(mqtt("publish")
-      .publish("v1/devices/me/telemetry", "{\"key1\":\"value1\", \"key2\":\"value2\"}", QoS.AT_LEAST_ONCE, retain = false))
+      .publish("v1/devices/me/telemetry", "{\"temp\":73.2}", QoS.AT_LEAST_ONCE, retain = false))
       .pause(testParams.getPublishTelemetryPause milliseconds)
   }
 
@@ -52,7 +52,7 @@ class MqttSimulation extends Simulation {
 
   setUp(
     scn
-      .inject(constantUsersPerSec(testParams.getDeviceCount) during (1 seconds))
+      .inject(rampUsers(testParams.getDeviceCount) over (1 seconds))
   ).protocols(mqttConf)
 
 }
