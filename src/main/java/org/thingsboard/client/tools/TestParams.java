@@ -28,7 +28,8 @@ public class TestParams {
     static final int DEFAULT_PUBLISH_TELEMETRY_PAUSE = 100;
     static final String DEFAULT_REST_URL = "http://localhost:8080";
     static final String DEFAULT_MQTT_URLS = "tcp://localhost:1883";
-    static final String DEFAULT_CREDENTIALS = "tenant@thingsboard.org:tenant";
+    static final String DEFAULT_USERNAME = "tenant@thingsboard.org";
+    static final String DEFAULT_PASSWORD = "tenant";
 
     private Properties params = new Properties();
 
@@ -52,8 +53,12 @@ public class TestParams {
         return params.getProperty("mqttUrls", DEFAULT_MQTT_URLS).split(",");
     }
 
-    public String[] getCredentials() {
-        return params.getProperty("credentials", DEFAULT_CREDENTIALS).split(",");
+    public String getUsername() {
+        return params.getProperty("username", DEFAULT_USERNAME);
+    }
+
+    public String getPassword() {
+        return params.getProperty("password", DEFAULT_PASSWORD);
     }
 
     public int getPublishTelemetryCount() {

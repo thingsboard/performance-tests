@@ -16,7 +16,6 @@
 package org.thingsboard.client.tools;
 
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.paho.client.mqttv3.IMqttToken;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.security.DeviceCredentials;
 
@@ -46,29 +45,24 @@ public class MqttStressTestTool {
         AtomicLong value = new AtomicLong(Long.MAX_VALUE);
         log.info("value: {} ", value.incrementAndGet());
 
-
         List<String> deviceCredentialsIds = new ArrayList<>();
 
-        for (String credentialStr : params.getCredentials()) {
-            RestClient restClient = new RestClient(params.getRestApiUrl());
-            String userName = credentialStr.split("/")[0];
-            String password = credentialStr.split("/")[1];
-            restClient.login(userName, password);
+        RestClient restClient = new RestClient(params.getRestApiUrl());
+        restClient.login(params.getUsername(), params.getPassword());
 
-            for (int i = 0; i < params.getDeviceCount() / params.getCredentials().length; i++) {
-                Device device = restClient.createDevice("Device " + UUID.randomUUID());
-                DeviceCredentials credentials = restClient.getCredentials(device.getId());
-                String[] mqttUrls = params.getMqttUrls();
-                String mqttURL = mqttUrls[i % mqttUrls.length];
-                MqttStressTestClient client = new MqttStressTestClient(results, mqttURL, credentials.getCredentialsId());
+        for (int i = 0; i < params.getDeviceCount(); i++) {
+            Device device = restClient.createDevice("Device " + UUID.randomUUID());
+            DeviceCredentials credentials = restClient.getCredentials(device.getId());
+            String[] mqttUrls = params.getMqttUrls();
+            String mqttURL = mqttUrls[i % mqttUrls.length];
+            MqttStressTestClient client = new MqttStressTestClient(results, mqttURL, credentials.getCredentialsId());
 
-                deviceCredentialsIds.add(credentials.getCredentialsId());
-                client.connect().waitForCompletion();
-                client.warmUp(data);
-                client.disconnect();
-            }
-            Thread.sleep(1000);
+            deviceCredentialsIds.add(credentials.getCredentialsId());
+            client.connect().waitForCompletion();
+            client.warmUp(data);
+            client.disconnect();
         }
+        Thread.sleep(1000);
 
         return deviceCredentialsIds;
     }
