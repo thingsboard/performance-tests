@@ -52,7 +52,7 @@ class MqttSimulation extends Simulation {
 
   setUp(
     scn
-      .inject(rampUsers(testParams.getDeviceCount) over (1 seconds))
+      .inject(rampUsers(deviceCredentialsIds.length) over (1 seconds))
   ).protocols(mqttConf)
 
 }
