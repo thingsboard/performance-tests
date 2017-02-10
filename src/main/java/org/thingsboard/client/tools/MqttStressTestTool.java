@@ -51,16 +51,20 @@ public class MqttStressTestTool {
         restClient.login(params.getUsername(), params.getPassword());
 
         for (int i = 0; i < params.getDeviceCount(); i++) {
-            Device device = restClient.createDevice("Device " + UUID.randomUUID());
-            DeviceCredentials credentials = restClient.getCredentials(device.getId());
-            String[] mqttUrls = params.getMqttUrls();
-            String mqttURL = mqttUrls[i % mqttUrls.length];
-            MqttStressTestClient client = new MqttStressTestClient(results, mqttURL, credentials.getCredentialsId());
+            try {
+                Device device = restClient.createDevice("Device " + UUID.randomUUID());
+                DeviceCredentials credentials = restClient.getCredentials(device.getId());
+                String[] mqttUrls = params.getMqttUrls();
+                String mqttURL = mqttUrls[i % mqttUrls.length];
+                MqttStressTestClient client = new MqttStressTestClient(results, mqttURL, credentials.getCredentialsId());
 
-            deviceCredentialsIds.add(credentials.getCredentialsId());
-            client.connect().waitForCompletion();
-            client.warmUp(data);
-            client.disconnect();
+                deviceCredentialsIds.add(credentials.getCredentialsId());
+                client.connect().waitForCompletion();
+                client.warmUp(data);
+                client.disconnect();
+            } catch (Exception e) {
+                log.error("Error while creating device: {}", e);
+            }
         }
         Thread.sleep(1000);
 
