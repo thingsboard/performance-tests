@@ -9,13 +9,13 @@ spec:
     image: thingsboard/performance-tests:k8stest
     env:
     - name: REST_URL
-      value: "http://demo.thingsboard.io"
+      value: "http://localhost:8080"
     - name: MQTT_URLS
-      value: "tcp://demo.thingsboard.io:1883"
+      value: "tcp://localhost:1883"
     - name : DEVICE_COUNT
-      value: 2
+      value: 20000
     - name : PUBLISH_TELEMETRY_COUNT
-      value: 5
+      value: 60
     - name: PUBLISH_TELEMETRY_PAUSE
       value: 1000
     - name: USERNAMAE
