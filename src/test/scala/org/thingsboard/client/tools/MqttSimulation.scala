@@ -26,6 +26,15 @@ class MqttSimulation extends Simulation {
 
   val testParams = new TestParams()
 
+  println(s"Running test using following configuration: " +
+    s"restUrl = [${testParams.getRestApiUrl}], " +
+    s"mqttUrls = [${testParams.getMqttUrls.head}], " +
+    s"deviceCount = [${testParams.getDeviceCount}], " +
+    s"publishTelemetryCount = [${testParams.getPublishTelemetryCount}], " +
+    s"publishTelemetryPause = [${testParams.getPublishTelemetryPause}], " +
+    s"username = [${testParams.getUsername}], " +
+    s"password = [${testParams.getPassword}]")
+
   val deviceCredentialsIds: Array[String] = MqttStressTestTool.createDevices(testParams).asScala.toArray
 
   val mqttConf = mqtt

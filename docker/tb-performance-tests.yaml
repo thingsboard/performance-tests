@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: tb-performance-tests
+spec:
+  containers:
+  - name: tb-db-schema
+    imagePullPolicy: Always
+    image: thingsboard/performance-tests:k8stest
+    env:
+    - name: REST_URL
+      value: "http://demo.thingsboard.io"
+    - name: MQTT_URLS
+      value: "tcp://demo.thingsboard.io:1883"
+    - name : DEVICE_COUNT
+      value: 2
+    - name : PUBLISH_TELEMETRY_COUNT
+      value: 5
+    - name: PUBLISH_TELEMETRY_PAUSE
+      value: 1000
+    - name: USERNAMAE
+      value: "tenant@thingsboard.org"
+    - name : PASSWORD
+      value: "tenant"
+    command:
+    - sh
+    - -c
+    - ./run_tests.sh
+  restartPolicy: Never
