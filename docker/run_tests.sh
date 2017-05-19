@@ -45,7 +45,7 @@ function create_config() {
     echo "deviceCount=$DEVICE_COUNT" >> $TEST_PROJECT_CONFIG_FILE
     echo "publishTelemetryCount=$PUBLISH_TELEMETRY_COUNT" >> $TEST_PROJECT_CONFIG_FILE
     echo "publishTelemetryPause=$PUBLISH_TELEMETRY_PAUSE" >> $TEST_PROJECT_CONFIG_FILE
-    echo "username=USERNAME" >> $TEST_PROJECT_CONFIG_FILE
+    echo "username=$USERNAME" >> $TEST_PROJECT_CONFIG_FILE
     echo "password=$PASSWORD" >> $TEST_PROJECT_CONFIG_FILE
     echo "Wrote performance test configuration file to $TEST_PROJECT_CONFIG_FILE"
 }
