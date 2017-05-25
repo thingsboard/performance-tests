@@ -21,39 +21,7 @@ spec:
     - name: PUBLISH_TELEMETRY_PAUSE
       value: "500"
     - name: USERNAME
-      value: "tenant2@thingsboard.org"
-    - name : PASSWORD
-      value: "tenant"
-    command:
-    - sh
-    - -c
-    - ./run_tests.sh
-  restartPolicy: Never
----
-apiVersion: v1
-kind: Pod
-metadata:
-  name: tb-performance-tests-2
-spec:
-  nodeSelector:
-    machinetype: test
-  containers:
-  - name: tb-performance-tests-2
-    imagePullPolicy: Always
-    image: thingsboard/performance-tests:k8stest
-    env:
-    - name: REST_URL
-      value: "http://tb-service:8080"
-    - name: MQTT_URLS
-      value: "tcp://tb-service:1883"
-    - name : DEVICE_COUNT
-      value: "5000"
-    - name : PUBLISH_TELEMETRY_COUNT
-      value: "60"
-    - name: PUBLISH_TELEMETRY_PAUSE
-      value: "500"
-    - name: USERNAME
-      value: "tenant3@thingsboard.org"
+      value: "tenant@thingsboard.org"
     - name : PASSWORD
       value: "tenant"
     command:
