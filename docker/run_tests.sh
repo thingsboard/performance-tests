@@ -20,7 +20,7 @@ MQTT_URLS=${MQTT_URLS:-"tcp://localhost:1883"}
 DEVICE_COUNT=${DEVICE_COUNT:-"20000"}
 PUBLISH_TELEMETRY_COUNT=${PUBLISH_TELEMETRY_COUNT:-"60"}
 PUBLISH_TELEMETRY_PAUSE=${PUBLISH_TELEMETRY_PAUSE:-"1000"}
-USERNAMAE=${USERNAMAE:-"tenant@thingsboard.org"}
+USERNAME=${USERNAME:-"tenant@thingsboard.org"}
 PASSWORD=${PASSWORD:-"tenant"}
 
 TEST_PROJECT_DIR="/root/performance-tests"
@@ -45,7 +45,7 @@ function create_config() {
     echo "deviceCount=$DEVICE_COUNT" >> $TEST_PROJECT_CONFIG_FILE
     echo "publishTelemetryCount=$PUBLISH_TELEMETRY_COUNT" >> $TEST_PROJECT_CONFIG_FILE
     echo "publishTelemetryPause=$PUBLISH_TELEMETRY_PAUSE" >> $TEST_PROJECT_CONFIG_FILE
-    echo "username=$USERNAMAE" >> $TEST_PROJECT_CONFIG_FILE
+    echo "username=$USERNAME" >> $TEST_PROJECT_CONFIG_FILE
     echo "password=$PASSWORD" >> $TEST_PROJECT_CONFIG_FILE
     echo "Wrote performance test configuration file to $TEST_PROJECT_CONFIG_FILE"
 }

@@ -3,22 +3,24 @@ kind: Pod
 metadata:
   name: tb-performance-tests
 spec:
+  nodeSelector:
+    machinetype: test
   containers:
   - name: tb-performance-tests
     imagePullPolicy: Always
     image: thingsboard/performance-tests:k8stest
     env:
     - name: REST_URL
-      value: "http://localhost:8080"
+      value: "http://tb-service:8080"
     - name: MQTT_URLS
-      value: "tcp://localhost:1883"
+      value: "tcp://tb-service:1883"
     - name : DEVICE_COUNT
-      value: 20000
+      value: "5000"
     - name : PUBLISH_TELEMETRY_COUNT
-      value: 60
+      value: "60"
     - name: PUBLISH_TELEMETRY_PAUSE
-      value: 1000
-    - name: USERNAMAE
+      value: "500"
+    - name: USERNAME
       value: "tenant@thingsboard.org"
     - name : PASSWORD
       value: "tenant"
