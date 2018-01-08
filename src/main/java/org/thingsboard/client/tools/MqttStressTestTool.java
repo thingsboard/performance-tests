@@ -52,7 +52,7 @@ public class MqttStressTestTool {
 
         for (int i = 0; i < params.getDeviceCount(); i++) {
             try {
-                Device device = restClient.createDevice("Device " + UUID.randomUUID());
+                Device device = restClient.createDevice("Device " + UUID.randomUUID(), "default");
                 DeviceCredentials credentials = restClient.getCredentials(device.getId());
                 String[] mqttUrls = params.getMqttUrls();
                 String mqttURL = mqttUrls[i % mqttUrls.length];
