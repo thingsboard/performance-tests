@@ -19,8 +19,8 @@ FROM maven:3.5.0-jdk-8
 RUN mkdir /root/performance-tests
 
 COPY run_tests.sh /root/run_tests.sh
-COPY data-1.2.3.jar /root/data-1.2.3.jar
-COPY tools-1.2.3.jar /root/tools-1.2.3.jar
+COPY data-1.4.0.jar /root/data-1.4.0.jar
+COPY tools-1.4.0.jar /root/tools-1.4.0.jar
 COPY tb-gatling-1.0.0.jar /root/tb-gatling-1.0.0.jar
 COPY project-src.tar.gz /root/project-src.tar.gz
 COPY pom.xml /root/performance-tests/pom.xml
