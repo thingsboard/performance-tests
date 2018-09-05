@@ -17,3 +17,6 @@ Once params are configured to run test simple type from the root folder:
 ```bash
 mvn clean install gatling:execute
 ```
+1.update gatling-mqtt project and run 'install-local-gatling-mqtt.sh'
+2.udpate thingsboard and execute 'mvn clean install -DskipTests'
+3.update version of thingsboard and tools.jar,data.jar in the pom.xml
