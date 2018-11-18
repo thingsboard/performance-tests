@@ -1,4 +1,4 @@
-VERSION=k8stest
+VERSION=latest
 PROJECT=thingsboard
 APP=performance-tests
 

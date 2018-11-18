@@ -25,10 +25,10 @@
         </encoder>
     </appender>
 
-    <logger name="io.gatling.core.action.Pause" level="WARN"/>
-    <logger name="org.thingsboard" level="INFO" />
+    <logger name="io.gatling.core.action.Pause" level="DEBUG"/>
+    <logger name="org.thingsboard" level="DEBUG" />
 
-    <root level="INFO">
+    <root level="DEBUG">
         <appender-ref ref="STDOUT"/>
     </root>
 

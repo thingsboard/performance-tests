@@ -24,7 +24,7 @@ spec:
   containers:
   - name: tb-performance-tests
     imagePullPolicy: Always
-    image: thingsboard/performance-tests:k8stest
+    image: thingsboard/performance-tests:latest
     env:
     - name: REST_URL
       value: "http://tb-service:8080"

@@ -1,5 +1,5 @@
 #
-# Copyright © 2016-2017 The Thingsboard Authors
+# Copyright © 2016-2018 The Thingsboard Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,19 +14,17 @@
 # limitations under the License.
 #
 
-FROM maven:3.5.0-jdk-8
 
-RUN mkdir /root/performance-tests
+version: '2.2'
 
-COPY run_tests.sh /root/run_tests.sh
-COPY data-1.0.0.jar /root/data-1.0.0.jar
-COPY tools-1.0.0.jar /root/tools-1.0.0.jar
-COPY tb-gatling-1.0.0.jar /root/tb-gatling-1.0.0.jar
-COPY project-src.tar.gz /root/project-src.tar.gz
-COPY pom.xml /root/performance-tests/pom.xml
-
-RUN chmod +x /root/run_tests.sh
-
-WORKDIR /root
-
-CMD ["/root/run_tests.sh"]
+services:
+  tb-performance-tests:
+    image: "${DOCKER_REPO}/${PERFORMANCE_TESTS_DOCKER_NAME}:${TB_VERSION}"
+    environment:
+      REST_URL: "http://localhost:8080"
+      MQTT_URLS: "tcp://localhost:1883"
+      DEVICE_COUNT: 10
+      PUBLISH_TELEMETRY_COUNT: 60
+      PUBLISH_TELEMETRY_PAUSE: 1000
+      USERNAME: "tenant@thingsboard.org"
+      PASSWORD: "tenant"

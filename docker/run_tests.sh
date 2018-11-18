@@ -28,8 +28,8 @@ TEST_PROJECT_CONFIG_FILE="$TEST_PROJECT_DIR/src/main/resources/test.properties"
 
 function install_dependencies() {
     mvn install:install-file -Dfile=/root/tb-gatling-1.0.0.jar -DgroupId=org.thingsboard -DartifactId=gatling-mqtt -Dversion=1.0.0 -Dpackaging=jar
-    mvn install:install-file -Dfile=/root/tools-1.2.3.jar -DgroupId=org.thingsboard -DartifactId=tools -Dversion=1.2.3 -Dpackaging=jar
-    mvn install:install-file -Dfile=/root/data-1.2.3.jar -DgroupId=org.thingsboard.common -DartifactId=data -Dversion=1.2.3 -Dpackaging=jar
+    mvn install:install-file -Dfile=/root/tools-1.0.0.jar -DgroupId=org.thingsboard -DartifactId=tools -Dversion=1.0.0 -Dpackaging=jar
+    mvn install:install-file -Dfile=/root/data-1.0.0.jar -DgroupId=org.thingsboard.common -DartifactId=data -Dversion=1.0.0 -Dpackaging=jar
 }
 
 function install_project() {
