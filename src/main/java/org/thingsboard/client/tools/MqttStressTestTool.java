@@ -23,6 +23,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -33,6 +36,8 @@ public class MqttStressTestTool {
 
     private static byte[] data = "{\"longKey\":73}".getBytes(StandardCharsets.UTF_8);
     private static ResultAccumulator results = new ResultAccumulator();
+
+    private static final ExecutorService executor = Executors.newFixedThreadPool(100);
 
     /**
      * Returns list of device credential IDs
@@ -50,23 +55,29 @@ public class MqttStressTestTool {
         RestClient restClient = new RestClient(params.getRestApiUrl());
         restClient.login(params.getUsername(), params.getPassword());
 
+        CountDownLatch latch = new CountDownLatch(params.getDeviceCount());
         for (int i = 0; i < params.getDeviceCount(); i++) {
-            try {
-                Device device = restClient.createDevice("Device " + UUID.randomUUID(), "default");
-                DeviceCredentials credentials = restClient.getCredentials(device.getId());
-                String[] mqttUrls = params.getMqttUrls();
-                String mqttURL = mqttUrls[i % mqttUrls.length];
-                MqttStressTestClient client = new MqttStressTestClient(results, mqttURL, credentials.getCredentialsId());
+            int count = i;
+            executor.submit(() -> {
+                try {
+                    Device device = restClient.createDevice("Device " + UUID.randomUUID(), "default");
+                    DeviceCredentials credentials = restClient.getCredentials(device.getId());
+                    String[] mqttUrls = params.getMqttUrls();
+                    String mqttURL = mqttUrls[count % mqttUrls.length];
+                    MqttStressTestClient client = new MqttStressTestClient(results, mqttURL, credentials.getCredentialsId());
 
-                deviceCredentialsIds.add(credentials.getCredentialsId());
-                client.connect().waitForCompletion();
-                client.warmUp(data);
-                client.disconnect();
-            } catch (Exception e) {
-                log.error("Error while creating device: {}", e);
-            }
+                    deviceCredentialsIds.add(credentials.getCredentialsId());
+                    client.connect().waitForCompletion();
+                    client.warmUp(data);
+                    client.disconnect();
+                } catch (Exception e) {
+                    log.error("Error while creating device: {}", e);
+                } finally {
+                    latch.countDown();
+                }
+            });
         }
-        Thread.sleep(1000);
+        latch.await();
 
         return deviceCredentialsIds;
     }
