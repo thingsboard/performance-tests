@@ -31,15 +31,16 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <main.dir>${basedir}</main.dir>
-        <gatling.version>2.2.3</gatling.version>
-        <gatling-mqtt.version>1.0.0</gatling-mqtt.version>
-        <gatling-plugin.version>2.2.1</gatling-plugin.version>
-        <scala-maven-plugin.version>3.2.2</scala-maven-plugin.version>
-        <thingsboard.version>1.0.0</thingsboard.version>
+        <thingsboard.version>2.2.0-SNAPSHOT</thingsboard.version>
         <paho.client.version>1.1.0</paho.client.version>
         <lombok.version>1.16.10</lombok.version>
-        <spring-boot.version>1.4.2.RELEASE</spring-boot.version>
-        <maven.exec.skip>false</maven.exec.skip>
+        <spring-boot.version>1.4.3.RELEASE</spring-boot.version>
+        <spring.version>4.3.4.RELEASE</spring.version>
+        <pkg.name>tb-performance-tests</pkg.name>
+        <pkg.user>thingsboard</pkg.user>
+        <pkg.unixLogFolder>/var/log/${pkg.name}</pkg.unixLogFolder>
+        <pkg.installFolder>/usr/share/${pkg.name}</pkg.installFolder>
+        <pkg.win.dist>${project.build.directory}/windows</pkg.win.dist>
     </properties>
 
     <dependencies>
@@ -54,9 +55,29 @@
             <version>${thingsboard.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.thingsboard</groupId>
+            <artifactId>netty-mqtt</artifactId>
+            <version>${thingsboard.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
             <version>${spring-boot.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+            <version>${spring-boot.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+            <version>${spring.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context-support</artifactId>
+            <version>${spring.version}</version>
         </dependency>
         <dependency>
             <groupId>org.eclipse.paho</groupId>
@@ -67,23 +88,16 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>${lombok.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.gatling.highcharts</groupId>
-            <artifactId>gatling-charts-highcharts</artifactId>
-            <version>${gatling.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.thingsboard</groupId>
-            <artifactId>gatling-mqtt</artifactId>
-            <version>${gatling-mqtt.version}</version>
-            <scope>test</scope>
         </dependency>
     </dependencies>
 
     <build>
+        <finalName>${pkg.name}-${project.version}</finalName>
+        <resources>
+            <resource>
+                <directory>${project.basedir}/src/main/resources</directory>
+            </resource>
+        </resources>
         <pluginManagement>
             <plugins>
                 <plugin>
@@ -91,104 +105,294 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>2.5.1</version>
                     <configuration>
-                        <source>1.8</source>
-                        <target>1.8</target>
+                        <source>${java.version}</source>
+                        <target>${java.version}</target>
                     </configuration>
                 </plugin>
                 <plugin>
-                    <groupId>net.alchim31.maven</groupId>
-                    <artifactId>scala-maven-plugin</artifactId>
-                    <version>${scala-maven-plugin.version}</version>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>2.7</version>
                 </plugin>
                 <plugin>
-                    <groupId>io.gatling</groupId>
-                    <artifactId>gatling-maven-plugin</artifactId>
-                    <version>${gatling-plugin.version}</version>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>2.2.1</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>3.0.2</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-assembly-plugin</artifactId>
+                    <version>3.0.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring-boot.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.fortasoft</groupId>
+                    <artifactId>gradle-maven-plugin</artifactId>
+                    <version>1.0.8</version>
+                </plugin>
+                <plugin>
+                    <groupId>com.mycila</groupId>
+                    <artifactId>license-maven-plugin</artifactId>
+                    <version>3.0</version>
+                    <configuration>
+                        <skip>${maven.exec.skip}</skip>
+                        <header>${main.dir}/license-header-template.txt</header>
+                        <properties>
+                            <owner>The Thingsboard Authors</owner>
+                        </properties>
+                        <excludes>
+                            <exclude>**/.env</exclude>
+                            <exclude>**/.eslintrc</exclude>
+                            <exclude>**/.babelrc</exclude>
+                            <exclude>**/.jshintrc</exclude>
+                            <exclude>**/.gradle/**</exclude>
+                            <exclude>**/nightwatch</exclude>
+                            <exclude>**/README</exclude>
+                            <exclude>**/LICENSE</exclude>
+                            <exclude>**/banner.txt</exclude>
+                            <exclude>node_modules/**</exclude>
+                            <exclude>**/*.properties</exclude>
+                            <exclude>src/test/resources/**</exclude>
+                            <exclude>src/vendor/**</exclude>
+                            <exclude>src/font/**</exclude>
+                            <exclude>src/sh/**</exclude>
+                            <exclude>src/main/scripts/control/**</exclude>
+                        </excludes>
+                        <mapping>
+                            <proto>JAVADOC_STYLE</proto>
+                            <cql>DOUBLEDASHES_STYLE</cql>
+                            <scss>JAVADOC_STYLE</scss>
+                            <jsx>SLASHSTAR_STYLE</jsx>
+                            <conf>SCRIPT_STYLE</conf>
+                            <gradle>JAVADOC_STYLE</gradle>
+                        </mapping>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>check</goal>
+                            </goals>
+                        </execution>
+                    </executions>
                 </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
             <plugin>
+                <groupId>com.mycila</groupId>
+                <artifactId>license-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
+                <artifactId>maven-dependency-plugin</artifactId>
                 <executions>
                     <execution>
+                        <id>copy</id>
                         <phase>package</phase>
                         <goals>
-                            <goal>shade</goal>
+                            <goal>copy</goal>
                         </goals>
                         <configuration>
-                            <filters>
-                                <filter>
-                                    <artifact>*:*</artifact>
-                                    <excludes>
-                                        <exclude>META-INF/*.SF</exclude>
-                                        <exclude>META-INF/*.DSA</exclude>
-                                        <exclude>META-INF/*.RSA</exclude>
-                                    </excludes>
-                                </filter>
-                            </filters>
-                            <transformers>
-                                <transformer
-                                    implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <manifestEntries>
-                                        <Main-Class>org.thingsboard.client.tools.MqttStressTestTool</Main-Class>
-                                    </manifestEntries>
-                                </transformer>
-                            </transformers>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>com.sun.winsw</groupId>
+                                    <artifactId>winsw</artifactId>
+                                    <classifier>bin</classifier>
+                                    <type>exe</type>
+                                    <destFileName>service.exe</destFileName>
+                                </artifactItem>
+                            </artifactItems>
+                            <outputDirectory>${pkg.win.dist}</outputDirectory>
                         </configuration>
                     </execution>
                 </executions>
             </plugin>
             <plugin>
-                <groupId>net.alchim31.maven</groupId>
-                <artifactId>scala-maven-plugin</artifactId>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-service-conf</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/conf</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>src/main/resources</directory>
+                                    <excludes>
+                                        <exclude>logback.xml</exclude>
+                                    </excludes>
+                                    <filtering>false</filtering>
+                                </resource>
+                                <resource>
+                                    <directory>src/main/conf</directory>
+                                    <filtering>true</filtering>
+                                </resource>
+                            </resources>
+                            <filters>
+                                <filter>src/main/filters/unix.properties</filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>copy-win-conf</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${pkg.win.dist}/conf</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>src/main/resources</directory>
+                                    <excludes>
+                                        <exclude>logback.xml</exclude>
+                                    </excludes>
+                                    <filtering>false</filtering>
+                                </resource>
+                                <resource>
+                                    <directory>src/main/conf</directory>
+                                    <excludes>
+                                        <exclude>tb-performance-tests.conf</exclude>
+                                    </excludes>
+                                    <filtering>true</filtering>
+                                </resource>
+                            </resources>
+                            <filters>
+                                <filter>src/main/filters/windows.properties</filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>copy-control</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/control</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>src/main/scripts/control</directory>
+                                    <filtering>true</filtering>
+                                </resource>
+                            </resources>
+                            <filters>
+                                <filter>src/main/filters/unix.properties</filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>copy-windows-control</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${pkg.win.dist}</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>src/main/scripts/windows</directory>
+                                    <filtering>true</filtering>
+                                </resource>
+                            </resources>
+                            <filters>
+                                <filter>src/main/filters/windows.properties</filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
-                <groupId>io.gatling</groupId>
-                <artifactId>gatling-maven-plugin</artifactId>
-            </plugin>
-            <plugin>
-                <groupId>com.mycila</groupId>
-                <artifactId>license-maven-plugin</artifactId>
-                <version>3.0</version>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
                 <configuration>
-                    <skip>${maven.exec.skip}</skip>
-                    <header>${main.dir}/license-header-template.txt</header>
-                    <properties>
-                        <owner>The Thingsboard Authors</owner>
-                    </properties>
-                    <excludes>
-                        <exclude>**/.env</exclude>
-                        <exclude>**/.eslintrc</exclude>
-                        <exclude>**/.babelrc</exclude>
-                        <exclude>**/.jshintrc</exclude>
-                        <exclude>**/.gradle/**</exclude>
-                        <exclude>**/nightwatch</exclude>
-                        <exclude>**/README</exclude>
-                        <exclude>**/LICENSE</exclude>
-                        <exclude>**/banner.txt</exclude>
-                        <exclude>node_modules/**</exclude>
-                        <exclude>**/*.properties</exclude>
-                        <exclude>src/test/resources/**</exclude>
-                        <exclude>src/vendor/**</exclude>
-                        <exclude>src/font/**</exclude>
-                        <exclude>src/sh/**</exclude>
-                        <exclude>src/main/scripts/control/**</exclude>
-                    </excludes>
-                    <mapping>
-                        <proto>JAVADOC_STYLE</proto>
-                        <cql>DOUBLEDASHES_STYLE</cql>
-                        <scss>JAVADOC_STYLE</scss>
-                        <jsx>SLASHSTAR_STYLE</jsx>
-                        <conf>SCRIPT_STYLE</conf>
-                        <gradle>JAVADOC_STYLE</gradle>
-                    </mapping>
+                    <archive>
+                        <manifestEntries>
+                            <Implementation-Title>TB Performance Tests</Implementation-Title>
+                            <Implementation-Version>${project.version}</Implementation-Version>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <classifier>boot</classifier>
+                    <layout>ZIP</layout>
+                    <executable>true</executable>
+                    <excludeDevtools>true</excludeDevtools>
+                    <embeddedLaunchScriptProperties>
+                        <confFolder>${pkg.installFolder}/conf</confFolder>
+                        <logFolder>${pkg.unixLogFolder}</logFolder>
+                        <logFilename>${pkg.name}.out</logFilename>
+                        <initInfoProvides>${pkg.name}</initInfoProvides>
+                    </embeddedLaunchScriptProperties>
                 </configuration>
                 <executions>
                     <execution>
                         <goals>
-                            <goal>check</goal>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.fortasoft</groupId>
+                <artifactId>gradle-maven-plugin</artifactId>
+                <configuration>
+                    <tasks>
+                        <task>build</task>
+                        <task>buildDeb</task>
+                        <task>buildRpm</task>
+                    </tasks>
+                    <args>
+                        <arg>-PprojectBuildDir=${project.build.directory}</arg>
+                        <arg>-PprojectVersion=${project.version}</arg>
+                        <arg>-PmainJar=${project.build.directory}/${project.build.finalName}-boot.${project.packaging}</arg>
+                        <arg>-PpkgName=${pkg.name}</arg>
+                        <arg>-PpkgUser=${pkg.user}</arg>
+                        <arg>-PpkgInstallFolder=${pkg.installFolder}</arg>
+                        <arg>-PpkgLogFolder=${pkg.unixLogFolder}</arg>
+                    </args>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>invoke</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <configuration>
+                    <finalName>${pkg.name}</finalName>
+                    <descriptors>
+                        <descriptor>src/main/assembly/windows.xml</descriptor>
+                    </descriptors>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>assembly</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
                         </goals>
                     </execution>
                 </executions>

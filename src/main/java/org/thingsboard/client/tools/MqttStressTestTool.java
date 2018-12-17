@@ -39,13 +39,6 @@ public class MqttStressTestTool {
 
     private static final ExecutorService executor = Executors.newFixedThreadPool(100);
 
-    /**
-     * Returns list of device credential IDs
-     *
-     * @param params
-     * @return
-     * @throws Exception
-     */
     public static List<String> createDevices(TestParams params) throws Exception {
         AtomicLong value = new AtomicLong(Long.MAX_VALUE);
         log.info("value: {} ", value.incrementAndGet());
@@ -81,4 +74,6 @@ public class MqttStressTestTool {
 
         return deviceCredentialsIds;
     }
+
+
 }

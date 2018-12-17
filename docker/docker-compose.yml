@@ -21,10 +21,10 @@ services:
   tb-performance-tests:
     image: "${DOCKER_REPO}/${PERFORMANCE_TESTS_DOCKER_NAME}:${TB_VERSION}"
     environment:
-      REST_URL: "http://localhost:8080"
-      MQTT_URLS: "tcp://localhost:1883"
+      REST_URL: "https://demo.thingsboard.io"
+      MQTT_URLS: "tcp://demo.thingsboard.io:1883"
       DEVICE_COUNT: 10
-      PUBLISH_TELEMETRY_COUNT: 60
+      PUBLISH_TELEMETRY_COUNT: 10
       PUBLISH_TELEMETRY_PAUSE: 1000
-      USERNAME: "tenant@thingsboard.org"
-      PASSWORD: "tenant"
+      USERNAME: "vbabak@thingsboard.io"
+      PASSWORD: "CCyer445m"
