@@ -16,19 +16,17 @@
     limitations under the License.
 
 -->
-<!DOCTYPE configuration>
-<configuration>
+<configuration scan="true">
 
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n</pattern>
-        </encoder>
+        <layout class="ch.qos.logback.classic.PatternLayout">
+            <Pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</Pattern>
+        </layout>
     </appender>
 
-    <logger name="io.gatling.core.action.Pause" level="DEBUG"/>
-    <logger name="org.thingsboard" level="DEBUG" />
+    <logger name="org.thingsboard" level="DEBUG"/>
 
-    <root level="DEBUG">
+    <root level="INFO">
         <appender-ref ref="STDOUT"/>
     </root>
 

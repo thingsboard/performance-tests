@@ -1,0 +1,27 @@
+#
+# Copyright © 2017 Supertech Agroline
+#
+
+server:
+  # Server bind address
+  address: "0.0.0.0"
+  # Server bind port
+  port: "${SERVER_PORT:19090}"
+
+
+tests:
+  rest:
+    url: http://pigpilot.ch:8080
+    username: tenant@thingsboard.org
+    password: tenant
+  mqtt:
+    host: pigpilot.ch
+    port: 1883
+  device:
+    count: 5
+    create: true
+    deleteOnComplete: true
+  publish:
+    count: 5
+    pause: 1000 # in milliseconds
+
