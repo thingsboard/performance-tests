@@ -1,5 +1,17 @@
 #
-# Copyright © 2017 Supertech Agroline
+# Copyright © 2016-2018 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 #
 
 server:
@@ -8,20 +20,18 @@ server:
   # Server bind port
   port: "${SERVER_PORT:19090}"
 
-
-tests:
-  rest:
-    url: http://pigpilot.ch:8080
-    username: tenant@thingsboard.org
-    password: tenant
-  mqtt:
-    host: pigpilot.ch
-    port: 1883
-  device:
-    count: 5
-    create: true
-    deleteOnComplete: true
-  publish:
-    count: 5
-    pause: 1000 # in milliseconds
+rest:
+  url: "${REST_URL:http://localhost:8080}"
+  username: "${REST_USERNAME:tenant@thingsboard.org}"
+  password: "${REST_PASSWORD:tenant}"
+mqtt:
+  host: "${MQTT_HOST:localhost}"
+  port: "${MQTT_PORT:1883}"
+device:
+  count: "${DEVICE_COUNT:100}"
+  createOnStart: "${DEVICE_CREATE_ON_START:true}"
+  deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:true}"
+publish:
+  count: "${PUBLISH_COUNT:30}"
+  pause: "${PUBLISH_PAUSE:500}" # in milliseconds
 
