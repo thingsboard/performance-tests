@@ -94,9 +94,14 @@ public class StatisticsCollector {
             int count = 0;
             long prevTime = 0;
             for (Map<String, String> entry : result.get(telemetryKey)) {
-                total += Long.parseLong(entry.get("value"));
-                log.debug("Telemetry value {}" + entry.get("value"));
-                count++;
+                long tmpValue = Long.parseLong(entry.get("value"));
+                long ts = Long.parseLong(entry.get("ts"));
+                log.info("============ TMP value [{}] TS [{}] ============", tmpValue, ts);
+                if (tmpValue > 0) {
+                    log.debug("Telemetry value {}" + tmpValue);
+                    total += tmpValue;
+                    count++;
+                }
                 long currTime = Long.parseLong(entry.get("ts"));
                 if (prevTime == 0) {
                     prevTime = currTime;
