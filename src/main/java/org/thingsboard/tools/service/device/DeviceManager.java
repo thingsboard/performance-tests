@@ -195,7 +195,7 @@ public class DeviceManager {
                                             }
                                     );
                         } finally {
-                            if (mqttClient.getClientConfig().getClientId().equals(mqttClients.get(0).getClientConfig().getClientId()) && publishedCount.get() % 1000 == 0) {
+                            if (mqttClient.getClientConfig().getClientId().equals(mqttClients.get(0).getClientConfig().getClientId()) && publishedCount.get() % mqttClients.size() == 0) {
                                 log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
                                         publishedCount.get(), totalMessagesToPublish - publishedCount.get(), totalMessagesToPublish);
                             }
