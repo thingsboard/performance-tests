@@ -57,23 +57,23 @@ public class TestExecutor {
         }
         deviceManager.warmUpDevices();
 
-        statisticsCollector.init();
+        ruleChainManager.createRuleChainWithCountNodeAndSetAsRoot();
 
-        ruleChainManager.init();
+        statisticsCollector.start();
 
         deviceManager.runTests(publishTelemetryCount, publishTelemetryPause);
 
-        // wait for rule chain to complete messages
-        Thread.sleep(5000);
+        statisticsCollector.end();
 
-        ruleChainManager.destroy();
+        Thread.sleep(3000); // wait for messages delivery before removing rule chain
+
+        ruleChainManager.revertRootNodeAndCleanUp();
 
         statisticsCollector.printResults();
 
         if (deviceDeleteOnComplete) {
             deviceManager.removeDevices();
         }
-
     }
 
 }

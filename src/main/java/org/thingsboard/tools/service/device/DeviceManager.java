@@ -16,6 +16,8 @@
 package org.thingsboard.tools.service.device;
 
 import io.netty.buffer.Unpooled;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.handler.codec.mqtt.MqttQoS;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
@@ -69,11 +71,13 @@ public class DeviceManager {
     private RestClient restClient;
 
     private final ExecutorService httpExecutor = Executors.newFixedThreadPool(100);
-    private final ScheduledExecutorService mqttPublishExecutor = Executors.newScheduledThreadPool(100);
+    private final ScheduledExecutorService mqttPublishExecutor = Executors.newScheduledThreadPool(10);
     private final ExecutorService mqttExecutor = Executors.newFixedThreadPool(100);
 
     private final List<MqttClient> mqttClients = Collections.synchronizedList(new ArrayList<>());
     private final List<DeviceId> deviceIds = Collections.synchronizedList(new ArrayList<>());
+
+    private EventLoopGroup EVENT_LOOP_GROUP;
 
     private int deviceCount;
 
@@ -81,6 +85,7 @@ public class DeviceManager {
     private void init() {
         deviceCount = deviceEndIdx - deviceStartIdx;
         restClient = new RestClient(restUrl);
+        EVENT_LOOP_GROUP = new NioEventLoopGroup();
         restClient.login(username, password);
     }
 
@@ -95,12 +100,16 @@ public class DeviceManager {
         if (!this.mqttExecutor.isShutdown()) {
             this.mqttExecutor.shutdown();
         }
+        if (!EVENT_LOOP_GROUP.isShutdown()) {
+            EVENT_LOOP_GROUP.shutdownGracefully(0, 5, TimeUnit.SECONDS);
+        }
     }
 
     private MqttClient initClient(String token) throws Exception {
         MqttClientConfig config = new MqttClientConfig();
         config.setUsername(token);
         MqttClient client = MqttClient.create(config, null);
+        client.setEventLoop(EVENT_LOOP_GROUP);
         Future<MqttConnectResult> connectFuture = client.connect(mqttHost, mqttPort);
         MqttConnectResult result;
         try {
@@ -168,15 +177,12 @@ public class DeviceManager {
 
     public void runTests(int publishTelemetryCount, final int publishTelemetryPause) throws InterruptedException {
         log.info("Starting performance test for {} devices...", mqttClients.size());
+        long maxDelay = (publishTelemetryPause + 1) * publishTelemetryCount;
         final int totalMessagesToPublish = mqttClients.size() * publishTelemetryCount;
-        final String defaultClientId = mqttClients.get(0).getClientConfig().getClientId();
-        CountDownLatch mqttClientsCountLatch = new CountDownLatch(mqttClients.size());
         AtomicInteger publishedCount = new AtomicInteger();
         for (MqttClient mqttClient : mqttClients) {
             mqttExecutor.submit(() -> {
-                try {
-                    CountDownLatch telemetryCountLatch = new CountDownLatch(publishTelemetryCount);
-                    ScheduledFuture<?> scheduledFuture = mqttPublishExecutor.scheduleAtFixedRate(() -> {
+                    mqttPublishExecutor.scheduleAtFixedRate(() -> {
                         try {
                             mqttClient.publish("v1/devices/me/telemetry", Unpooled.wrappedBuffer(data), MqttQoS.AT_LEAST_ONCE)
                                     .addListener(future -> {
@@ -189,25 +195,16 @@ public class DeviceManager {
                                             }
                                     );
                         } finally {
-                            telemetryCountLatch.countDown();
-                            if (publishedCount.get() > 0 && publishedCount.get() % 100 == 0) {
+                            if (mqttClient.getClientConfig().getClientId().equals(mqttClients.get(0).getClientConfig().getClientId()) && publishedCount.get() % 1000 == 0) {
                                 log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
                                         publishedCount.get(), totalMessagesToPublish - publishedCount.get(), totalMessagesToPublish);
                             }
                         }
                     }, 0, publishTelemetryPause, TimeUnit.MILLISECONDS);
-                    try {
-                        telemetryCountLatch.await();
-                    } catch (InterruptedException e) {
-                        log.error("Exception while waiting", e);
-                    }
-                    scheduledFuture.cancel(true);
-                } finally {
-                    mqttClientsCountLatch.countDown();
-                }
             });
         }
-        mqttClientsCountLatch.await();
+        Thread.sleep(maxDelay);
+        mqttPublishExecutor.shutdownNow();
         log.info("Performance test was completed for {} devices!", mqttClients.size());
     }
 
