@@ -28,10 +28,11 @@ mqtt:
   host: "${MQTT_HOST:localhost}"
   port: "${MQTT_PORT:1883}"
 device:
-  count: "${DEVICE_COUNT:100}"
+  startIdx: "${DEVICE_START_IDX:0}"
+  endIdx: "${DEVICE_END_IDX:1000}"
   createOnStart: "${DEVICE_CREATE_ON_START:true}"
   deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:true}"
 publish:
-  count: "${PUBLISH_COUNT:30}"
-  pause: "${PUBLISH_PAUSE:500}" # in milliseconds
+  count: "${PUBLISH_COUNT:10}"
+  pause: "${PUBLISH_PAUSE:1000}" # in milliseconds
 

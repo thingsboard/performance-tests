@@ -50,7 +50,7 @@ public class RuleChainManager {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    public void init() {
+    public void createRuleChainWithCountNodeAndSetAsRoot() {
         restClient = new RestClient(restUrl);
         restClient.login(username, password);
 
@@ -71,7 +71,7 @@ public class RuleChainManager {
         }
     }
 
-    public void destroy() {
+    public void revertRootNodeAndCleanUp() {
         setRootRuleChain(defaultRootRuleChainId);
         restClient.getRestTemplate().delete(restUrl + "/api/ruleChain/" + updatedRuleChainId.getId());
     }

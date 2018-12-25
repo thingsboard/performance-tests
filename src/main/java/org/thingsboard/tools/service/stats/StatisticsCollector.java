@@ -52,24 +52,24 @@ public class StatisticsCollector {
     @Value("${rest.password}")
     private String password;
 
-    private RestClient restClient;
-
     private long startTs;
+    private long endTs;
 
-    private TenantId tenantId;
-
-    public void init() {
-        restClient = new RestClient(restUrl);
-        restClient.login(username, password);
+    public void start(){
         startTs = System.currentTimeMillis();
+    }
 
-        // hack to get tenant id
-        Device device = restClient.createDevice("Dummy asset", "default");
-        tenantId = device.getTenantId();
-        restClient.deleteDevice(device.getId());
+    public void end(){
+        endTs = System.currentTimeMillis();
     }
 
     public void printResults() {
+        RestClient restClient = new RestClient(restUrl);
+        restClient.login(username, password);
+        // hack to get tenant id
+        Device device = restClient.createDevice("Dummy asset", "default");
+        TenantId tenantId = device.getTenantId();
+        restClient.deleteDevice(device.getId());
         List<String> keys = restClient.getRestTemplate().exchange(
                 restUrl + "/api/plugins/telemetry/" + EntityType.TENANT.name() + "/" + tenantId + "/keys/timeseries",
                 HttpMethod.GET,
@@ -78,7 +78,6 @@ public class StatisticsCollector {
 
         List<String> perfTestsTelemetryKeys = keys.stream().filter(k -> k.startsWith("perf_tests")).collect(Collectors.toList());
 
-        long endTs = System.currentTimeMillis();
         Map<String, List<Map<String, String>>> result =
                 restClient.getRestTemplate().exchange(
                         restUrl + "/api/plugins/telemetry/" + EntityType.TENANT.name() + "/" + tenantId +
@@ -91,7 +90,7 @@ public class StatisticsCollector {
         for (String telemetryKey : result.keySet()) {
             long intervalSum = 0;
             long total = 0;
-            int count = 0;
+            long count = 0;
             long prevTime = 0;
             for (Map<String, String> entry : result.get(telemetryKey)) {
                 long tmpValue = Long.parseLong(entry.get("value"));
@@ -112,7 +111,7 @@ public class StatisticsCollector {
             }
             intervalInSeconds = (int) (intervalSum / 1000 / (count - 1));
             String nodeName = telemetryKey.substring(STATS_TELEMETRY_PREFIX.length() + 1);
-            double avg = new BigDecimal(total / count).setScale(2, RoundingMode.HALF_UP).doubleValue();
+            double avg = new BigDecimal(((double)total)/count).setScale(2, RoundingMode.HALF_UP).doubleValue();
             totalAvg += avg;
             log.info("============ Node [{}] AVG is {} per {} second ============", nodeName, avg, intervalInSeconds);
         }
