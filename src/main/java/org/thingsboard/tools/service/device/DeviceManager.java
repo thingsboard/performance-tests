@@ -45,8 +45,11 @@ public class DeviceManager {
     private static final int CONNECT_TIMEOUT_IN_SECONDS = 5;
     private static byte[] data = "{\"longKey\":73}".getBytes(StandardCharsets.UTF_8);
 
-    @Value("${device.count}")
-    private int deviceCount;
+    @Value("${device.startIdx}")
+    private int deviceStartIdx;
+
+    @Value("${device.endIdx}")
+    private int deviceEndIdx;
 
     @Value("${rest.url}")
     private String restUrl;
@@ -66,13 +69,17 @@ public class DeviceManager {
     private RestClient restClient;
 
     private final ExecutorService httpExecutor = Executors.newFixedThreadPool(100);
+    private final ScheduledExecutorService mqttPublishExecutor = Executors.newScheduledThreadPool(100);
     private final ExecutorService mqttExecutor = Executors.newFixedThreadPool(100);
 
     private final List<MqttClient> mqttClients = Collections.synchronizedList(new ArrayList<>());
     private final List<DeviceId> deviceIds = Collections.synchronizedList(new ArrayList<>());
 
+    private int deviceCount;
+
     @PostConstruct
     private void init() {
+        deviceCount = deviceEndIdx - deviceStartIdx;
         restClient = new RestClient(restUrl);
         restClient.login(username, password);
     }
@@ -115,7 +122,7 @@ public class DeviceManager {
         log.info("Creating {} devices...", deviceCount);
         CountDownLatch latch = new CountDownLatch(deviceCount);
         AtomicInteger count = new AtomicInteger();
-        for (int i = 0; i < deviceCount; i++) {
+        for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
             final int tokenNumber = i;
             httpExecutor.submit(() -> {
                 try {
@@ -162,42 +169,52 @@ public class DeviceManager {
     public void runTests(int publishTelemetryCount, final int publishTelemetryPause) throws InterruptedException {
         log.info("Starting performance test for {} devices...", mqttClients.size());
         final int totalMessagesToPublish = mqttClients.size() * publishTelemetryCount;
-        for (int i = 0; i < publishTelemetryCount; i++) {
-            CountDownLatch runTestsLatch = new CountDownLatch(mqttClients.size());
-            for (MqttClient mqttClient : mqttClients) {
-                mqttExecutor.submit(() -> {
-                    try {
-                        mqttClient.publish("v1/devices/me/telemetry", Unpooled.wrappedBuffer(data), MqttQoS.AT_LEAST_ONCE)
-                                .addListener(future -> {
-                                            if (future.isSuccess()) {
-                                                log.debug("Message was successfully published to device: {}", mqttClient.getClientConfig().getUsername());
-                                            } else {
-                                                log.error("Error while publishing message to device: {}", mqttClient.getClientConfig().getUsername());
+        final String defaultClientId = mqttClients.get(0).getClientConfig().getClientId();
+        CountDownLatch mqttClientsCountLatch = new CountDownLatch(mqttClients.size());
+        AtomicInteger publishedCount = new AtomicInteger();
+        for (MqttClient mqttClient : mqttClients) {
+            mqttExecutor.submit(() -> {
+                try {
+                    CountDownLatch telemetryCountLatch = new CountDownLatch(publishTelemetryCount);
+                    ScheduledFuture<?> scheduledFuture = mqttPublishExecutor.scheduleAtFixedRate(() -> {
+                        try {
+                            mqttClient.publish("v1/devices/me/telemetry", Unpooled.wrappedBuffer(data), MqttQoS.AT_LEAST_ONCE)
+                                    .addListener(future -> {
+                                                if (future.isSuccess()) {
+                                                    log.debug("Message was successfully published to device: {}", mqttClient.getClientConfig().getUsername());
+                                                } else {
+                                                    log.error("Error while publishing message to device: {}", mqttClient.getClientConfig().getUsername());
+                                                }
+                                                publishedCount.getAndIncrement();
                                             }
-                                        }
-                                );
-                    } finally {
-                        runTestsLatch.countDown();
+                                    );
+                        } finally {
+                            telemetryCountLatch.countDown();
+                            if (publishedCount.get() > 0 && publishedCount.get() % 100 == 0) {
+                                log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
+                                        publishedCount.get(), totalMessagesToPublish - publishedCount.get(), totalMessagesToPublish);
+                            }
+                        }
+                    }, 0, publishTelemetryPause, TimeUnit.MILLISECONDS);
+                    try {
+                        telemetryCountLatch.await();
+                    } catch (InterruptedException e) {
+                        log.error("Exception while waiting", e);
                     }
-                });
-            }
-            runTestsLatch.await();
-            int messagesPublished = (i + 1) * mqttClients.size();
-            log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
-                    messagesPublished, totalMessagesToPublish - messagesPublished, totalMessagesToPublish);
-            try {
-                Thread.sleep(publishTelemetryPause);
-            } catch (InterruptedException e) {
-                log.error("Pause interrupted", e);
-            }
+                    scheduledFuture.cancel(true);
+                } finally {
+                    mqttClientsCountLatch.countDown();
+                }
+            });
         }
+        mqttClientsCountLatch.await();
         log.info("Performance test was completed for {} devices!", mqttClients.size());
     }
 
     public void warmUpDevices() throws InterruptedException {
         log.info("Warming up {} devices...", deviceCount);
         CountDownLatch connectLatch = new CountDownLatch(deviceCount);
-        for (int i = 0; i < deviceCount; i++) {
+        for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
             final int tokenNumber = i;
             mqttExecutor.submit(() -> {
                 try {

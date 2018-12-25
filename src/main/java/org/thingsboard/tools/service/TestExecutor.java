@@ -63,6 +63,9 @@ public class TestExecutor {
 
         deviceManager.runTests(publishTelemetryCount, publishTelemetryPause);
 
+        // wait for rule chain to complete messages
+        Thread.sleep(5000);
+
         ruleChainManager.destroy();
 
         statisticsCollector.printResults();
