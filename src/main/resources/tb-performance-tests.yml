@@ -21,18 +21,21 @@ server:
   port: "${SERVER_PORT:19090}"
 
 rest:
-  url: "${REST_URL:http://localhost:8080}"
+  url: "${REST_URL:http://ec2-18-191-19-172.us-east-2.compute.amazonaws.com:9090}"
   username: "${REST_USERNAME:tenant@thingsboard.org}"
   password: "${REST_PASSWORD:tenant}"
 mqtt:
-  host: "${MQTT_HOST:localhost}"
+  host: "${MQTT_HOST:ec2-18-191-19-172.us-east-2.compute.amazonaws.com}"
   port: "${MQTT_PORT:1883}"
 device:
+  # Device API to use - MQTT or HTTP
+  api: "${DEVICE_API:HTTP}"
   startIdx: "${DEVICE_START_IDX:0}"
-  endIdx: "${DEVICE_END_IDX:1000}"
+  endIdx: "${DEVICE_END_IDX:100}"
   createOnStart: "${DEVICE_CREATE_ON_START:true}"
-  deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:true}"
+  deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
 publish:
-  count: "${PUBLISH_COUNT:10}"
+  count: "${PUBLISH_COUNT:20}"
   pause: "${PUBLISH_PAUSE:1000}" # in milliseconds
+
 
