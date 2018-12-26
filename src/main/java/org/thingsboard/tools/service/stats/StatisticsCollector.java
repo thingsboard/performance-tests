@@ -109,13 +109,17 @@ public class StatisticsCollector {
                     prevTime = currTime;
                 }
             }
-            intervalInSeconds = (int) (intervalSum / 1000 / (count - 1));
-            String nodeName = telemetryKey.substring(STATS_TELEMETRY_PREFIX.length() + 1);
-            double avg = new BigDecimal(((double)total)/count).setScale(2, RoundingMode.HALF_UP).doubleValue();
-            totalAvg += avg;
-            log.info("============ Node [{}] AVG is {} per {} second ============", nodeName, avg, intervalInSeconds);
+            if (count > 0) {
+                intervalInSeconds = (int) (intervalSum / 1000 / (count - 1));
+                String nodeName = telemetryKey.substring(STATS_TELEMETRY_PREFIX.length() + 1);
+                double avg = new BigDecimal(((double) total) / count).setScale(2, RoundingMode.HALF_UP).doubleValue();
+                totalAvg += avg;
+                log.info("============ Node [{}] AVG is {} per {} second ============", nodeName, avg, intervalInSeconds);
+            }
         }
-        log.info("============ Total AVG is {} per {} second ============", totalAvg, intervalInSeconds);
+        if (totalAvg > 0) {
+            log.info("============ Total AVG is {} per {} second ============", totalAvg, intervalInSeconds);
+        }
     }
 
 }
