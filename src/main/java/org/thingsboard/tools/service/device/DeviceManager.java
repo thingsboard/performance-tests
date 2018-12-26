@@ -131,6 +131,7 @@ public class DeviceManager {
         log.info("Creating {} devices...", deviceCount);
         CountDownLatch latch = new CountDownLatch(deviceCount);
         AtomicInteger count = new AtomicInteger();
+        final int logInterval = deviceCount / 10;
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
             final int tokenNumber = i;
             httpExecutor.submit(() -> {
@@ -139,22 +140,26 @@ public class DeviceManager {
                     String token = String.format("%20d", tokenNumber);
                     restClient.updateDeviceCredentials(device.getId(), token);
                     deviceIds.add(device.getId());
+                    count.getAndIncrement();
                 } catch (Exception e) {
                     log.error("Error while creating device", e);
                 } finally {
                     latch.countDown();
-                    count.getAndIncrement();
+                }
+                if (count.get() > 0 && count.get() % logInterval == 0) {
+                    log.info("{} devices has been created so far...", count.get());
                 }
             });
         }
         latch.await();
-        log.info("{} devices have been created successfully!", deviceCount);
+        log.info("{} devices have been created successfully!", deviceIds.size());
     }
 
     public void removeDevices() throws Exception {
         log.info("Removing {} devices...", deviceIds.size());
         CountDownLatch latch = new CountDownLatch(deviceIds.size());
         AtomicInteger count = new AtomicInteger();
+        final int logInterval = deviceIds.size() / 10;
         for (DeviceId deviceId : deviceIds) {
             httpExecutor.submit(() -> {
                 try {
@@ -165,7 +170,7 @@ public class DeviceManager {
                 } finally {
                     latch.countDown();
                 }
-                if (count.get() > 0 && count.get() % 10 == 0) {
+                if (count.get() > 0 && count.get() % logInterval == 0) {
                     log.info("{} devices has been removed so far...", count.get());
                 }
             });
@@ -176,6 +181,10 @@ public class DeviceManager {
     }
 
     public void runTests(int publishTelemetryCount, final int publishTelemetryPause) throws InterruptedException {
+        if (mqttClients.size() == 0) {
+            log.info("Test stopped. No devices available!");
+            return;
+        }
         log.info("Starting performance test for {} devices...", mqttClients.size());
         long maxDelay = (publishTelemetryPause + 1) * publishTelemetryCount;
         final int totalMessagesToPublish = mqttClients.size() * publishTelemetryCount;
