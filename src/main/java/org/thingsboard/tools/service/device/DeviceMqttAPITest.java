@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,45 +22,26 @@ import io.netty.handler.codec.mqtt.MqttQoS;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
-import org.thingsboard.client.tools.RestClient;
 import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.mqtt.MqttClientConfig;
 import org.thingsboard.mqtt.MqttConnectResult;
-import org.thingsboard.server.common.data.Device;
-import org.thingsboard.server.common.data.id.DeviceId;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Service
-public class DeviceManager {
+@ConditionalOnProperty(prefix = "device", value = "api", havingValue = "MQTT")
+public class DeviceMqttAPITest extends BaseDeviceAPITest {
 
     private static final int CONNECT_TIMEOUT_IN_SECONDS = 5;
-    private static byte[] data = "{\"longKey\":73}".getBytes(StandardCharsets.UTF_8);
-
-    @Value("${device.startIdx}")
-    private int deviceStartIdx;
-
-    @Value("${device.endIdx}")
-    private int deviceEndIdx;
-
-    @Value("${rest.url}")
-    private String restUrl;
-
-    @Value("${rest.username}")
-    private String username;
-
-    @Value("${rest.password}")
-    private String password;
 
     @Value("${mqtt.host}")
     private String mqttHost;
@@ -68,34 +49,23 @@ public class DeviceManager {
     @Value("${mqtt.port}")
     private int mqttPort;
 
-    private RestClient restClient;
-
-    private final ExecutorService httpExecutor = Executors.newFixedThreadPool(100);
-    private final ScheduledExecutorService mqttPublishExecutor = Executors.newScheduledThreadPool(10);
     private final ExecutorService mqttExecutor = Executors.newFixedThreadPool(100);
 
     private final List<MqttClient> mqttClients = Collections.synchronizedList(new ArrayList<>());
-    private final List<DeviceId> deviceIds = Collections.synchronizedList(new ArrayList<>());
 
     private EventLoopGroup EVENT_LOOP_GROUP;
 
-    private int deviceCount;
-
     @PostConstruct
-    private void init() {
-        deviceCount = deviceEndIdx - deviceStartIdx;
-        restClient = new RestClient(restUrl);
+    void init() {
+        super.init();
         EVENT_LOOP_GROUP = new NioEventLoopGroup();
-        restClient.login(username, password);
     }
 
     @PreDestroy
-    private void destroy() {
+    void destroy() {
+        super.destroy();
         for (MqttClient mqttClient : mqttClients) {
             mqttClient.disconnect();
-        }
-        if (!this.httpExecutor.isShutdown()) {
-            this.httpExecutor.shutdown();
         }
         if (!this.mqttExecutor.isShutdown()) {
             this.mqttExecutor.shutdown();
@@ -127,60 +97,8 @@ public class DeviceManager {
         return client;
     }
 
-    public void createDevices() throws Exception {
-        log.info("Creating {} devices...", deviceCount);
-        CountDownLatch latch = new CountDownLatch(deviceCount);
-        AtomicInteger count = new AtomicInteger();
-        final int logInterval = deviceCount / 10;
-        for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
-            final int tokenNumber = i;
-            httpExecutor.submit(() -> {
-                try {
-                    Device device = restClient.createDevice("Device " + UUID.randomUUID(), "default");
-                    String token = String.format("%20d", tokenNumber);
-                    restClient.updateDeviceCredentials(device.getId(), token);
-                    deviceIds.add(device.getId());
-                    count.getAndIncrement();
-                } catch (Exception e) {
-                    log.error("Error while creating device", e);
-                } finally {
-                    latch.countDown();
-                }
-                if (count.get() > 0 && count.get() % logInterval == 0) {
-                    log.info("{} devices has been created so far...", count.get());
-                }
-            });
-        }
-        latch.await();
-        log.info("{} devices have been created successfully!", deviceIds.size());
-    }
-
-    public void removeDevices() throws Exception {
-        log.info("Removing {} devices...", deviceIds.size());
-        CountDownLatch latch = new CountDownLatch(deviceIds.size());
-        AtomicInteger count = new AtomicInteger();
-        final int logInterval = deviceIds.size() / 10;
-        for (DeviceId deviceId : deviceIds) {
-            httpExecutor.submit(() -> {
-                try {
-                    restClient.getRestTemplate().delete(restUrl + "/api/device/" + deviceId.getId());
-                    count.getAndIncrement();
-                } catch (Exception e) {
-                    log.error("Error while deleting device", e);
-                } finally {
-                    latch.countDown();
-                }
-                if (count.get() > 0 && count.get() % logInterval == 0) {
-                    log.info("{} devices has been removed so far...", count.get());
-                }
-            });
-        }
-        latch.await();
-        Thread.sleep(1000);
-        log.info("{} devices have been removed successfully! {} were failed for removal!", count.get(), deviceIds.size() - count.get());
-    }
-
-    public void runTests(int publishTelemetryCount, final int publishTelemetryPause) throws InterruptedException {
+    @Override
+    public void runApiTests(int publishTelemetryCount, final int publishTelemetryPause) throws InterruptedException {
         if (mqttClients.size() == 0) {
             log.info("Test stopped. No devices available!");
             return;
@@ -190,33 +108,34 @@ public class DeviceManager {
         final int totalMessagesToPublish = mqttClients.size() * publishTelemetryCount;
         AtomicInteger publishedCount = new AtomicInteger();
         for (MqttClient mqttClient : mqttClients) {
-            mqttExecutor.submit(() -> {
-                    mqttPublishExecutor.scheduleAtFixedRate(() -> {
-                        try {
-                            mqttClient.publish("v1/devices/me/telemetry", Unpooled.wrappedBuffer(data), MqttQoS.AT_LEAST_ONCE)
-                                    .addListener(future -> {
-                                                if (future.isSuccess()) {
-                                                    log.debug("Message was successfully published to device: {}", mqttClient.getClientConfig().getUsername());
-                                                } else {
-                                                    log.error("Error while publishing message to device: {}", mqttClient.getClientConfig().getUsername());
-                                                }
-                                                publishedCount.getAndIncrement();
+            testExecutor.submit(() -> {
+                testPublishExecutor.scheduleAtFixedRate(() -> {
+                    try {
+                        mqttClient.publish("v1/devices/me/telemetry", Unpooled.wrappedBuffer(data), MqttQoS.AT_LEAST_ONCE)
+                                .addListener(future -> {
+                                            if (future.isSuccess()) {
+                                                log.debug("Message was successfully published to device: {}", mqttClient.getClientConfig().getUsername());
+                                            } else {
+                                                log.error("Error while publishing message to device: {}", mqttClient.getClientConfig().getUsername());
                                             }
-                                    );
-                        } finally {
-                            if (mqttClient.getClientConfig().getClientId().equals(mqttClients.get(0).getClientConfig().getClientId()) && publishedCount.get() % mqttClients.size() == 0) {
-                                log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
-                                        publishedCount.get(), totalMessagesToPublish - publishedCount.get(), totalMessagesToPublish);
-                            }
+                                            publishedCount.getAndIncrement();
+                                        }
+                                );
+                    } finally {
+                        if (publishedCount.get() % mqttClients.size() == 0) {
+                            log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
+                                    publishedCount.get(), totalMessagesToPublish - publishedCount.get(), totalMessagesToPublish);
                         }
-                    }, 0, publishTelemetryPause, TimeUnit.MILLISECONDS);
+                    }
+                }, 0, publishTelemetryPause, TimeUnit.MILLISECONDS);
             });
         }
         Thread.sleep(maxDelay);
-        mqttPublishExecutor.shutdownNow();
+        testPublishExecutor.shutdownNow();
         log.info("Performance test was completed for {} devices!", mqttClients.size());
     }
 
+    @Override
     public void warmUpDevices() throws InterruptedException {
         log.info("Warming up {} devices...", deviceCount);
         CountDownLatch connectLatch = new CountDownLatch(deviceCount);
@@ -224,7 +143,7 @@ public class DeviceManager {
             final int tokenNumber = i;
             mqttExecutor.submit(() -> {
                 try {
-                    String token = String.format("%20d", tokenNumber);
+                    String token = getToken(tokenNumber);
                     mqttClients.add(initClient(token));
                 } catch (Exception e) {
                     log.error("Error while warm-up device", e);

@@ -19,7 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.thingsboard.tools.service.device.DeviceManager;
+import org.thingsboard.tools.service.device.DeviceAPITest;
 import org.thingsboard.tools.service.rule.RuleChainManager;
 import org.thingsboard.tools.service.stats.StatisticsCollector;
 
@@ -41,11 +41,14 @@ public class TestExecutor {
     @Value("${publish.pause}")
     private int publishTelemetryPause;
 
+    @Value("${device.api}")
+    private String deviceAPIType;
+
     @Autowired
     private StatisticsCollector statisticsCollector;
 
     @Autowired
-    private DeviceManager deviceManager;
+    private DeviceAPITest deviceAPITest;
 
     @Autowired
     private RuleChainManager ruleChainManager;
@@ -53,15 +56,16 @@ public class TestExecutor {
     @PostConstruct
     public void init() throws Exception {
         if (deviceCreateOnStart) {
-            deviceManager.createDevices();
+            deviceAPITest.createDevices();
         }
-        deviceManager.warmUpDevices();
+
+        deviceAPITest.warmUpDevices();
 
         ruleChainManager.createRuleChainWithCountNodeAndSetAsRoot();
 
         statisticsCollector.start();
 
-        deviceManager.runTests(publishTelemetryCount, publishTelemetryPause);
+        deviceAPITest.runApiTests(publishTelemetryCount, publishTelemetryPause);
 
         statisticsCollector.end();
 
@@ -72,7 +76,7 @@ public class TestExecutor {
         statisticsCollector.printResults();
 
         if (deviceDeleteOnComplete) {
-            deviceManager.removeDevices();
+            deviceAPITest.removeDevices();
         }
     }
 
