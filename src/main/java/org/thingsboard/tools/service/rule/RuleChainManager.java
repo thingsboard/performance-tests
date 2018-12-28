@@ -24,12 +24,15 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.thingsboard.client.tools.RestClient;
+import org.thingsboard.server.common.data.id.IdBased;
 import org.thingsboard.server.common.data.id.RuleChainId;
 import org.thingsboard.server.common.data.page.TextPageData;
 import org.thingsboard.server.common.data.rule.RuleChain;
 import org.thingsboard.server.common.data.rule.RuleChainMetaData;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -55,6 +58,8 @@ public class RuleChainManager {
         restClient.login(username, password);
 
         defaultRootRuleChainId = getDefaultRuleChainId();
+
+        deleteAllPreviousPerformanceTestRuleChains();
 
         try {
             JsonNode updatedRootRuleChainConfig = objectMapper.readTree(this.getClass().getClassLoader().getResourceAsStream("root_rule_chain.json"));
@@ -95,24 +100,37 @@ public class RuleChainManager {
                         RuleChainMetaData.class);
     }
 
+    private void deleteAllPreviousPerformanceTestRuleChains() {
+        ResponseEntity<TextPageData<RuleChain>> ruleChains =
+                restClient.getRestTemplate().exchange(
+                        restUrl + "/api/ruleChains?limit=999&textSearch=Performance Test Rule Chain",
+                        HttpMethod.GET,
+                        null,
+                        new ParameterizedTypeReference<TextPageData<RuleChain>>() {});
+
+        List<RuleChainId> ruleChainIds = ruleChains.getBody().getData()
+                .stream().map(IdBased::getId).collect(Collectors.toList());
+
+        ruleChainIds.forEach(ruleChainId -> restClient.getRestTemplate().delete(restUrl + "/api/ruleChain/" + ruleChainId.getId()));
+    }
+
     private RuleChainId getDefaultRuleChainId() {
         ResponseEntity<TextPageData<RuleChain>> ruleChains =
                 restClient.getRestTemplate().exchange(
-                        restUrl + "/api/ruleChains?limit=999&textSearch=",
+                        restUrl + "/api/ruleChains?limit=999&textSearch=Root Rule Chain",
                         HttpMethod.GET,
                         null,
-                        new ParameterizedTypeReference<TextPageData<RuleChain>>() {
-                        });
+                        new ParameterizedTypeReference<TextPageData<RuleChain>>() {});
 
         Optional<RuleChain> defaultRuleChain = ruleChains.getBody().getData()
                 .stream()
-                .filter(RuleChain::isRoot)
                 .findFirst();
 
         if (!defaultRuleChain.isPresent()) {
             throw new RuntimeException("Root rule chain was not found");
         }
 
+        setRootRuleChain(defaultRuleChain.get().getId());
         return defaultRuleChain.get().getId();
     }
 }

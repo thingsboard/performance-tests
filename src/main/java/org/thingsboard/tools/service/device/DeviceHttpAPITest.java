@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,10 +15,16 @@
  */
 package org.thingsboard.tools.service.device;
 
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
+import org.springframework.http.client.Netty4ClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.util.concurrent.ListenableFuture;
+import org.springframework.util.concurrent.ListenableFutureCallback;
+import org.springframework.web.client.AsyncRestTemplate;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -31,14 +37,23 @@ import java.util.concurrent.atomic.AtomicInteger;
 @ConditionalOnProperty(prefix = "device", value = "api", havingValue = "HTTP")
 public class DeviceHttpAPITest extends BaseDeviceAPITest {
 
+    private EventLoopGroup eventLoopGroup;
+    private AsyncRestTemplate httpClient;
+
     @PostConstruct
     void init() {
         super.init();
+        this.eventLoopGroup = new NioEventLoopGroup();
+        Netty4ClientHttpRequestFactory nettyFactory = new Netty4ClientHttpRequestFactory(this.eventLoopGroup);
+        httpClient = new AsyncRestTemplate(nettyFactory);
     }
 
     @PreDestroy
     void destroy() {
         super.destroy();
+        if (this.eventLoopGroup != null) {
+            this.eventLoopGroup.shutdownGracefully(0, 5, TimeUnit.SECONDS);
+        }
     }
 
     @Override
@@ -47,25 +62,40 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
         long maxDelay = (publishTelemetryPause + 1) * publishTelemetryCount;
         final int totalMessagesToPublish = deviceCount * publishTelemetryCount;
         AtomicInteger publishedCount = new AtomicInteger();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<String> entity = new HttpEntity<>(dataAsStr, headers);
+
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
             final int tokenNumber = i;
             testExecutor.submit(() -> {
                 testPublishExecutor.scheduleAtFixedRate(() -> {
                     try {
                         String token = getToken(tokenNumber);
-                        restClient.getRestTemplate()
-                                .postForEntity(restUrl + "/api/v1/{token}/telemetry",
-                                        mapper.readTree(dataAsStr),
-                                        ResponseEntity.class,
-                                        token);
-                        publishedCount.getAndIncrement();
+                        String url = restUrl + "/api/v1/" + token + "/telemetry";
+                        ListenableFuture<ResponseEntity<Void>> future = httpClient.exchange(url, HttpMethod.POST, entity, Void.class);
+                        future.addCallback(new ListenableFutureCallback<ResponseEntity>() {
+                            @Override
+                            public void onFailure(Throwable throwable) {
+                                log.error("Error while publishing telemetry, token: {}", tokenNumber, throwable);
+                            }
+
+                            @Override
+                            public void onSuccess(ResponseEntity responseEntity) {
+                                if (responseEntity.getStatusCode().is2xxSuccessful()) {
+                                    publishedCount.getAndIncrement();
+                                    if (publishedCount.get() % deviceCount == 0) {
+                                        log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
+                                                publishedCount.get(), totalMessagesToPublish - publishedCount.get(), totalMessagesToPublish);
+                                    }
+                                } else {
+                                    log.error("Error while publishing telemetry, token: {}, status code: {}", tokenNumber, responseEntity.getStatusCode().getReasonPhrase());
+                                }
+                            }
+                        });
                     } catch (Exception e) {
                         log.error("Error while publishing telemetry, token: {}", tokenNumber, e);
-                    } finally {
-                        if (publishedCount.get() % deviceCount == 0) {
-                            log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
-                                    publishedCount.get(), totalMessagesToPublish - publishedCount.get(), totalMessagesToPublish);
-                        }
                     }
                 }, 0, publishTelemetryPause, TimeUnit.MILLISECONDS);
             });

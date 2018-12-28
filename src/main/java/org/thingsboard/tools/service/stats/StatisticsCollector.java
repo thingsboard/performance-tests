@@ -109,7 +109,7 @@ public class StatisticsCollector {
                     prevTime = currTime;
                 }
             }
-            if (count > 0) {
+            if (count > 1) {
                 intervalInSeconds = (int) (intervalSum / 1000 / (count - 1));
                 String nodeName = telemetryKey.substring(STATS_TELEMETRY_PREFIX.length() + 1);
                 double avg = new BigDecimal(((double) total) / count).setScale(2, RoundingMode.HALF_UP).doubleValue();
