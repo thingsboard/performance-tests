@@ -113,7 +113,7 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
     }
 
     private void logPublishedMessages(int count, int totalMessagesToPublish, int tokenNumber) {
-        if (count % deviceCount == 0 && tokenNumber == deviceStartIdx) {
+        if (tokenNumber == deviceStartIdx) {
             log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
                     count, totalMessagesToPublish - count, totalMessagesToPublish);
         }

@@ -129,7 +129,7 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
                     }
                     finally {
                         totalPublishedCount.getAndIncrement();
-                        if (totalPublishedCount.get() % mqttClients.size() == 0 && mqttClient.getClientConfig().getClientId().equals(mqttClients.get(0).getClientConfig().getClientId())) {
+                        if (mqttClient.getClientConfig().getClientId().equals(mqttClients.get(0).getClientConfig().getClientId())) {
                             log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
                                     totalPublishedCount.get(), totalMessagesToPublish - totalPublishedCount.get(), totalMessagesToPublish);
                         }
