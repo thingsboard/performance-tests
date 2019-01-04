@@ -61,7 +61,9 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
         log.info("Starting performance test for {} devices...", deviceCount);
         long maxDelay = (publishTelemetryPause + 1) * publishTelemetryCount;
         final int totalMessagesToPublish = deviceCount * publishTelemetryCount;
-        AtomicInteger publishedCount = new AtomicInteger();
+        AtomicInteger totalPublishedCount = new AtomicInteger();
+        AtomicInteger successPublishedCount = new AtomicInteger();
+        AtomicInteger failedPublishedCount = new AtomicInteger();
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -78,20 +80,24 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
                         future.addCallback(new ListenableFutureCallback<ResponseEntity>() {
                             @Override
                             public void onFailure(Throwable throwable) {
+                                failedPublishedCount.getAndIncrement();
                                 log.error("Error while publishing telemetry, token: {}", tokenNumber, throwable);
+
+                                totalPublishedCount.getAndIncrement();
+                                logPublishedMessages(totalPublishedCount.get(), totalMessagesToPublish, tokenNumber);
                             }
 
                             @Override
                             public void onSuccess(ResponseEntity responseEntity) {
                                 if (responseEntity.getStatusCode().is2xxSuccessful()) {
-                                    publishedCount.getAndIncrement();
-                                    if (publishedCount.get() % deviceCount == 0) {
-                                        log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
-                                                publishedCount.get(), totalMessagesToPublish - publishedCount.get(), totalMessagesToPublish);
-                                    }
+                                    successPublishedCount.getAndIncrement();
                                 } else {
+                                    failedPublishedCount.getAndIncrement();
                                     log.error("Error while publishing telemetry, token: {}, status code: {}", tokenNumber, responseEntity.getStatusCode().getReasonPhrase());
                                 }
+
+                                totalPublishedCount.getAndIncrement();
+                                logPublishedMessages(totalPublishedCount.get(), totalMessagesToPublish, tokenNumber);
                             }
                         });
                     } catch (Exception e) {
@@ -103,6 +109,14 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
         Thread.sleep(maxDelay);
         testPublishExecutor.shutdownNow();
         log.info("Performance test was completed for {} devices!", deviceCount);
+        log.info("{} messages were published successfully, {} failed!", successPublishedCount.get(), failedPublishedCount.get());
+    }
+
+    private void logPublishedMessages(int count, int totalMessagesToPublish, int tokenNumber) {
+        if (count % deviceCount == 0 && tokenNumber == deviceStartIdx) {
+            log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
+                    count, totalMessagesToPublish - count, totalMessagesToPublish);
+        }
     }
 
     @Override
