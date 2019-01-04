@@ -106,7 +106,9 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
         log.info("Starting performance test for {} devices...", mqttClients.size());
         long maxDelay = (publishTelemetryPause + 1) * publishTelemetryCount;
         final int totalMessagesToPublish = mqttClients.size() * publishTelemetryCount;
-        AtomicInteger publishedCount = new AtomicInteger();
+        AtomicInteger totalPublishedCount = new AtomicInteger();
+        AtomicInteger successPublishedCount = new AtomicInteger();
+        AtomicInteger failedPublishedCount = new AtomicInteger();
         for (MqttClient mqttClient : mqttClients) {
             testExecutor.submit(() -> {
                 testPublishExecutor.scheduleAtFixedRate(() -> {
@@ -114,17 +116,22 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
                         mqttClient.publish("v1/devices/me/telemetry", Unpooled.wrappedBuffer(data), MqttQoS.AT_LEAST_ONCE)
                                 .addListener(future -> {
                                             if (future.isSuccess()) {
+                                                successPublishedCount.getAndIncrement();
                                                 log.debug("Message was successfully published to device: {}", mqttClient.getClientConfig().getUsername());
                                             } else {
+                                                failedPublishedCount.getAndIncrement();
                                                 log.error("Error while publishing message to device: {}", mqttClient.getClientConfig().getUsername());
                                             }
-                                            publishedCount.getAndIncrement();
                                         }
                                 );
-                    } finally {
-                        if (publishedCount.get() % mqttClients.size() == 0) {
+                    } catch (Exception e) {
+                        failedPublishedCount.getAndIncrement();
+                    }
+                    finally {
+                        totalPublishedCount.getAndIncrement();
+                        if (totalPublishedCount.get() % mqttClients.size() == 0 && mqttClient.getClientConfig().getClientId().equals(mqttClients.get(0).getClientConfig().getClientId())) {
                             log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
-                                    publishedCount.get(), totalMessagesToPublish - publishedCount.get(), totalMessagesToPublish);
+                                    totalPublishedCount.get(), totalMessagesToPublish - totalPublishedCount.get(), totalMessagesToPublish);
                         }
                     }
                 }, 0, publishTelemetryPause, TimeUnit.MILLISECONDS);
@@ -133,6 +140,7 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
         Thread.sleep(maxDelay);
         testPublishExecutor.shutdownNow();
         log.info("Performance test was completed for {} devices!", mqttClients.size());
+        log.info("{} messages were published successfully, {} failed!", successPublishedCount.get(), failedPublishedCount.get());
     }
 
     @Override
