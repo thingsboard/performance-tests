@@ -89,6 +89,7 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
 
     @Override
     public void createDevices() throws Exception {
+        restClient.login(username, password);
         log.info("Creating {} devices...", deviceCount);
         CountDownLatch latch = new CountDownLatch(deviceCount);
         AtomicInteger count = new AtomicInteger();
@@ -122,6 +123,7 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
 
     @Override
     public void removeDevices() throws Exception {
+        restClient.login(username, password);
         log.info("Removing {} devices...", deviceIds.size());
         CountDownLatch latch = new CountDownLatch(deviceIds.size());
         AtomicInteger count = new AtomicInteger();

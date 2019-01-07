@@ -58,6 +58,7 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
 
     @Override
     public void runApiTests(int publishTelemetryCount, final int publishTelemetryPause) throws InterruptedException {
+        restClient.login(username, password);
         log.info("Starting performance test for {} devices...", deviceCount);
         long maxDelay = (publishTelemetryPause + 1) * publishTelemetryCount;
         final int totalMessagesToPublish = deviceCount * publishTelemetryCount;
@@ -121,6 +122,7 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
 
     @Override
     public void warmUpDevices() throws InterruptedException {
+        restClient.login(username, password);
         log.info("Warming up {} devices...", deviceCount);
         CountDownLatch connectLatch = new CountDownLatch(deviceCount);
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
