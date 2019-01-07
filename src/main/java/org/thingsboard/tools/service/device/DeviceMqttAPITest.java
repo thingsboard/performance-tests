@@ -99,6 +99,7 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
 
     @Override
     public void runApiTests(int publishTelemetryCount, final int publishTelemetryPause) throws InterruptedException {
+        restClient.login(username, password);
         if (mqttClients.size() == 0) {
             log.info("Test stopped. No devices available!");
             return;
@@ -126,8 +127,7 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
                                 );
                     } catch (Exception e) {
                         failedPublishedCount.getAndIncrement();
-                    }
-                    finally {
+                    } finally {
                         totalPublishedCount.getAndIncrement();
                         if (mqttClient.getClientConfig().getClientId().equals(mqttClients.get(0).getClientConfig().getClientId())) {
                             log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
@@ -145,6 +145,7 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
 
     @Override
     public void warmUpDevices() throws InterruptedException {
+        restClient.login(username, password);
         log.info("Warming up {} devices...", deviceCount);
         CountDownLatch connectLatch = new CountDownLatch(deviceCount);
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {

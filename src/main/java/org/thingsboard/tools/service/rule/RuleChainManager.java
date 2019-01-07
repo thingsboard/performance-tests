@@ -77,6 +77,7 @@ public class RuleChainManager {
     }
 
     public void revertRootNodeAndCleanUp() {
+        restClient.login(username, password);
         setRootRuleChain(defaultRootRuleChainId);
         restClient.getRestTemplate().delete(restUrl + "/api/ruleChain/" + updatedRuleChainId.getId());
     }
