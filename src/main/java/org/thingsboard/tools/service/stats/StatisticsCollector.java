@@ -16,6 +16,7 @@
 package org.thingsboard.tools.service.stats;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpMethod;
@@ -25,7 +26,6 @@ import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.EntityType;
 import org.thingsboard.server.common.data.id.TenantId;
 
-import javax.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
@@ -55,28 +55,26 @@ public class StatisticsCollector {
     private long startTs;
     private long endTs;
 
-    public void start(){
+    public void start() {
         startTs = System.currentTimeMillis();
     }
 
-    public void end(){
+    public void end() {
         endTs = System.currentTimeMillis();
     }
 
     public void printResults() {
         RestClient restClient = new RestClient(restUrl);
         restClient.login(username, password);
-        // hack to get tenant id
-        Device device = restClient.createDevice("Dummy asset", "default");
-        TenantId tenantId = device.getTenantId();
-        restClient.deleteDevice(device.getId());
+        TenantId tenantId = getTenantId(restClient);
         List<String> keys = restClient.getRestTemplate().exchange(
                 restUrl + "/api/plugins/telemetry/" + EntityType.TENANT.name() + "/" + tenantId + "/keys/timeseries",
                 HttpMethod.GET,
                 null,
-                new ParameterizedTypeReference<List<String>>() {}).getBody();
+                new ParameterizedTypeReference<List<String>>() {
+                }).getBody();
 
-        List<String> perfTestsTelemetryKeys = keys.stream().filter(k -> k.startsWith("perf_tests")).collect(Collectors.toList());
+        List<String> perfTestsTelemetryKeys = keys.stream().filter(k -> k.startsWith(STATS_TELEMETRY_PREFIX)).collect(Collectors.toList());
 
         Map<String, List<Map<String, String>>> result =
                 restClient.getRestTemplate().exchange(
@@ -84,7 +82,8 @@ public class StatisticsCollector {
                                 "/values/timeseries?keys=" + String.join(",", perfTestsTelemetryKeys) + "&startTs=" + startTs + "&endTs=" + endTs,
                         HttpMethod.GET,
                         null,
-                        new ParameterizedTypeReference<Map<String, List<Map<String, String>>>>() {}).getBody();
+                        new ParameterizedTypeReference<Map<String, List<Map<String, String>>>>() {
+                        }).getBody();
         double totalAvg = 0;
         int intervalInSeconds = 1;
         for (String telemetryKey : result.keySet()) {
@@ -120,6 +119,13 @@ public class StatisticsCollector {
         if (totalAvg > 0) {
             log.info("============ Total AVG is {} per {} second ============", totalAvg, intervalInSeconds);
         }
+    }
+
+    private TenantId getTenantId(RestClient restClient) {
+        Device device = restClient.createDevice(RandomStringUtils.randomAlphanumeric(15), "default");
+        TenantId tenantId = device.getTenantId();
+        restClient.deleteDevice(device.getId());
+        return tenantId;
     }
 
 }
