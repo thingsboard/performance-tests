@@ -26,5 +26,5 @@ services:
       DEVICE_COUNT: 10
       PUBLISH_TELEMETRY_COUNT: 10
       PUBLISH_TELEMETRY_PAUSE: 1000
-      USERNAME: "vbabak@thingsboard.io"
-      PASSWORD: "CCyer445m"
+      USERNAME: "tenant@thingsboard.org"
+      PASSWORD: "tenant"
