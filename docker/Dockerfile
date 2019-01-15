@@ -14,18 +14,15 @@
 # limitations under the License.
 #
 
-FROM maven:3.5.0-jdk-8
+FROM openjdk:8-jdk
 
-RUN mkdir /root/performance-tests
+COPY start-tb-node.sh ${pkg.name}.deb /tmp/
 
-COPY run_tests.sh /root/run_tests.sh
-COPY data-1.0.0.jar /root/data-1.0.0.jar
-COPY tools-1.0.0.jar /root/tools-1.0.0.jar
-COPY project-src.tar.gz /root/project-src.tar.gz
-COPY pom.xml /root/performance-tests/pom.xml
+RUN chmod a+x /tmp/*.sh \
+    && mv /tmp/start-tb-node.sh /usr/bin
 
-RUN chmod +x /root/run_tests.sh
+RUN dpkg -i /tmp/${pkg.name}.deb
 
-WORKDIR /root
+RUN update-rc.d ${pkg.name} disable
 
-CMD ["/root/run_tests.sh"]
+CMD ["start-tb-node.sh"]
