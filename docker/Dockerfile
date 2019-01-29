@@ -16,13 +16,31 @@
 
 FROM openjdk:8-jdk
 
-COPY start-tb-node.sh ${pkg.name}.deb /tmp/
+COPY start-tests.sh ${pkg.name}.conf ${pkg.name}.deb /tmp/
 
 RUN chmod a+x /tmp/*.sh \
-    && mv /tmp/start-tb-node.sh /usr/bin
+    && mv /tmp/start-tests.sh /usr/bin
 
 RUN dpkg -i /tmp/${pkg.name}.deb
 
 RUN update-rc.d ${pkg.name} disable
 
-CMD ["start-tb-node.sh"]
+RUN mv /tmp/${pkg.name}.conf ${pkg.installFolder}/conf
+
+ENV REST_URL=localhost:9090
+ENV REST_USERNAME=tenant@thingsboard.org
+ENV REST_PASSWORD=tenant
+
+ENV MQTT_HOST=localhost
+ENV MQTT_PORT=1883
+
+ENV DEVICE_API=MQTT
+ENV DEVICE_START_IDX=0
+ENV DEVICE_END_IDX=10
+ENV DEVICE_CREATE_ON_START=true
+ENV DEVICE_DELETE_ON_COMPLETE=true
+
+ENV PUBLISH_COUNT=10
+ENV PUBLISH_PAUSE=1000
+
+CMD ["start-tests.sh"]

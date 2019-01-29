@@ -21,7 +21,7 @@
 
     <groupId>org.thingsboard</groupId>
     <artifactId>performance-tests</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>2.0.0</version>
     <packaging>jar</packaging>
 
     <name>Thingsboard Performance Tests</name>
@@ -44,6 +44,8 @@
         <pkg.installFolder>/usr/share/${pkg.name}</pkg.installFolder>
         <pkg.win.dist>${project.build.directory}/windows</pkg.win.dist>
         <thingsboard.version>2.2.0-SNAPSHOT</thingsboard.version>
+        <docker.repo>thingsboard</docker.repo>
+        <tb-performance-test.docker.name>tb-performance-test</tb-performance-test.docker.name>
     </properties>
 
     <dependencies>
@@ -193,6 +195,11 @@
                         </execution>
                     </executions>
                 </plugin>
+                <plugin>
+                    <groupId>com.spotify</groupId>
+                    <artifactId>dockerfile-maven-plugin</artifactId>
+                    <version>1.4.5</version>
+                </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
@@ -225,6 +232,31 @@
                     </execution>
                 </executions>
             </plugin>
+            <!--<plugin>-->
+                <!--<groupId>org.apache.maven.plugins</groupId>-->
+                <!--<artifactId>maven-dependency-plugin</artifactId>-->
+                <!--<executions>-->
+                    <!--<execution>-->
+                        <!--<id>copy-tb-deb</id>-->
+                        <!--<phase>package</phase>-->
+                        <!--<goals>-->
+                            <!--<goal>copy</goal>-->
+                        <!--</goals>-->
+                        <!--<configuration>-->
+                            <!--<artifactItems>-->
+                                <!--<artifactItem>-->
+                                    <!--<groupId>org.thingsboard</groupId>-->
+                                    <!--<artifactId>application</artifactId>-->
+                                    <!--<classifier>deb</classifier>-->
+                                    <!--<type>deb</type>-->
+                                    <!--<destFileName>${pkg.name}.deb</destFileName>-->
+                                    <!--<outputDirectory>${project.build.directory}/docker-tb</outputDirectory>-->
+                                <!--</artifactItem>-->
+                            <!--</artifactItems>-->
+                        <!--</configuration>-->
+                    <!--</execution>-->
+                <!--</executions>-->
+            <!--</plugin>-->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-resources-plugin</artifactId>
@@ -322,6 +354,36 @@
                             </filters>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>copy-docker-service-conf</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/docker</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>src/main/resources</directory>
+                                    <excludes>
+                                        <exclude>logback.xml</exclude>
+                                    </excludes>
+                                    <filtering>false</filtering>
+                                </resource>
+                                <resource>
+                                    <directory>src/main/conf</directory>
+                                    <filtering>true</filtering>
+                                </resource>
+                                <resource>
+                                    <directory>docker</directory>
+                                    <filtering>true</filtering>
+                                </resource>
+                            </resources>
+                            <filters>
+                                <filter>src/main/filters/unix.properties</filter>
+                            </filters>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <plugin>
@@ -406,8 +468,105 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-docker-deb</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/docker</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.build.directory}</directory>
+                                    <includes>
+                                        <include>${pkg.name}.deb</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>com.spotify</groupId>
+                <artifactId>dockerfile-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>build-docker-tb-image</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>build</goal>
+                        </goals>
+                        <configuration>
+                            <repository>${docker.repo}/${tb-performance-test.docker.name}</repository>
+                            <verbose>true</verbose>
+                            <googleContainerRegistryEnabled>false</googleContainerRegistryEnabled>
+                            <contextDirectory>${project.build.directory}/docker</contextDirectory>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>tag-docker-tb-image</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>tag</goal>
+                        </goals>
+                        <configuration>
+                            <repository>${docker.repo}/${tb-performance-test.docker.name}</repository>
+                            <tag>${project.version}</tag>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>push-docker-image</id>
+            <activation>
+                <property>
+                    <name>push-docker-image</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.spotify</groupId>
+                        <artifactId>dockerfile-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>push-latest-docker-tb-performance-test-image</id>
+                                <phase>pre-integration-test</phase>
+                                <goals>
+                                    <goal>push</goal>
+                                </goals>
+                                <configuration>
+                                    <tag>latest</tag>
+                                    <repository>${docker.repo}/${tb-performance-test.docker.name}</repository>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>push-version-docker-tb-performance-test-image</id>
+                                <phase>pre-integration-test</phase>
+                                <goals>
+                                    <goal>push</goal>
+                                </goals>
+                                <configuration>
+                                    <tag>${project.version}</tag>
+                                    <repository>${docker.repo}/${tb-performance-test.docker.name}</repository>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
     <repositories>
         <repository>
