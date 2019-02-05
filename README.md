@@ -9,18 +9,26 @@ Project that is able to stress test Thingsboard server with a huge number of MQT
 
 ## Running
 
-To run test againt Thingsboard first create plain text file to set up test configuration (in our example configuration file name is .env)
+To run test against ThingsBoard first create plain text file to set up test configuration (in our example configuration file name is .env):
 ```bash
 touch .env
 ```
 
-Put next content into the text file and modify according to your test goals
+Edit this *.env* file:
 ```bash
-REST_URL=http://IP_ADDRESS_OF_TB_INSTANCE:9090 # IP_ADDRESS_OF_TB_INSTANCE is your local IP address if you run ThingsBoard on your dev machine in docker 
+nano .env
+```
+
+and put next content into the text file (modify it according to your test goals):
+```bash
+REST_URL=http://IP_ADDRESS_OF_TB_INSTANCE:9090
+# IP_ADDRESS_OF_TB_INSTANCE is your local IP address if you run ThingsBoard on your dev machine in docker
+# Port should be modified as well if needed 
 REST_USERNAME=tenant@thingsboard.org
 REST_PASSWORD=tenant
 
 MQTT_HOST=IP_ADDRESS_OF_TB_INSTANCE
+# IP_ADDRESS_OF_TB_INSTANCE is your local IP address if you run ThingsBoard on your dev machine in docker
 MQTT_PORT=1883
 
 DEVICE_API=MQTT
