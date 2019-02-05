@@ -9,7 +9,7 @@ Project that is able to stress test Thingsboard server with a huge number of MQT
 
 ## Running
 
-To run test against ThingsBoard first create plain text file to set up test configuration (in our example configuration file name is .env):
+To run test against ThingsBoard first create plain text file to set up test configuration (in our example configuration file name is *.env*):
 ```bash
 touch .env
 ```
