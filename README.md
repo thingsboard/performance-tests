@@ -16,11 +16,11 @@ touch .env
 
 Put next content into the text file and modify according to your test goals
 ```bash
-REST_URL=localhost:9090
+REST_URL=http://IP_ADDRESS_OF_TB_INSTANCE:9090 # IP_ADDRESS_OF_TB_INSTANCE is your local IP address if you run ThingsBoard on your dev machine in docker 
 REST_USERNAME=tenant@thingsboard.org
 REST_PASSWORD=tenant
 
-MQTT_HOST=localhost
+MQTT_HOST=IP_ADDRESS_OF_TB_INSTANCE
 MQTT_PORT=1883
 
 DEVICE_API=MQTT
@@ -38,14 +38,14 @@ Where:
 - `REST_URL`                     - Rest URL of the TB instance
 - `REST_USERNAME`                - Login of the user 
 - `REST_PASSWORD`                - Password of the user
-- `MQTT_HOST`                    - URL of the Thingsboard MQTT broker
-- `MQTT_PORT`                    - Port of the Thingsboard MQTT broker
+- `MQTT_HOST`                    - URL of the ThingsBoard MQTT broker
+- `MQTT_PORT`                    - Port of the ThingsBoard MQTT broker
 - `DEVICE_API`                   - Use MQTT or HTTP Device API for send messages
 - `DEVICE_START_IDX`             - First index of the device that is going to be used in the test. Token of the device is going to be index of this device during test
 - `DEVICE_END_IDX`               - Last index of the device that is going to be used in  the test
 - `DEVICE_CREATE_ON_START`       - Create devices before test 
 - `DEVICE_DELETE_ON_COMPLETE`    - Delete devices after test, there were created on start of the test
-- `PUBLISH_COUNT`                - Number of the messages to be published for a signle simulated device
+- `PUBLISH_COUNT`                - Number of the messages to be published for a single simulated device
 - `PUBLISH_PAUSE`                - Pause between messages for a single simulated device in milliseconds
 
   
