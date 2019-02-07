@@ -134,7 +134,7 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
                                     totalPublishedCount.get(), totalMessagesToPublish - totalPublishedCount.get(), totalMessagesToPublish);
                         }
                     }
-                }, 0, publishTelemetryPause, TimeUnit.MILLISECONDS);
+                }, randomInt.nextInt(publishTelemetryPause), publishTelemetryPause, TimeUnit.MILLISECONDS);
             });
         }
         Thread.sleep(maxDelay);

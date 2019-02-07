@@ -104,7 +104,7 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
                     } catch (Exception e) {
                         log.error("Error while publishing telemetry, token: {}", tokenNumber, e);
                     }
-                }, 0, publishTelemetryPause, TimeUnit.MILLISECONDS);
+                }, randomInt.nextInt(publishTelemetryPause), publishTelemetryPause, TimeUnit.MILLISECONDS);
             });
         }
         Thread.sleep(maxDelay);

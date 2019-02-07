@@ -31,6 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -43,6 +44,8 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
 
     static String dataAsStr = "{\"longKey\":73}";
     static byte[] data = dataAsStr.getBytes(StandardCharsets.UTF_8);
+
+    static Random randomInt = new Random();
 
     static protected ObjectMapper mapper = new ObjectMapper();
 
