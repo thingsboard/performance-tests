@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -33,7 +33,11 @@ import javax.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
@@ -105,6 +109,7 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
             return;
         }
         log.info("Starting performance test for {} devices...", mqttClients.size());
+        log.info("Message statistics will be displayed every {} seconds", publishTelemetryPause / 1000);
         long maxDelay = (publishTelemetryPause + 1) * publishTelemetryCount;
         final int totalMessagesToPublish = mqttClients.size() * publishTelemetryCount;
         AtomicInteger totalPublishedCount = new AtomicInteger();

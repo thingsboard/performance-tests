@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,13 +16,8 @@
 package org.thingsboard.tools.service.device;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.handler.ssl.SslContextBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.client.Netty4ClientHttpRequestFactory;
-import org.springframework.web.client.AsyncRestTemplate;
 import org.thingsboard.client.tools.RestClient;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.DeviceId;
@@ -32,7 +27,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -96,7 +90,7 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
         log.info("Creating {} devices...", deviceCount);
         CountDownLatch latch = new CountDownLatch(deviceCount);
         AtomicInteger count = new AtomicInteger();
-        final int logInterval = deviceCount / 10;
+        final int logInterval = deviceCount / 10 > 1000 ? 1000 : deviceCount / 10;
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
             final int tokenNumber = i;
             httpExecutor.submit(() -> {
@@ -130,7 +124,7 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
         log.info("Removing {} devices...", deviceIds.size());
         CountDownLatch latch = new CountDownLatch(deviceIds.size());
         AtomicInteger count = new AtomicInteger();
-        final int logInterval = deviceIds.size() / 10;
+        final int logInterval = deviceIds.size() / 10 > 1000 ? 1000 : deviceIds.size() / 10;
         for (DeviceId deviceId : deviceIds) {
             httpExecutor.submit(() -> {
                 try {

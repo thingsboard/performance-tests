@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,11 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.Netty4ClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.concurrent.ListenableFuture;
@@ -60,6 +64,7 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
     public void runApiTests(int publishTelemetryCount, final int publishTelemetryPause) throws InterruptedException {
         restClient.login(username, password);
         log.info("Starting performance test for {} devices...", deviceCount);
+        log.info("Message statistics will be displayed every {} seconds", publishTelemetryPause / 1000);
         long maxDelay = (publishTelemetryPause + 1) * publishTelemetryCount;
         final int totalMessagesToPublish = deviceCount * publishTelemetryCount;
         AtomicInteger totalPublishedCount = new AtomicInteger();
