@@ -144,13 +144,19 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
     }
 
     @Override
-    public void warmUpDevices() throws InterruptedException {
+    public void warmUpDevices(final int publishTelemetryPause) throws InterruptedException {
         restClient.login(username, password);
         log.info("Warming up {} devices...", deviceCount);
+        AtomicInteger totalConnectedCount = new AtomicInteger();
         CountDownLatch connectLatch = new CountDownLatch(deviceCount);
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
             final int tokenNumber = i;
             mqttExecutor.submit(() -> {
+                try {
+                    Thread.sleep(randomInt.nextInt(publishTelemetryPause / 100));
+                } catch (InterruptedException e) {
+                    log.error("Error during thread sleep", e);
+                }
                 try {
                     String token = getToken(tokenNumber);
                     mqttClients.add(initClient(token));
@@ -158,14 +164,22 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
                     log.error("Error while warm-up device", e);
                 } finally {
                     connectLatch.countDown();
+                    totalConnectedCount.getAndIncrement();
+                    log.info("[{}] devices have been connected!", totalConnectedCount.get());
                 }
             });
         }
         connectLatch.await();
 
+        AtomicInteger totalWarmedUpCount = new AtomicInteger();
         CountDownLatch warmUpLatch = new CountDownLatch(mqttClients.size());
         for (MqttClient mqttClient : mqttClients) {
             mqttExecutor.submit(() -> {
+                try {
+                    Thread.sleep(randomInt.nextInt(publishTelemetryPause / 100));
+                } catch (InterruptedException e) {
+                    log.error("Error during thread sleep", e);
+                }
                 mqttClient.publish("v1/devices/me/telemetry", Unpooled.wrappedBuffer(data), MqttQoS.AT_LEAST_ONCE)
                         .addListener(future -> {
                                     if (future.isSuccess()) {
@@ -174,6 +188,8 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
                                         log.error("Error while publishing message to device: {}", mqttClient.getClientConfig().getUsername());
                                     }
                                     warmUpLatch.countDown();
+                                    totalWarmedUpCount.getAndIncrement();
+                                    log.info("[{}] devices have been warmed up!", totalWarmedUpCount.get());
                                 }
                         );
             });

@@ -121,7 +121,7 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
     }
 
     @Override
-    public void warmUpDevices() throws InterruptedException {
+    public void warmUpDevices(final int publishTelemetryPause) throws InterruptedException {
         restClient.login(username, password);
         log.info("Warming up {} devices...", deviceCount);
         CountDownLatch connectLatch = new CountDownLatch(deviceCount);

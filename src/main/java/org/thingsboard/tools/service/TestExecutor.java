@@ -59,7 +59,7 @@ public class TestExecutor {
             deviceAPITest.createDevices();
         }
 
-        deviceAPITest.warmUpDevices();
+        deviceAPITest.warmUpDevices(publishTelemetryPause);
 
         ruleChainManager.createRuleChainWithCountNodeAndSetAsRoot();
 

@@ -21,7 +21,7 @@ public interface DeviceAPITest {
 
     void removeDevices() throws Exception;
 
-    void warmUpDevices() throws InterruptedException;
+    void warmUpDevices(final int publishTelemetryPause) throws InterruptedException;
 
     void runApiTests(int publishTelemetryCount, final int publishTelemetryPause) throws InterruptedException;
 }
