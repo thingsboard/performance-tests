@@ -26,11 +26,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -40,9 +40,10 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
     static String dataAsStr = "{\"longKey\":73}";
     static byte[] data = dataAsStr.getBytes(StandardCharsets.UTF_8);
 
-    static Random randomInt = new Random();
+    static ObjectMapper mapper = new ObjectMapper();
 
-    static protected ObjectMapper mapper = new ObjectMapper();
+    static final int LOG_PAUSE = 1;
+    static final int PUBLISHED_MESSAGES_LOG_PAUSE = 5;
 
     @Value("${device.startIdx}")
     int deviceStartIdx;
@@ -65,7 +66,7 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
 
     final ExecutorService httpExecutor = Executors.newFixedThreadPool(100);
     final ScheduledExecutorService schedulerExecutor = Executors.newScheduledThreadPool(10);
-    final ExecutorService testExecutor = Executors.newFixedThreadPool(100);
+    final ScheduledExecutorService schedulerLogExecutor = Executors.newScheduledThreadPool(10);
 
     private final List<DeviceId> deviceIds = Collections.synchronizedList(new ArrayList<>());
 
@@ -111,15 +112,16 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
                 }
             });
         }
-        httpExecutor.submit(() -> {
-            schedulerExecutor.scheduleAtFixedRate(() -> {
-                try {
-                    log.info("{} devices has been created so far...", count.get());
-                } catch (Exception ignored) {}
-            }, 0, 5, TimeUnit.SECONDS);
-        });
+
+        ScheduledFuture<?> logScheduleFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
+            try {
+                log.info("{} devices has been created so far...", count.get());
+            } catch (Exception ignored) {
+            }
+        }, 0, LOG_PAUSE, TimeUnit.SECONDS);
+
         latch.await();
-        schedulerExecutor.shutdownNow();
+        logScheduleFuture.cancel(false);
         log.info("{} devices have been created successfully!", deviceIds.size());
     }
 
@@ -141,14 +143,15 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
                 }
             });
         }
-        httpExecutor.submit(() -> {
-            schedulerExecutor.scheduleAtFixedRate(() -> {
-                try {
-                    log.info("{} devices has been removed so far...", count.get());
-                } catch (Exception ignored) {}
-            }, 0, 5, TimeUnit.SECONDS);
-        });
+
+        ScheduledFuture<?> logScheduleFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
+            try {
+                log.info("{} devices has been removed so far...", count.get());
+            } catch (Exception ignored) {}
+        }, 0, LOG_PAUSE, TimeUnit.SECONDS);
+
         latch.await();
+        logScheduleFuture.cancel(false);
         Thread.sleep(1000);
         log.info("{} devices have been removed successfully! {} were failed for removal!", count.get(), deviceIds.size() - count.get());
     }

@@ -34,8 +34,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -45,7 +46,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @ConditionalOnProperty(prefix = "device", value = "api", havingValue = "MQTT")
 public class DeviceMqttAPITest extends BaseDeviceAPITest {
 
-    private static final int CONNECT_TIMEOUT_IN_SECONDS = 5;
+    private static final int CONNECT_TIMEOUT = 5;
 
     @Value("${mqtt.host}")
     private String mqttHost;
@@ -53,7 +54,7 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
     @Value("${mqtt.port}")
     private int mqttPort;
 
-    private final ExecutorService mqttExecutor = Executors.newFixedThreadPool(100);
+    private final ScheduledExecutorService warmUpExecutor = Executors.newScheduledThreadPool(10);
 
     private final List<MqttClient> mqttClients = Collections.synchronizedList(new ArrayList<>());
 
@@ -71,8 +72,8 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
         for (MqttClient mqttClient : mqttClients) {
             mqttClient.disconnect();
         }
-        if (!this.mqttExecutor.isShutdown()) {
-            this.mqttExecutor.shutdown();
+        if (!this.warmUpExecutor.isShutdown()) {
+            this.warmUpExecutor.shutdown();
         }
         if (!EVENT_LOOP_GROUP.isShutdown()) {
             EVENT_LOOP_GROUP.shutdownGracefully(0, 5, TimeUnit.SECONDS);
@@ -87,7 +88,7 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
         Future<MqttConnectResult> connectFuture = client.connect(mqttHost, mqttPort);
         MqttConnectResult result;
         try {
-            result = connectFuture.get(CONNECT_TIMEOUT_IN_SECONDS, TimeUnit.SECONDS);
+            result = connectFuture.get(CONNECT_TIMEOUT, TimeUnit.SECONDS);
         } catch (TimeoutException ex) {
             connectFuture.cancel(true);
             client.disconnect();
@@ -114,39 +115,43 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
         AtomicInteger totalPublishedCount = new AtomicInteger();
         AtomicInteger successPublishedCount = new AtomicInteger();
         AtomicInteger failedPublishedCount = new AtomicInteger();
+        int i = 0;
         for (MqttClient mqttClient : mqttClients) {
-            testExecutor.submit(() -> {
-                schedulerExecutor.scheduleAtFixedRate(() -> {
-                    try {
-                        mqttClient.publish("v1/devices/me/telemetry", Unpooled.wrappedBuffer(data), MqttQoS.AT_LEAST_ONCE)
-                                .addListener(future -> {
-                                            if (future.isSuccess()) {
-                                                successPublishedCount.getAndIncrement();
-                                                log.debug("Message was successfully published to device: {}", mqttClient.getClientConfig().getUsername());
-                                            } else {
-                                                failedPublishedCount.getAndIncrement();
-                                                log.error("Error while publishing message to device: {}", mqttClient.getClientConfig().getUsername());
-                                            }
-                                        }
-                                );
-                    } catch (Exception e) {
-                        failedPublishedCount.getAndIncrement();
-                    } finally {
-                        totalPublishedCount.getAndIncrement();
-                    }
-                }, randomInt.nextInt(publishTelemetryPause), publishTelemetryPause, TimeUnit.MILLISECONDS);
-            });
-        }
-        testExecutor.submit(() -> {
+            final int delayPause = publishTelemetryPause / mqttClients.size() * i;
+            i++;
             schedulerExecutor.scheduleAtFixedRate(() -> {
                 try {
-                    log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
-                            totalPublishedCount.get(), totalMessagesToPublish - totalPublishedCount.get(), totalMessagesToPublish);
-                } catch (Exception ignored) {}
-            }, 0, 5, TimeUnit.SECONDS);
-        });
+                    mqttClient.publish("v1/devices/me/telemetry", Unpooled.wrappedBuffer(data), MqttQoS.AT_LEAST_ONCE)
+                            .addListener(future -> {
+                                        if (future.isSuccess()) {
+                                            successPublishedCount.getAndIncrement();
+                                            log.debug("Message was successfully published to device: {}", mqttClient.getClientConfig().getUsername());
+                                        } else {
+                                            failedPublishedCount.getAndIncrement();
+                                            log.error("Error while publishing message to device: {}", mqttClient.getClientConfig().getUsername());
+                                        }
+                                    }
+                            );
+                } catch (Exception e) {
+                    failedPublishedCount.getAndIncrement();
+                } finally {
+                    totalPublishedCount.getAndIncrement();
+                }
+            }, delayPause, publishTelemetryPause, TimeUnit.MILLISECONDS);
+        }
+
+        ScheduledFuture<?> scheduledLogFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
+            try {
+                log.info("[{}] messages have been published successfully. [{}] failed. [{}] total.",
+                        successPublishedCount.get(), failedPublishedCount.get(), totalMessagesToPublish);
+            } catch (Exception ignored) {
+            }
+        }, 0, PUBLISHED_MESSAGES_LOG_PAUSE, TimeUnit.SECONDS);
+
         Thread.sleep(maxDelay);
+        scheduledLogFuture.cancel(false);
         schedulerExecutor.shutdownNow();
+
         log.info("Performance test was completed for {} devices!", mqttClients.size());
         log.info("{} messages were published successfully, {} failed!", successPublishedCount.get(), failedPublishedCount.get());
     }
@@ -154,40 +159,47 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
     @Override
     public void warmUpDevices(final int publishTelemetryPause) throws InterruptedException {
         restClient.login(username, password);
-        log.info("Warming up {} devices...", deviceCount);
+        log.info("Connecting {} devices...", deviceCount);
         AtomicInteger totalConnectedCount = new AtomicInteger();
         CountDownLatch connectLatch = new CountDownLatch(deviceCount);
+        int idx = 0;
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
             final int tokenNumber = i;
-            mqttExecutor.submit(() -> {
-                try {
-                    Thread.sleep(randomInt.nextInt(publishTelemetryPause / 100));
-                } catch (InterruptedException e) {
-                    log.error("Error during thread sleep", e);
-                }
+            final int delayPause = publishTelemetryPause / deviceCount * idx;
+            idx++;
+            warmUpExecutor.schedule(() -> {
                 try {
                     String token = getToken(tokenNumber);
                     mqttClients.add(initClient(token));
                 } catch (Exception e) {
-                    log.error("Error while warm-up device", e);
+                    log.error("Error while connect device", e);
                 } finally {
                     connectLatch.countDown();
                     totalConnectedCount.getAndIncrement();
-                    log.info("[{}] devices have been connected!", totalConnectedCount.get());
                 }
-            });
+            }, delayPause, TimeUnit.MILLISECONDS);
         }
+        ScheduledFuture<?> scheduledLogFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
+            try {
+                log.info("[{}] devices have been connected!", totalConnectedCount.get());
+            } catch (Exception ignored) {
+            }
+        }, 0, LOG_PAUSE, TimeUnit.SECONDS);
+
         connectLatch.await();
+        scheduledLogFuture.cancel(false);
+
+        log.info("{} devices have been connected successfully!", mqttClients.size());
+        log.info("Warming up {} devices...", mqttClients.size());
 
         AtomicInteger totalWarmedUpCount = new AtomicInteger();
         CountDownLatch warmUpLatch = new CountDownLatch(mqttClients.size());
+
+        idx = 0;
         for (MqttClient mqttClient : mqttClients) {
-            mqttExecutor.submit(() -> {
-                try {
-                    Thread.sleep(randomInt.nextInt(publishTelemetryPause / 100));
-                } catch (InterruptedException e) {
-                    log.error("Error during thread sleep", e);
-                }
+            final int delayPause = publishTelemetryPause / mqttClients.size() * idx;
+            idx++;
+            warmUpExecutor.schedule(() -> {
                 mqttClient.publish("v1/devices/me/telemetry", Unpooled.wrappedBuffer(data), MqttQoS.AT_LEAST_ONCE)
                         .addListener(future -> {
                                     if (future.isSuccess()) {
@@ -197,12 +209,21 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
                                     }
                                     warmUpLatch.countDown();
                                     totalWarmedUpCount.getAndIncrement();
-                                    log.info("[{}] devices have been warmed up!", totalWarmedUpCount.get());
                                 }
                         );
-            });
+            }, delayPause, TimeUnit.MILLISECONDS);
         }
+
+        scheduledLogFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
+            try {
+                log.info("[{}] devices have been warmed up!", totalWarmedUpCount.get());
+            } catch (Exception ignored) {
+            }
+        }, 0, LOG_PAUSE, TimeUnit.SECONDS);
+
         warmUpLatch.await();
+        scheduledLogFuture.cancel(false);
+
         log.info("{} devices have been warmed up successfully!", mqttClients.size());
     }
 }

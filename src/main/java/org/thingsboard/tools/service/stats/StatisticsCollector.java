@@ -30,6 +30,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -87,37 +88,43 @@ public class StatisticsCollector {
         double totalAvg = 0;
         int intervalInSeconds = 1;
         for (String telemetryKey : result.keySet()) {
+            TreeMap<Long, Long> telemetryMap = new TreeMap<>();
+            for (Map<String, String> entry : result.get(telemetryKey)) {
+                long value = Long.parseLong(entry.get("value"));
+                long ts = Long.parseLong(entry.get("ts"));
+                telemetryMap.put(ts, value);
+            }
+
             long intervalSum = 0;
             long total = 0;
             long count = 0;
             long prevTime = 0;
-            for (Map<String, String> entry : result.get(telemetryKey)) {
-                long tmpValue = Long.parseLong(entry.get("value"));
-                long ts = Long.parseLong(entry.get("ts"));
-                log.info("============ TMP value [{}] TS [{}] ============", tmpValue, ts);
-                if (tmpValue > 0) {
-                    log.debug("Telemetry value {}" + tmpValue);
-                    total += tmpValue;
-                    count++;
-                }
-                long currTime = Long.parseLong(entry.get("ts"));
+            long intervalCount = 0;
+            for (Map.Entry<Long, Long> entry : telemetryMap.entrySet()) {
+                long ts = entry.getKey();
+                long value = entry.getValue();
+                log.info("============ value [{}] TS [{}] ============", value, ts);
+                total += value;
+                count++;
                 if (prevTime == 0) {
-                    prevTime = currTime;
+                    prevTime = ts;
                 } else {
-                    intervalSum += (prevTime - currTime);
-                    prevTime = currTime;
+                    intervalSum += (ts - prevTime);
+                    intervalCount++;
+                    prevTime = ts;
                 }
             }
+
             if (count > 1) {
-                intervalInSeconds = (int) (intervalSum / 1000 / (count - 1));
+                intervalInSeconds = (int) (intervalSum / 1000 / intervalCount);
                 String nodeName = telemetryKey.substring(STATS_TELEMETRY_PREFIX.length() + 1);
                 double avg = new BigDecimal(((double) total) / count).setScale(2, RoundingMode.HALF_UP).doubleValue();
                 totalAvg += avg;
-                log.info("============ Node [{}] AVG is {} per {} second ============", nodeName, avg, intervalInSeconds);
+                log.info("============ Node [{}] AVG is {} per {} second(s) ============", nodeName, avg, intervalInSeconds);
             }
         }
         if (totalAvg > 0) {
-            log.info("============ Total AVG is {} per {} second ============", totalAvg, intervalInSeconds);
+            log.info("============ Total AVG is {} per {} second(s) ============", totalAvg, intervalInSeconds);
         }
     }
 

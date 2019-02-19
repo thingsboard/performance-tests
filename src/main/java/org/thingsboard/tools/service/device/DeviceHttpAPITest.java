@@ -33,6 +33,7 @@ import org.springframework.web.client.AsyncRestTemplate;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -74,51 +75,53 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<String> entity = new HttpEntity<>(dataAsStr, headers);
 
+        int idx = 0;
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
             final int tokenNumber = i;
-            testExecutor.submit(() -> {
-                schedulerExecutor.scheduleAtFixedRate(() -> {
-                    try {
-                        String token = getToken(tokenNumber);
-                        String url = restUrl + "/api/v1/" + token + "/telemetry";
-                        ListenableFuture<ResponseEntity<Void>> future = httpClient.exchange(url, HttpMethod.POST, entity, Void.class);
-                        future.addCallback(new ListenableFutureCallback<ResponseEntity>() {
-                            @Override
-                            public void onFailure(Throwable throwable) {
-                                failedPublishedCount.getAndIncrement();
-                                log.error("Error while publishing telemetry, token: {}", tokenNumber, throwable);
-
-                                totalPublishedCount.getAndIncrement();
-                            }
-
-                            @Override
-                            public void onSuccess(ResponseEntity responseEntity) {
-                                if (responseEntity.getStatusCode().is2xxSuccessful()) {
-                                    successPublishedCount.getAndIncrement();
-                                } else {
-                                    failedPublishedCount.getAndIncrement();
-                                    log.error("Error while publishing telemetry, token: {}, status code: {}", tokenNumber, responseEntity.getStatusCode().getReasonPhrase());
-                                }
-
-                                totalPublishedCount.getAndIncrement();
-                            }
-                        });
-                    } catch (Exception e) {
-                        log.error("Error while publishing telemetry, token: {}", tokenNumber, e);
-                    }
-                }, randomInt.nextInt(publishTelemetryPause), publishTelemetryPause, TimeUnit.MILLISECONDS);
-            });
-        }
-        testExecutor.submit(() -> {
+            final int delayPause = publishTelemetryPause / deviceCount * idx;
+            idx++;
             schedulerExecutor.scheduleAtFixedRate(() -> {
                 try {
-                    log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
-                            totalPublishedCount.get(), totalMessagesToPublish - totalPublishedCount.get(), totalMessagesToPublish);
-                } catch (Exception ignored) {}
-            }, 0, 5, TimeUnit.SECONDS);
-        });
+                    String token = getToken(tokenNumber);
+                    String url = restUrl + "/api/v1/" + token + "/telemetry";
+                    ListenableFuture<ResponseEntity<Void>> future = httpClient.exchange(url, HttpMethod.POST, entity, Void.class);
+                    future.addCallback(new ListenableFutureCallback<ResponseEntity>() {
+                        @Override
+                        public void onFailure(Throwable throwable) {
+                            failedPublishedCount.getAndIncrement();
+                            log.error("Error while publishing telemetry, token: {}", tokenNumber, throwable);
+                            totalPublishedCount.getAndIncrement();
+                        }
+
+                        @Override
+                        public void onSuccess(ResponseEntity responseEntity) {
+                            if (responseEntity.getStatusCode().is2xxSuccessful()) {
+                                successPublishedCount.getAndIncrement();
+                            } else {
+                                failedPublishedCount.getAndIncrement();
+                                log.error("Error while publishing telemetry, token: {}, status code: {}", tokenNumber, responseEntity.getStatusCode().getReasonPhrase());
+                            }
+                            totalPublishedCount.getAndIncrement();
+                        }
+                    });
+                } catch (Exception e) {
+                    log.error("Error while publishing telemetry, token: {}", tokenNumber, e);
+                }
+            }, delayPause, publishTelemetryPause, TimeUnit.MILLISECONDS);
+        }
+
+        ScheduledFuture<?> scheduledLogFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
+            try {
+                log.info("[{}] messages have been published successfully. [{}] failed. [{}] total.",
+                        successPublishedCount.get(), failedPublishedCount.get(), totalMessagesToPublish);
+            } catch (Exception ignored) {
+            }
+        }, 0, PUBLISHED_MESSAGES_LOG_PAUSE, TimeUnit.SECONDS);
+
         Thread.sleep(maxDelay);
+        scheduledLogFuture.cancel(false);
         schedulerExecutor.shutdownNow();
+
         log.info("Performance test was completed for {} devices!", deviceCount);
         log.info("{} messages were published successfully, {} failed!", successPublishedCount.get(), failedPublishedCount.get());
     }
@@ -128,6 +131,7 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
         restClient.login(username, password);
         log.info("Warming up {} devices...", deviceCount);
         CountDownLatch connectLatch = new CountDownLatch(deviceCount);
+        AtomicInteger totalWarmedUpCount = new AtomicInteger();
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
             final int tokenNumber = i;
             httpExecutor.submit(() -> {
@@ -142,9 +146,19 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
                     log.error("Error while warming up device, token: {}", tokenNumber, e);
                 } finally {
                     connectLatch.countDown();
+                    totalWarmedUpCount.getAndIncrement();
                 }
             });
         }
+
+        ScheduledFuture<?> scheduledLogFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
+            try {
+                log.info("[{}] devices have been warmed up!", totalWarmedUpCount.get());
+            } catch (Exception ignored) {
+            }
+        }, 0, LOG_PAUSE, TimeUnit.SECONDS);
+
         connectLatch.await();
+        scheduledLogFuture.cancel(false);
     }
 }
