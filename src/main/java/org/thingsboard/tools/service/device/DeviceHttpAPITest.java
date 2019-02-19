@@ -64,7 +64,6 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
     public void runApiTests(int publishTelemetryCount, final int publishTelemetryPause) throws InterruptedException {
         restClient.login(username, password);
         log.info("Starting performance test for {} devices...", deviceCount);
-        log.info("Message statistics will be displayed every {} seconds", publishTelemetryPause / 1000);
         long maxDelay = (publishTelemetryPause + 1) * publishTelemetryCount;
         final int totalMessagesToPublish = deviceCount * publishTelemetryCount;
         AtomicInteger totalPublishedCount = new AtomicInteger();
@@ -78,7 +77,7 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
             final int tokenNumber = i;
             testExecutor.submit(() -> {
-                testPublishExecutor.scheduleAtFixedRate(() -> {
+                schedulerExecutor.scheduleAtFixedRate(() -> {
                     try {
                         String token = getToken(tokenNumber);
                         String url = restUrl + "/api/v1/" + token + "/telemetry";
@@ -90,7 +89,6 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
                                 log.error("Error while publishing telemetry, token: {}", tokenNumber, throwable);
 
                                 totalPublishedCount.getAndIncrement();
-                                logPublishedMessages(totalPublishedCount.get(), totalMessagesToPublish, tokenNumber);
                             }
 
                             @Override
@@ -103,7 +101,6 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
                                 }
 
                                 totalPublishedCount.getAndIncrement();
-                                logPublishedMessages(totalPublishedCount.get(), totalMessagesToPublish, tokenNumber);
                             }
                         });
                     } catch (Exception e) {
@@ -112,17 +109,18 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
                 }, randomInt.nextInt(publishTelemetryPause), publishTelemetryPause, TimeUnit.MILLISECONDS);
             });
         }
+        testExecutor.submit(() -> {
+            schedulerExecutor.scheduleAtFixedRate(() -> {
+                try {
+                    log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
+                            totalPublishedCount.get(), totalMessagesToPublish - totalPublishedCount.get(), totalMessagesToPublish);
+                } catch (Exception ignored) {}
+            }, 0, 5, TimeUnit.SECONDS);
+        });
         Thread.sleep(maxDelay);
-        testPublishExecutor.shutdownNow();
+        schedulerExecutor.shutdownNow();
         log.info("Performance test was completed for {} devices!", deviceCount);
         log.info("{} messages were published successfully, {} failed!", successPublishedCount.get(), failedPublishedCount.get());
-    }
-
-    private void logPublishedMessages(int count, int totalMessagesToPublish, int tokenNumber) {
-        if (tokenNumber == deviceStartIdx) {
-            log.info("[{}] messages have been published. [{}] messages to publish. Total [{}].",
-                    count, totalMessagesToPublish - count, totalMessagesToPublish);
-        }
     }
 
     @Override

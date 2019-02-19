@@ -31,6 +31,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
@@ -63,7 +64,7 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
     int deviceCount;
 
     final ExecutorService httpExecutor = Executors.newFixedThreadPool(100);
-    final ScheduledExecutorService testPublishExecutor = Executors.newScheduledThreadPool(10);
+    final ScheduledExecutorService schedulerExecutor = Executors.newScheduledThreadPool(10);
     final ExecutorService testExecutor = Executors.newFixedThreadPool(100);
 
     private final List<DeviceId> deviceIds = Collections.synchronizedList(new ArrayList<>());
@@ -90,7 +91,6 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
         log.info("Creating {} devices...", deviceCount);
         CountDownLatch latch = new CountDownLatch(deviceCount);
         AtomicInteger count = new AtomicInteger();
-        final int logInterval = deviceCount / 10 > 1000 ? 1000 : deviceCount / 10;
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
             final int tokenNumber = i;
             httpExecutor.submit(() -> {
@@ -109,12 +109,17 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
                 } finally {
                     latch.countDown();
                 }
-                if (count.get() > 0 && count.get() % logInterval == 0) {
-                    log.info("{} devices has been created so far...", count.get());
-                }
             });
         }
+        httpExecutor.submit(() -> {
+            schedulerExecutor.scheduleAtFixedRate(() -> {
+                try {
+                    log.info("{} devices has been created so far...", count.get());
+                } catch (Exception ignored) {}
+            }, 0, 5, TimeUnit.SECONDS);
+        });
         latch.await();
+        schedulerExecutor.shutdownNow();
         log.info("{} devices have been created successfully!", deviceIds.size());
     }
 
@@ -124,7 +129,6 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
         log.info("Removing {} devices...", deviceIds.size());
         CountDownLatch latch = new CountDownLatch(deviceIds.size());
         AtomicInteger count = new AtomicInteger();
-        final int logInterval = deviceIds.size() / 10 > 1000 ? 1000 : deviceIds.size() / 10;
         for (DeviceId deviceId : deviceIds) {
             httpExecutor.submit(() -> {
                 try {
@@ -135,11 +139,15 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
                 } finally {
                     latch.countDown();
                 }
-                if (count.get() > 0 && count.get() % logInterval == 0) {
-                    log.info("{} devices has been removed so far...", count.get());
-                }
             });
         }
+        httpExecutor.submit(() -> {
+            schedulerExecutor.scheduleAtFixedRate(() -> {
+                try {
+                    log.info("{} devices has been removed so far...", count.get());
+                } catch (Exception ignored) {}
+            }, 0, 5, TimeUnit.SECONDS);
+        });
         latch.await();
         Thread.sleep(1000);
         log.info("{} devices have been removed successfully! {} were failed for removal!", count.get(), deviceIds.size() - count.get());
