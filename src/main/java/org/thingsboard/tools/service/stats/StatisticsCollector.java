@@ -80,7 +80,7 @@ public class StatisticsCollector {
         Map<String, List<Map<String, String>>> result =
                 restClient.getRestTemplate().exchange(
                         restUrl + "/api/plugins/telemetry/" + EntityType.TENANT.name() + "/" + tenantId +
-                                "/values/timeseries?keys=" + String.join(",", perfTestsTelemetryKeys) + "&startTs=" + startTs + "&endTs=" + endTs,
+                                "/values/timeseries?keys=" + String.join(",", perfTestsTelemetryKeys) + "&startTs=" + startTs + "&endTs=" + endTs + "&limit=999999",
                         HttpMethod.GET,
                         null,
                         new ParameterizedTypeReference<Map<String, List<Map<String, String>>>>() {
