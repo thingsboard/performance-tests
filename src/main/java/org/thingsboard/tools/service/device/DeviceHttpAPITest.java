@@ -65,7 +65,7 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
     public void runApiTests(int publishTelemetryCount, final int publishTelemetryPause) throws InterruptedException {
         restClient.login(username, password);
         log.info("Starting performance test for {} devices...", deviceCount);
-        long maxDelay = (publishTelemetryPause + 1) * publishTelemetryCount;
+        long maxDelay = publishTelemetryPause * publishTelemetryCount;
         final int totalMessagesToPublish = deviceCount * publishTelemetryCount;
         AtomicInteger totalPublishedCount = new AtomicInteger();
         AtomicInteger successPublishedCount = new AtomicInteger();
@@ -78,7 +78,7 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
         int idx = 0;
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
             final int tokenNumber = i;
-            final int delayPause = publishTelemetryPause / deviceCount * idx;
+            final int delayPause = (int) ((double) publishTelemetryPause / deviceCount * idx);
             idx++;
             schedulerExecutor.scheduleAtFixedRate(() -> {
                 try {
@@ -119,7 +119,7 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
         }, 0, PUBLISHED_MESSAGES_LOG_PAUSE, TimeUnit.SECONDS);
 
         Thread.sleep(maxDelay);
-        scheduledLogFuture.cancel(false);
+        scheduledLogFuture.cancel(true);
         schedulerExecutor.shutdownNow();
 
         log.info("Performance test was completed for {} devices!", deviceCount);
@@ -159,6 +159,6 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
         }, 0, LOG_PAUSE, TimeUnit.SECONDS);
 
         connectLatch.await();
-        scheduledLogFuture.cancel(false);
+        scheduledLogFuture.cancel(true);
     }
 }

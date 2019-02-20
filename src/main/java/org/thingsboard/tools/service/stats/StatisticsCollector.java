@@ -86,7 +86,7 @@ public class StatisticsCollector {
                         new ParameterizedTypeReference<Map<String, List<Map<String, String>>>>() {
                         }).getBody();
         double totalAvg = 0;
-        int intervalInSeconds = 1;
+        int interval = 1;
         for (String telemetryKey : result.keySet()) {
             TreeMap<Long, Long> telemetryMap = new TreeMap<>();
             for (Map<String, String> entry : result.get(telemetryKey)) {
@@ -101,8 +101,8 @@ public class StatisticsCollector {
             long prevTime = 0;
             long intervalCount = 0;
             for (Map.Entry<Long, Long> entry : telemetryMap.entrySet()) {
-                long ts = entry.getKey();
                 long value = entry.getValue();
+                long ts = entry.getKey();
                 log.info("============ value [{}] TS [{}] ============", value, ts);
                 total += value;
                 count++;
@@ -116,15 +116,15 @@ public class StatisticsCollector {
             }
 
             if (count > 1) {
-                intervalInSeconds = (int) (intervalSum / 1000 / intervalCount);
+                interval = (int) (intervalSum / intervalCount);
                 String nodeName = telemetryKey.substring(STATS_TELEMETRY_PREFIX.length() + 1);
                 double avg = new BigDecimal(((double) total) / count).setScale(2, RoundingMode.HALF_UP).doubleValue();
                 totalAvg += avg;
-                log.info("============ Node [{}] AVG is {} per {} second(s) ============", nodeName, avg, intervalInSeconds);
+                log.info("============ Node [{}] AVG is {} per {} millisecond(s) ============", nodeName, avg, interval);
             }
         }
         if (totalAvg > 0) {
-            log.info("============ Total AVG is {} per {} second(s) ============", totalAvg, intervalInSeconds);
+            log.info("============ Total AVG is {} per {} millisecond(s) ============", totalAvg, interval);
         }
     }
 

@@ -121,7 +121,7 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
         }, 0, LOG_PAUSE, TimeUnit.SECONDS);
 
         latch.await();
-        logScheduleFuture.cancel(false);
+        logScheduleFuture.cancel(true);
         log.info("{} devices have been created successfully!", deviceIds.size());
     }
 
@@ -151,7 +151,7 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
         }, 0, LOG_PAUSE, TimeUnit.SECONDS);
 
         latch.await();
-        logScheduleFuture.cancel(false);
+        logScheduleFuture.cancel(true);
         Thread.sleep(1000);
         log.info("{} devices have been removed successfully! {} were failed for removal!", count.get(), deviceIds.size() - count.get());
     }

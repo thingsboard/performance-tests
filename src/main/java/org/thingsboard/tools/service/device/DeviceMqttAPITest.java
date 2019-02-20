@@ -110,14 +110,14 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
             return;
         }
         log.info("Starting performance test for {} devices...", mqttClients.size());
-        long maxDelay = (publishTelemetryPause + 1) * publishTelemetryCount;
+        long maxDelay = publishTelemetryPause * publishTelemetryCount;
         final int totalMessagesToPublish = mqttClients.size() * publishTelemetryCount;
         AtomicInteger totalPublishedCount = new AtomicInteger();
         AtomicInteger successPublishedCount = new AtomicInteger();
         AtomicInteger failedPublishedCount = new AtomicInteger();
         int i = 0;
         for (MqttClient mqttClient : mqttClients) {
-            final int delayPause = publishTelemetryPause / mqttClients.size() * i;
+            final int delayPause = (int)((double) publishTelemetryPause / mqttClients.size() * i);
             i++;
             schedulerExecutor.scheduleAtFixedRate(() -> {
                 try {
@@ -149,7 +149,7 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
         }, 0, PUBLISHED_MESSAGES_LOG_PAUSE, TimeUnit.SECONDS);
 
         Thread.sleep(maxDelay);
-        scheduledLogFuture.cancel(false);
+        scheduledLogFuture.cancel(true);
         schedulerExecutor.shutdownNow();
 
         log.info("Performance test was completed for {} devices!", mqttClients.size());
@@ -165,7 +165,7 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
         int idx = 0;
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
             final int tokenNumber = i;
-            final int delayPause = publishTelemetryPause / deviceCount * idx;
+            final int delayPause = (int) ((double) publishTelemetryPause / deviceCount * idx);
             idx++;
             warmUpExecutor.schedule(() -> {
                 try {
@@ -187,7 +187,7 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
         }, 0, LOG_PAUSE, TimeUnit.SECONDS);
 
         connectLatch.await();
-        scheduledLogFuture.cancel(false);
+        scheduledLogFuture.cancel(true);
 
         log.info("{} devices have been connected successfully!", mqttClients.size());
         log.info("Warming up {} devices...", mqttClients.size());
@@ -197,7 +197,7 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
 
         idx = 0;
         for (MqttClient mqttClient : mqttClients) {
-            final int delayPause = publishTelemetryPause / mqttClients.size() * idx;
+            final int delayPause = (int) ((double) publishTelemetryPause / mqttClients.size() * idx);
             idx++;
             warmUpExecutor.schedule(() -> {
                 mqttClient.publish("v1/devices/me/telemetry", Unpooled.wrappedBuffer(data), MqttQoS.AT_LEAST_ONCE)
@@ -222,7 +222,7 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
         }, 0, LOG_PAUSE, TimeUnit.SECONDS);
 
         warmUpLatch.await();
-        scheduledLogFuture.cancel(false);
+        scheduledLogFuture.cancel(true);
 
         log.info("{} devices have been warmed up successfully!", mqttClients.size());
     }
