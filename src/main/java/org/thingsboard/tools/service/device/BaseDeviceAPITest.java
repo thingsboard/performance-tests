@@ -115,7 +115,7 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
 
         ScheduledFuture<?> logScheduleFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
             try {
-                log.info("{} devices has been created so far...", count.get());
+                log.info("{} devices have been created so far...", count.get());
             } catch (Exception ignored) {
             }
         }, 0, LOG_PAUSE, TimeUnit.SECONDS);
@@ -146,7 +146,7 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
 
         ScheduledFuture<?> logScheduleFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
             try {
-                log.info("{} devices has been removed so far...", count.get());
+                log.info("{} devices have been removed so far...", count.get());
             } catch (Exception ignored) {}
         }, 0, LOG_PAUSE, TimeUnit.SECONDS);
 
