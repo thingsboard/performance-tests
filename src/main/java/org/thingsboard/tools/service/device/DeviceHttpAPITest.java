@@ -118,8 +118,15 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
             }
         }, 0, PUBLISHED_MESSAGES_LOG_PAUSE, TimeUnit.SECONDS);
 
+        ScheduledFuture<?> tokenRefreshScheduleFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
+            try {
+                restClient.login(username, password);
+            } catch (Exception ignored) {}
+        }, 10, 10, TimeUnit.MINUTES);
+
         Thread.sleep(maxDelay);
         scheduledLogFuture.cancel(true);
+        tokenRefreshScheduleFuture.cancel(true);
         schedulerExecutor.shutdownNow();
 
         log.info("Performance test was completed for {} devices!", deviceCount);
@@ -158,7 +165,14 @@ public class DeviceHttpAPITest extends BaseDeviceAPITest {
             }
         }, 0, LOG_PAUSE, TimeUnit.SECONDS);
 
+        ScheduledFuture<?> tokenRefreshScheduleFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
+            try {
+                restClient.login(username, password);
+            } catch (Exception ignored) {}
+        }, 10, 10, TimeUnit.MINUTES);
+
         connectLatch.await();
         scheduledLogFuture.cancel(true);
+        tokenRefreshScheduleFuture.cancel(true);
     }
 }

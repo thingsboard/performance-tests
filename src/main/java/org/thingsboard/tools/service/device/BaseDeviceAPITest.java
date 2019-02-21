@@ -120,7 +120,14 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
             }
         }, 0, LOG_PAUSE, TimeUnit.SECONDS);
 
+        ScheduledFuture<?> tokenRefreshScheduleFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
+            try {
+                restClient.login(username, password);
+            } catch (Exception ignored) {}
+        }, 10, 10, TimeUnit.MINUTES);
+
         latch.await();
+        tokenRefreshScheduleFuture.cancel(true);
         logScheduleFuture.cancel(true);
         log.info("{} devices have been created successfully!", deviceIds.size());
     }
@@ -150,8 +157,15 @@ public abstract class BaseDeviceAPITest implements DeviceAPITest {
             } catch (Exception ignored) {}
         }, 0, LOG_PAUSE, TimeUnit.SECONDS);
 
+        ScheduledFuture<?> tokenRefreshScheduleFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
+            try {
+                restClient.login(username, password);
+            } catch (Exception ignored) {}
+        }, 10, 10, TimeUnit.MINUTES);
+
         latch.await();
         logScheduleFuture.cancel(true);
+        tokenRefreshScheduleFuture.cancel(true);
         Thread.sleep(1000);
         log.info("{} devices have been removed successfully! {} were failed for removal!", count.get(), deviceIds.size() - count.get());
     }

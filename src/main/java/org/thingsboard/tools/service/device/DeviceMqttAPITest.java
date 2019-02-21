@@ -104,7 +104,6 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
 
     @Override
     public void runApiTests(int publishTelemetryCount, final int publishTelemetryPause) throws InterruptedException {
-        restClient.login(username, password);
         if (mqttClients.size() == 0) {
             log.info("Test stopped. No devices available!");
             return;
@@ -158,7 +157,6 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
 
     @Override
     public void warmUpDevices(final int publishTelemetryPause) throws InterruptedException {
-        restClient.login(username, password);
         log.info("Connecting {} devices...", deviceCount);
         AtomicInteger totalConnectedCount = new AtomicInteger();
         CountDownLatch connectLatch = new CountDownLatch(deviceCount);
