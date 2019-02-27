@@ -19,6 +19,8 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.handler.codec.mqtt.MqttQoS;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +32,9 @@ import org.thingsboard.mqtt.MqttConnectResult;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import javax.net.ssl.TrustManagerFactory;
+import java.io.FileInputStream;
+import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -53,6 +58,16 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
 
     @Value("${mqtt.port}")
     private int mqttPort;
+
+    @Value("${mqtt.ssl.enabled}")
+    boolean mqttSslEnabled;
+
+    @Value("${mqtt.ssl.key_store}")
+    String mqttSslKeyStore;
+
+    @Value("${mqtt.ssl.key_store_password}")
+    String mqttSllKeyStorePassword;
+
 
     private final ScheduledExecutorService warmUpExecutor = Executors.newScheduledThreadPool(10);
 
@@ -81,7 +96,7 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
     }
 
     private MqttClient initClient(String token) throws Exception {
-        MqttClientConfig config = new MqttClientConfig();
+        MqttClientConfig config = new MqttClientConfig(getSslContext());
         config.setUsername(token);
         MqttClient client = MqttClient.create(config, null);
         client.setEventLoop(EVENT_LOOP_GROUP);
@@ -153,6 +168,23 @@ public class DeviceMqttAPITest extends BaseDeviceAPITest {
 
         log.info("Performance test was completed for {} devices!", mqttClients.size());
         log.info("{} messages were published successfully, {} failed!", successPublishedCount.get(), failedPublishedCount.get());
+    }
+
+    private SslContext getSslContext() {
+        if (mqttSslEnabled) {
+            try {
+                TrustManagerFactory trustFact = TrustManagerFactory.getInstance("SunX509");
+                KeyStore trustStore = KeyStore.getInstance("JKS");
+                FileInputStream stream = new FileInputStream(mqttSslKeyStore);
+                trustStore.load(stream, mqttSllKeyStorePassword.toCharArray());
+                trustFact.init(trustStore);
+                return SslContextBuilder.forClient().trustManager(trustFact).build();
+            } catch (Exception e) {
+                throw new RuntimeException("Exception while creating SslContext", e);
+            }
+        } else {
+            return null;
+        }
     }
 
     @Override

@@ -27,6 +27,10 @@ rest:
 mqtt:
   host: "${MQTT_HOST:localhost}"
   port: "${MQTT_PORT:1883}"
+  ssl:
+    enabled: "${MQTT_SSL_ENABLED:false}"
+    key_store: "${MQTT_SSL_KEY_STORE:mqttclient.jks}"
+    key_store_password: "${MQTT_SSL_KEY_STORE_PASSWORD:password}"
 device:
   # Device API to use - MQTT or HTTP
   api: "${DEVICE_API:MQTT}"

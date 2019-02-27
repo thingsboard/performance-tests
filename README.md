@@ -55,8 +55,10 @@ Where:
 - `DEVICE_DELETE_ON_COMPLETE`    - Delete devices after test, there were created on start of the test
 - `PUBLISH_COUNT`                - Number of the messages to be published for a single simulated device
 - `PUBLISH_PAUSE`                - Pause between messages for a single simulated device in milliseconds
+- `MQTT_SSL_ENABLED`             - Enable/disable ssl for MQTT
+- `MQTT_SSL_KEY_STORE`           - MQTT key store file location
+- `MQTT_SSL_KEY_STORE_PASSWORD`  - MQTT key store file password
 
-  
 Once params are configured to run test simple type from the folder where configuration file is located:
 ```bash
 docker run -it --env-file .env --name tb-perf-test thingsboard/tb-performance-test
