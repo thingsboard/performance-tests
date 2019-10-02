@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-FROM openjdk:8-jdk
+FROM thingsboard/openjdk8
 
 COPY start-tests.sh ${pkg.name}.conf ${pkg.name}.deb /tmp/
 
