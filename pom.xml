@@ -43,7 +43,7 @@
         <pkg.unixLogFolder>/var/log/${pkg.name}</pkg.unixLogFolder>
         <pkg.installFolder>/usr/share/${pkg.name}</pkg.installFolder>
         <pkg.win.dist>${project.build.directory}/windows</pkg.win.dist>
-        <thingsboard.version>2.3.1-SNAPSHOT</thingsboard.version>
+        <thingsboard.version>2.4.1</thingsboard.version>
         <docker.repo>thingsboard</docker.repo>
         <tb-performance-test.docker.name>tb-performance-test</tb-performance-test.docker.name>
     </properties>

@@ -21,7 +21,7 @@ server:
   port: "${SERVER_PORT:19090}"
 
 rest:
-  url: "${REST_URL:http://localhost:9090}"
+  url: "${REST_URL:http://localhost:8080}"
   username: "${REST_USERNAME:tenant@thingsboard.org}"
   password: "${REST_PASSWORD:tenant}"
 mqtt:
@@ -34,10 +34,15 @@ mqtt:
 device:
   # Device API to use - MQTT or HTTP
   api: "${DEVICE_API:MQTT}"
-  startIdx: "${DEVICE_START_IDX:0}"
-  endIdx: "${DEVICE_END_IDX:10}"
+  startIdx: "${DEVICE_START_IDX:1000}"
+  endIdx: "${DEVICE_END_IDX:10000}"
   createOnStart: "${DEVICE_CREATE_ON_START:true}"
-  deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:true}"
+  deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
+gateway:
+  startIdx: "${GATEWAY_START_IDX:1000}"
+  endIdx: "${GATEWAY_END_IDX:1005}"
+  createOnStart: "${GATEWAY_CREATE_ON_START:true}"
+  deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:false}"
 publish:
   count: "${PUBLISH_COUNT:10}"
   pause: "${PUBLISH_PAUSE:1000}" # in milliseconds
