@@ -38,8 +38,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
-@Service
-@ConditionalOnProperty(prefix = "device", value = "api", havingValue = "HTTP")
 public class DeviceHttpAPITest extends BaseDeviceAPITest {
 
     private EventLoopGroup eventLoopGroup;

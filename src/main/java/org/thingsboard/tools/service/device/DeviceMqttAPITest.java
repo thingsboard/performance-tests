@@ -47,8 +47,6 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
-@Service
-@ConditionalOnProperty(prefix = "device", value = "api", havingValue = "MQTT")
 public class DeviceMqttAPITest extends BaseDeviceAPITest {
 
     private static final int CONNECT_TIMEOUT = 5;
