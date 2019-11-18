@@ -27,5 +27,5 @@ public interface GatewayAPITest {
 
     void warmUpDevices() throws InterruptedException;
 
-    void runApiTests(int publishTelemetryCount, final int publishTelemetryPause) throws InterruptedException;
+    void runApiTests() throws InterruptedException;
 }

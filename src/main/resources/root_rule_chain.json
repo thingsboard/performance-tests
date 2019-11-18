@@ -1,19 +1,139 @@
 {
   "ruleChain": {
     "additionalInfo": null,
-    "name": "Performance Test Rule Chain",
+    "name": "Root Rule Chain",
     "firstRuleNodeId": null,
     "root": false,
     "debugMode": false,
     "configuration": null
   },
   "metadata": {
-    "firstNodeIndex": 2,
+    "firstNodeIndex": 12,
     "nodes": [
       {
         "additionalInfo": {
-          "layoutX": 824,
-          "layoutY": 156
+          "layoutX": 273,
+          "layoutY": 655
+        },
+        "type": "org.thingsboard.rule.engine.filter.TbCheckMessageNode",
+        "name": "Is Second",
+        "debugMode": true,
+        "configuration": {
+          "messageNames": [
+            "t2_0"
+          ],
+          "metadataNames": [],
+          "checkAllKeys": false
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 520,
+          "layoutY": 652
+        },
+        "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
+        "name": "TelemetryToAttributes",
+        "debugMode": true,
+        "configuration": {
+          "jsScript": "var newMsg = {};\nnewMsg[\"t2_0\"] = msg[\"t2_0\"];\nnewMsg[\"t2_1\"] = msg[\"t2_1\"];\nnewMsg[\"t2_2\"] = msg[\"t2_2\"];\nreturn {msg: newMsg, metadata: metadata, msgType: \"POST_ATTRIBUTES_REQUEST\"};"
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1286,
+          "layoutY": 348
+        },
+        "type": "org.thingsboard.rule.engine.telemetry.TbMsgTimeseriesNode",
+        "name": "SaveToDB",
+        "debugMode": false,
+        "configuration": {
+          "defaultTTL": 0
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 100,
+          "layoutY": 562
+        },
+        "type": "org.thingsboard.rule.engine.filter.TbCheckMessageNode",
+        "name": "Is First",
+        "debugMode": true,
+        "configuration": {
+          "messageNames": [
+            "t1"
+          ],
+          "metadataNames": [],
+          "checkAllKeys": false
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 417,
+          "layoutY": 566
+        },
+        "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
+        "name": "TelemetryToAttributes",
+        "debugMode": true,
+        "configuration": {
+          "jsScript": "return {msg: msg, metadata: metadata, msgType: \"POST_ATTRIBUTES_REQUEST\"};"
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1057,
+          "layoutY": 445
+        },
+        "type": "org.thingsboard.rule.engine.action.TbMsgCountNode",
+        "name": "telemetrySuccess",
+        "debugMode": true,
+        "configuration": {
+          "telemetryPrefix": "telemetrySuccess",
+          "interval": 1
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1061,
+          "layoutY": 522
+        },
+        "type": "org.thingsboard.rule.engine.action.TbMsgCountNode",
+        "name": "telemetryFailure",
+        "debugMode": false,
+        "configuration": {
+          "telemetryPrefix": "telemetryFailure",
+          "interval": 1
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1042,
+          "layoutY": 205
+        },
+        "type": "org.thingsboard.rule.engine.action.TbMsgCountNode",
+        "name": "attrSuccess",
+        "debugMode": false,
+        "configuration": {
+          "telemetryPrefix": "attrSuccess",
+          "interval": 1
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1046,
+          "layoutY": 282
+        },
+        "type": "org.thingsboard.rule.engine.action.TbMsgCountNode",
+        "name": "attrFailure",
+        "debugMode": false,
+        "configuration": {
+          "telemetryPrefix": "attrFailure",
+          "interval": 1
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 800,
+          "layoutY": 484
         },
         "type": "org.thingsboard.rule.engine.telemetry.TbMsgTimeseriesNode",
         "name": "Save Timeseries",
@@ -24,11 +144,11 @@
       },
       {
         "additionalInfo": {
-          "layoutX": 825,
-          "layoutY": 52
+          "layoutX": 834,
+          "layoutY": 368
         },
         "type": "org.thingsboard.rule.engine.telemetry.TbMsgAttributesNode",
-        "name": "Save Client Attributes",
+        "name": "Save Attributes",
         "debugMode": false,
         "configuration": {
           "scope": "CLIENT_SCOPE"
@@ -36,8 +156,8 @@
       },
       {
         "additionalInfo": {
-          "layoutX": 347,
-          "layoutY": 149
+          "layoutX": 509,
+          "layoutY": 360
         },
         "type": "org.thingsboard.rule.engine.filter.TbMsgTypeSwitchNode",
         "name": "Message Type Switch",
@@ -48,100 +168,151 @@
       },
       {
         "additionalInfo": {
-          "layoutX": 825,
-          "layoutY": 266
+          "layoutX": 255,
+          "layoutY": 301
         },
-        "type": "org.thingsboard.rule.engine.action.TbLogNode",
-        "name": "Log RPC from Device",
+        "type": "org.thingsboard.rule.engine.filter.TbOriginatorTypeFilterNode",
+        "name": "Is Entity Group",
         "debugMode": false,
         "configuration": {
-          "jsScript": "return '\\nIncoming message:\\n' + JSON.stringify(msg) + '\\nIncoming metadata:\\n' + JSON.stringify(metadata);"
+          "originatorTypes": [
+            "ENTITY_GROUP"
+          ]
         }
       },
       {
         "additionalInfo": {
-          "layoutX": 825,
-          "layoutY": 379
+          "layoutX": 319,
+          "layoutY": 109
         },
-        "type": "org.thingsboard.rule.engine.action.TbLogNode",
-        "name": "Log Other",
+        "type": "org.thingsboard.rule.engine.filter.TbMsgTypeFilterNode",
+        "name": "Post attributes or RPC request",
         "debugMode": false,
         "configuration": {
-          "jsScript": "return '\\nIncoming message:\\n' + JSON.stringify(msg) + '\\nIncoming metadata:\\n' + JSON.stringify(metadata);"
+          "messageTypes": [
+            "POST_ATTRIBUTES_REQUEST",
+            "RPC_CALL_FROM_SERVER_TO_DEVICE"
+          ]
         }
       },
       {
         "additionalInfo": {
-          "layoutX": 825,
-          "layoutY": 468
+          "layoutX": 627,
+          "layoutY": 108
         },
-        "type": "org.thingsboard.rule.engine.rpc.TbSendRPCRequestNode",
-        "name": "RPC Call Request",
+        "type": "org.thingsboard.rule.engine.transform.TbDuplicateMsgToGroupNode",
+        "name": "Duplicate To Group Entities",
         "debugMode": false,
         "configuration": {
-          "timeoutInSeconds": 60
-        }
-      },
-      {
-        "additionalInfo": {
-          "layoutX": 1100,
-          "layoutY": 158
-        },
-        "type": "org.thingsboard.rule.engine.action.TbMsgCountNode",
-        "name": "Perf tests msg count node",
-        "debugMode": false,
-        "configuration": {
-          "telemetryPrefix": "perf_tests",
-          "interval": 1
-        }
-      },
-      {
-        "additionalInfo": {
-          "layoutX": 1110,
-          "layoutY": 308
-        },
-        "type": "org.thingsboard.rule.engine.telemetry.TbMsgTimeseriesNode",
-        "name": "Save perf tests statistics",
-        "debugMode": false,
-        "configuration": {
-          "defaultTTL": 0
+          "entityGroupId": null,
+          "entityGroupIsMessageOriginator": true
         }
       }
     ],
     "connections": [
       {
         "fromIndex": 0,
-        "toIndex": 6,
+        "toIndex": 1,
+        "type": "True"
+      },
+      {
+        "fromIndex": 1,
+        "toIndex": 10,
         "type": "Success"
       },
       {
-        "fromIndex": 2,
+        "fromIndex": 3,
         "toIndex": 4,
-        "type": "Other"
+        "type": "True"
       },
       {
-        "fromIndex": 2,
-        "toIndex": 1,
-        "type": "Post attributes"
-      },
-      {
-        "fromIndex": 2,
+        "fromIndex": 3,
         "toIndex": 0,
-        "type": "Post telemetry"
+        "type": "False"
       },
       {
-        "fromIndex": 2,
-        "toIndex": 3,
-        "type": "RPC Request from Device"
+        "fromIndex": 4,
+        "toIndex": 10,
+        "type": "Success"
       },
       {
-        "fromIndex": 2,
-        "toIndex": 5,
-        "type": "RPC Request to Device"
+        "fromIndex": 5,
+        "toIndex": 2,
+        "type": "Success"
       },
       {
         "fromIndex": 6,
+        "toIndex": 2,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 7,
+        "toIndex": 2,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 8,
+        "toIndex": 2,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 9,
+        "toIndex": 5,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 9,
+        "toIndex": 6,
+        "type": "Failure"
+      },
+      {
+        "fromIndex": 10,
         "toIndex": 7,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 10,
+        "toIndex": 8,
+        "type": "Failure"
+      },
+      {
+        "fromIndex": 11,
+        "toIndex": 10,
+        "type": "Post attributes"
+      },
+      {
+        "fromIndex": 11,
+        "toIndex": 9,
+        "type": "Post telemetry"
+      },
+      {
+        "fromIndex": 11,
+        "toIndex": 3,
+        "type": "Post telemetry"
+      },
+      {
+        "fromIndex": 12,
+        "toIndex": 11,
+        "type": "False"
+      },
+      {
+        "fromIndex": 12,
+        "toIndex": 13,
+        "type": "True"
+      },
+      {
+        "fromIndex": 13,
+        "toIndex": 11,
+        "type": "False"
+      },
+      {
+        "fromIndex": 13,
+        "toIndex": 14,
+        "type": "True"
+      },
+      {
+        "fromIndex": 14,
+        "toIndex": 11,
         "type": "Success"
       }
     ],
