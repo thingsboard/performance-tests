@@ -35,15 +35,16 @@ device:
   # Device API to use - MQTT or HTTP
   api: "${DEVICE_API:MQTT}"
   startIdx: "${DEVICE_START_IDX:1000}"
-  endIdx: "${DEVICE_END_IDX:10000}"
+  endIdx: "${DEVICE_END_IDX:1001}"
   createOnStart: "${DEVICE_CREATE_ON_START:true}"
   deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
 gateway:
   startIdx: "${GATEWAY_START_IDX:1000}"
-  endIdx: "${GATEWAY_END_IDX:1005}"
+  endIdx: "${GATEWAY_END_IDX:1001}"
   createOnStart: "${GATEWAY_CREATE_ON_START:true}"
   deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:false}"
-publish:
-  count: "${PUBLISH_COUNT:10}"
-  pause: "${PUBLISH_PAUSE:1000}" # in milliseconds
+test:
+  mps: "${MESSAGES_PER_SECOND:10}"
+  duration: "${DURATION_IN_SECONDS:1}"
+
 

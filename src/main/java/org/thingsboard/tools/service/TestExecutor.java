@@ -41,12 +41,6 @@ public class TestExecutor {
     @Value("${device.deleteOnComplete}")
     private boolean deviceDeleteOnComplete;
 
-    @Value("${publish.count}")
-    private int publishTelemetryCount;
-
-    @Value("${publish.pause}")
-    private int publishTelemetryPause;
-
     @Value("${device.api}")
     private String deviceAPIType;
 
@@ -71,10 +65,11 @@ public class TestExecutor {
         gatewayAPITest.warmUpDevices();
 
         ruleChainManager.createRuleChainWithCountNodeAndSetAsRoot();
+        //TODO: deploy dashboard
 
         statisticsCollector.start();
 
-        gatewayAPITest.runApiTests(publishTelemetryCount, publishTelemetryPause);
+        gatewayAPITest.runApiTests();
 
         statisticsCollector.end();
 
@@ -84,7 +79,7 @@ public class TestExecutor {
 
         statisticsCollector.printResults();
 
-        if (gatewayDeleteOnComplete) {
+        if (gatewayDeleteOnComplete){
             gatewayAPITest.removeGateways();
         }
         if (deviceDeleteOnComplete) {

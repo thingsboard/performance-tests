@@ -24,6 +24,7 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.thingsboard.client.tools.RestClient;
@@ -32,6 +33,7 @@ import org.thingsboard.mqtt.MqttClientConfig;
 import org.thingsboard.mqtt.MqttConnectResult;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.DeviceId;
+import org.thingsboard.tools.service.msg.MessageGenerator;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -42,6 +44,7 @@ import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -55,14 +58,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Service
 public class MqttGatewayAPITest implements GatewayAPITest {
 
-    private static String dataAsStr = "{\"longKey\":73}";
-    private static byte[] data = dataAsStr.getBytes(StandardCharsets.UTF_8);
-
     private static ObjectMapper mapper = new ObjectMapper();
 
     private static final int LOG_PAUSE = 1;
-    private static final int PUBLISHED_MESSAGES_LOG_PAUSE = 5;
     private static final int CONNECT_TIMEOUT = 5;
+
+    @Autowired
+    private MessageGenerator msgGenerator;
 
     @Value("${mqtt.host}")
     private String mqttHost;
@@ -104,16 +106,20 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     int warmUpPackSize;
     @Value("${warmup.gateway.connect:10000}")
     int gatewayConnectTime;
+    @Value("${test.mps:1000}")
+    int testMessagesPerSecond;
+    @Value("${test.duration:60}")
+    int testDurationInSec;
 
     private RestClient restClient;
 
     private int gatewayCount;
     private int deviceCount;
 
-    protected final ExecutorService httpExecutor = Executors.newFixedThreadPool(100);
-    protected final ScheduledExecutorService schedulerExecutor = Executors.newScheduledThreadPool(10);
-    protected final ScheduledExecutorService schedulerLogExecutor = Executors.newScheduledThreadPool(10);
-    private final ScheduledExecutorService warmUpExecutor = Executors.newScheduledThreadPool(10);
+    private final ExecutorService httpExecutor = Executors.newFixedThreadPool(100);
+    private final ScheduledExecutorService schedulerLogExecutor = Executors.newScheduledThreadPool(10);
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(10);
+    private final ExecutorService workers = Executors.newFixedThreadPool(10);
     private final List<MqttClient> mqttClients = Collections.synchronizedList(new ArrayList<>());
 
     private final List<DeviceId> gatewayIds = Collections.synchronizedList(new ArrayList<>(1024));
@@ -121,6 +127,9 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     private final List<DeviceGatewayClient> devices = new ArrayList<>(1024 * 1024);
 
     private EventLoopGroup EVENT_LOOP_GROUP;
+
+    private volatile CountDownLatch testDurationLatch;
+    private final Random random = new Random();
 
     @PostConstruct
     public void init() {
@@ -133,14 +142,17 @@ public class MqttGatewayAPITest implements GatewayAPITest {
 
     @PreDestroy
     public void destroy() {
-        if (!this.httpExecutor.isShutdown()) {
-            this.httpExecutor.shutdown();
-        }
         for (MqttClient mqttClient : mqttClients) {
             mqttClient.disconnect();
         }
-        if (!this.warmUpExecutor.isShutdown()) {
-            this.warmUpExecutor.shutdown();
+        if (!this.httpExecutor.isShutdown()) {
+            this.httpExecutor.shutdownNow();
+        }
+        if (!this.scheduler.isShutdown()) {
+            this.scheduler.shutdownNow();
+        }
+        if (!this.workers.isShutdown()) {
+            this.workers.shutdownNow();
         }
         if (!EVENT_LOOP_GROUP.isShutdown()) {
             EVENT_LOOP_GROUP.shutdownGracefully(0, 5, TimeUnit.SECONDS);
@@ -180,10 +192,59 @@ public class MqttGatewayAPITest implements GatewayAPITest {
         log.info("{} devices have been warmed up successfully!", devices.size());
     }
 
+    @Override
+    public void runApiTests() throws InterruptedException {
+        log.info("Starting performance test for {} devices...", devices.size());
+        AtomicInteger totalSuccessCount = new AtomicInteger();
+        AtomicInteger totalFailedCount = new AtomicInteger();
+        testDurationLatch = new CountDownLatch(testDurationInSec);
+        for (int i = 0; i < testDurationInSec; i++) {
+            int iterationNumber = i;
+            scheduler.schedule(() -> runApiTestIteration(iterationNumber, totalSuccessCount, totalFailedCount), i, TimeUnit.SECONDS);
+        }
+        testDurationLatch.await((long) (testDurationInSec * 1.2), TimeUnit.SECONDS);
+        log.info("Completed performance iteration. Success: {}, Failed: {}", totalSuccessCount.get(), totalFailedCount.get());
+    }
+
+    private void runApiTestIteration(int iteration, AtomicInteger totalSuccessPublishedCount, AtomicInteger totalFailedPublishedCount) {
+        try {
+            log.info("[{}] Starting performance iteration for {} devices...", iteration, mqttClients.size());
+            AtomicInteger successPublishedCount = new AtomicInteger();
+            AtomicInteger failedPublishedCount = new AtomicInteger();
+            CountDownLatch iterationLatch = new CountDownLatch(testMessagesPerSecond);
+            int deviceCount = devices.size();
+            for (int i = 0; i < testMessagesPerSecond; i++) {
+                DeviceGatewayClient client = devices.get(random.nextInt(deviceCount));
+                byte[] message = msgGenerator.getNextMessage(client.getDeviceName());
+                workers.submit(() -> {
+                    client.getMqttClient().publish("v1/gateway/telemetry", Unpooled.wrappedBuffer(message), MqttQoS.AT_LEAST_ONCE)
+                            .addListener(future -> {
+                                        iterationLatch.countDown();
+                                        if (future.isSuccess()) {
+                                            totalSuccessPublishedCount.incrementAndGet();
+                                            successPublishedCount.incrementAndGet();
+                                            log.debug("[{}] Message was successfully published to device: {} and gateway: {}", iteration, client.getDeviceName(), client.getGatewayName());
+                                        } else {
+                                            totalFailedPublishedCount.incrementAndGet();
+                                            failedPublishedCount.incrementAndGet();
+                                            log.error("[{}] Error while publishing message to device: {} and gateway: {}", iteration, client.getDeviceName(), client.getGatewayName());
+                                        }
+                                    }
+                            );
+                });
+            }
+            iterationLatch.await();
+            log.info("[{}] Completed performance iteration. Success: {}, Failed: {}", iteration, successPublishedCount.get(), failedPublishedCount.get());
+            testDurationLatch.countDown();
+        } catch (Throwable t) {
+            log.warn("[{}] Failed to process iteration", iteration, t);
+        }
+    }
+
     private void sendAndWaitPack(List<DeviceGatewayClient> pack, AtomicInteger totalWarmedUpCount) throws InterruptedException {
         CountDownLatch packLatch = new CountDownLatch(pack.size());
         for (DeviceGatewayClient device : pack) {
-            warmUpExecutor.submit(() -> {
+            scheduler.submit(() -> {
                 device.getMqttClient().publish("v1/gateway/connect", Unpooled.wrappedBuffer(("{\"device\":\"" + device.getDeviceName() + "\"}").getBytes(StandardCharsets.UTF_8))
                         , MqttQoS.AT_LEAST_ONCE)
                         .addListener(future -> {
@@ -211,7 +272,7 @@ public class MqttGatewayAPITest implements GatewayAPITest {
             final int tokenNumber = i;
             final int delayPause = (int) (publishTelemetryPause / gatewayCount * idx);
             idx++;
-            warmUpExecutor.schedule(() -> {
+            scheduler.schedule(() -> {
                 try {
                     String token = getToken(true, tokenNumber);
                     mqttClients.add(initClient(token));
@@ -249,11 +310,6 @@ public class MqttGatewayAPITest implements GatewayAPITest {
             client.setGatewayName(getToken(true, i));
             devices.add(client);
         }
-    }
-
-    @Override
-    public void runApiTests(int publishTelemetryCount, int publishTelemetryPause) throws InterruptedException {
-
     }
 
     private void createEntities(int startIdx, int endIdx, boolean isGateway, boolean setCredentials) throws InterruptedException {

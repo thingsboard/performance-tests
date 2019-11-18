@@ -42,7 +42,7 @@ public class StatisticsCollector {
      * Update this value only in sync with root_rule_chain.json file
      * [TbMsgCountNode configuration, 'telemetryPrefix' value]
      */
-    private static final String STATS_TELEMETRY_PREFIX = "perf_tests";
+    private static final String STATS_TELEMETRY_PREFIX = "telemetrySuccess";
 
     @Value("${rest.url}")
     private String restUrl;
