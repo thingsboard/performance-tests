@@ -303,8 +303,6 @@ public class MqttGatewayAPITest implements GatewayAPITest {
             int deviceIdx = i - deviceStartIdx;
             int gatewayIdx = deviceIdx % gatewayCount;
             DeviceGatewayClient client = new DeviceGatewayClient();
-            client.setDeviceId(deviceIds.get(deviceIdx));
-            client.setGatewayId(gatewayIds.get(gatewayIdx));
             client.setMqttClient(mqttClients.get(gatewayIdx));
             client.setDeviceName(getToken(false, i));
             client.setGatewayName(getToken(true, i));
