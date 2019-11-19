@@ -34,18 +34,19 @@ mqtt:
 device:
   # Device API to use - MQTT or HTTP
   api: "${DEVICE_API:MQTT}"
-  startIdx: "${DEVICE_START_IDX:0}"
-  endIdx: "${DEVICE_END_IDX:10000}"
-  createOnStart: "${DEVICE_CREATE_ON_START:false}"
-  deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
+  startIdx: "${DEVICE_START_IDX:10000}"
+  endIdx: "${DEVICE_END_IDX:10010}"
+  createOnStart: "${DEVICE_CREATE_ON_START:true}"
+  deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:true}"
 gateway:
-  startIdx: "${GATEWAY_START_IDX:0}"
-  endIdx: "${GATEWAY_END_IDX:100}"
-  createOnStart: "${GATEWAY_CREATE_ON_START:false}"
-  deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:false}"
+  startIdx: "${GATEWAY_START_IDX:10000}"
+  endIdx: "${GATEWAY_END_IDX:10010}"
+  createOnStart: "${GATEWAY_CREATE_ON_START:true}"
+  deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:true}"
 test:
+  enabled: "${TEST_ENABLED:false}"
   ruleChainName:  "${RULE_CHAIN_NAME:root_rule_chain_no_attr.json}"
-  mps: "${MESSAGES_PER_SECOND:1000}"
-  duration: "${DURATION_IN_SECONDS:600}"
+  mps: "${MESSAGES_PER_SECOND:0}"
+  duration: "${DURATION_IN_SECONDS:0}"
 
 

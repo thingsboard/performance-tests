@@ -41,6 +41,9 @@ public class TestExecutor {
     @Value("${device.deleteOnComplete}")
     private boolean deviceDeleteOnComplete;
 
+    @Value("${test.enabled:true}")
+    private boolean testEnabled;
+
     @Value("${device.api}")
     private String deviceAPIType;
 
@@ -62,24 +65,26 @@ public class TestExecutor {
             gatewayAPITest.createDevices();
         }
 
-        gatewayAPITest.warmUpDevices();
+        if (testEnabled) {
+            gatewayAPITest.warmUpDevices();
 
-        ruleChainManager.createRuleChainWithCountNodeAndSetAsRoot();
-        //TODO: deploy dashboard
+            ruleChainManager.createRuleChainWithCountNodeAndSetAsRoot();
+            //TODO: deploy dashboard
 
-        statisticsCollector.start();
+            statisticsCollector.start();
 
-        gatewayAPITest.runApiTests();
+            gatewayAPITest.runApiTests();
 
-        statisticsCollector.end();
+            statisticsCollector.end();
 
-        Thread.sleep(3000); // wait for messages delivery before removing rule chain
+            Thread.sleep(3000); // wait for messages delivery before removing rule chain
 
-        ruleChainManager.revertRootNodeAndCleanUp();
+            ruleChainManager.revertRootNodeAndCleanUp();
 
-        statisticsCollector.printResults();
+            statisticsCollector.printResults();
+        }
 
-        if (gatewayDeleteOnComplete){
+        if (gatewayDeleteOnComplete) {
             gatewayAPITest.removeGateways();
         }
         if (deviceDeleteOnComplete) {

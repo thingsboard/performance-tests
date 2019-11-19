@@ -19,20 +19,15 @@ public class RandomMessageGenerator implements MessageGenerator {
     @Override
     public byte[] getNextMessage(String deviceName) {
         int percent = random.nextInt(100);
-        if (percent < 49) {
+        if (percent < 29) {
             return getTinyRandomMessage(deviceName);
-        } else {
+        } else if (percent < 59) {
             return getSmallRandomMessage(deviceName);
+        } else if (percent < 99) {
+            return getRandomMessage(deviceName);
+        } else {
+            return getHugeRandomMessage(deviceName);
         }
-//        if (percent < 29) {
-//            return getTinyRandomMessage(deviceName);
-//        } else if (percent < 59) {
-//            return getSmallRandomMessage();
-//        } else if (percent < 99) {
-//            return getRandomMessage();
-//        } else {
-//            return getHugeRandomMessage();
-//        }
     }
 
     private byte[] getTinyRandomMessage(String deviceName) {
@@ -75,7 +70,7 @@ public class RandomMessageGenerator implements MessageGenerator {
             arrayElement.put("ts", System.currentTimeMillis());
             ObjectNode values = arrayElement.putObject("values");
 
-                values.set("t3", getValueToRandomMessage(100));
+            values.put("t3", getValueToRandomMessage(100));
 
             return mapper.writeValueAsBytes(data);
         } catch (Exception e) {
@@ -92,7 +87,7 @@ public class RandomMessageGenerator implements MessageGenerator {
             arrayElement.put("ts", System.currentTimeMillis());
             ObjectNode values = arrayElement.putObject("values");
 
-            values.set("t4", getValueToRandomMessage(1000));
+            values.put("t4", getValueToRandomMessage(1000));
 
             return mapper.writeValueAsBytes(data);
         } catch (Exception e) {
@@ -101,11 +96,11 @@ public class RandomMessageGenerator implements MessageGenerator {
         }
     }
 
-    private ObjectNode getValueToRandomMessage(int n) throws JsonProcessingException {
+    private String getValueToRandomMessage(int n) throws JsonProcessingException {
         ObjectNode values = mapper.createObjectNode();
         for (int i = 0; i < n; i++) {
             values.put("v" + i, random.nextInt(100));
         }
-        return values;
+        return mapper.writeValueAsString(values);
     }
 }
