@@ -1,12 +1,12 @@
 /**
  * Copyright © 2016-2018 The Thingsboard Authors
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -47,6 +47,10 @@ public class RuleChainManager {
     @Value("${rest.password}")
     private String password;
 
+    @Value("${test.ruleChainName:root_rule_chain.json}")
+    private String ruleChainName;
+
+
     private RestClient restClient;
     private RuleChainId defaultRootRuleChainId;
     private RuleChainId updatedRuleChainId;
@@ -62,7 +66,7 @@ public class RuleChainManager {
         deleteAllPreviousPerformanceTestRuleChains();
 
         try {
-            JsonNode updatedRootRuleChainConfig = objectMapper.readTree(this.getClass().getClassLoader().getResourceAsStream("root_rule_chain.json"));
+            JsonNode updatedRootRuleChainConfig = objectMapper.readTree(this.getClass().getClassLoader().getResourceAsStream(ruleChainName));
             RuleChain ruleChain = objectMapper.treeToValue(updatedRootRuleChainConfig.get("ruleChain"), RuleChain.class);
             updatedRuleChainId = saveUpdatedRootRuleChainAndSetAsRoot(ruleChain);
             setRootRuleChain(updatedRuleChainId);
@@ -107,7 +111,8 @@ public class RuleChainManager {
                         restUrl + "/api/ruleChains?limit=999&textSearch=Performance Test Rule Chain",
                         HttpMethod.GET,
                         null,
-                        new ParameterizedTypeReference<TextPageData<RuleChain>>() {});
+                        new ParameterizedTypeReference<TextPageData<RuleChain>>() {
+                        });
 
         List<RuleChainId> ruleChainIds = ruleChains.getBody().getData()
                 .stream().map(IdBased::getId).collect(Collectors.toList());
@@ -121,7 +126,8 @@ public class RuleChainManager {
                         restUrl + "/api/ruleChains?limit=999&textSearch=Root Rule Chain",
                         HttpMethod.GET,
                         null,
-                        new ParameterizedTypeReference<TextPageData<RuleChain>>() {});
+                        new ParameterizedTypeReference<TextPageData<RuleChain>>() {
+                        });
 
         Optional<RuleChain> defaultRuleChain = ruleChains.getBody().getData()
                 .stream()

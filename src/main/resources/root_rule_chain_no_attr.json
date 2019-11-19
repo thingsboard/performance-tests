@@ -286,11 +286,6 @@
         "type": "Post telemetry"
       },
       {
-        "fromIndex": 11,
-        "toIndex": 3,
-        "type": "Post telemetry"
-      },
-      {
         "fromIndex": 12,
         "toIndex": 11,
         "type": "False"
