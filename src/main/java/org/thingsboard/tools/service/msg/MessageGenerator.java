@@ -2,6 +2,6 @@ package org.thingsboard.tools.service.msg;
 
 public interface MessageGenerator {
 
-    byte[] getNextMessage(String deviceName);
+    Msg getNextMessage(String deviceName, boolean shouldTriggerAlarm);
 
 }

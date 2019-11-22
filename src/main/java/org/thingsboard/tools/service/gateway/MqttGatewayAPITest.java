@@ -34,6 +34,7 @@ import org.thingsboard.mqtt.MqttConnectResult;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.DeviceId;
 import org.thingsboard.tools.service.msg.MessageGenerator;
+import org.thingsboard.tools.service.msg.Msg;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -68,40 +69,28 @@ public class MqttGatewayAPITest implements GatewayAPITest {
 
     @Value("${mqtt.host}")
     private String mqttHost;
-
     @Value("${mqtt.port}")
     private int mqttPort;
-
     @Value("${mqtt.ssl.enabled}")
     boolean mqttSslEnabled;
-
     @Value("${mqtt.ssl.key_store}")
     String mqttSslKeyStore;
-
     @Value("${mqtt.ssl.key_store_password}")
     String mqttSllKeyStorePassword;
-
     @Value("${device.startIdx}")
     int deviceStartIdx;
-
     @Value("${device.endIdx}")
     int deviceEndIdx;
-
     @Value("${gateway.startIdx}")
     int gatewayStartIdx;
-
     @Value("${gateway.endIdx}")
     int gatewayEndIdx;
-
     @Value("${rest.url}")
     String restUrl;
-
     @Value("${rest.username}")
     String username;
-
     @Value("${rest.password}")
     String password;
-
     @Value("${warmup.packSize:100}")
     int warmUpPackSize;
     @Value("${warmup.gateway.connect:10000}")
@@ -110,6 +99,12 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     int testMessagesPerSecond;
     @Value("${test.duration:60}")
     int testDurationInSec;
+    @Value("${test.alarm.start:0}")
+    int alarmsStartTs;
+    @Value("${test.alarm.end:0}")
+    int alarmsEndTs;
+    @Value("${test.alarm.aps:0}")
+    int alarmsPerSecond;
 
     private RestClient restClient;
 
@@ -213,13 +208,18 @@ public class MqttGatewayAPITest implements GatewayAPITest {
             AtomicInteger failedPublishedCount = new AtomicInteger();
             CountDownLatch iterationLatch = new CountDownLatch(testMessagesPerSecond);
             int deviceCount = devices.size();
+            boolean alarmIteration = iteration >= alarmsStartTs && iteration < alarmsEndTs;
+            int alarmCount = 0;
             for (int i = 0; i < testMessagesPerSecond; i++) {
+                boolean alarmRequired = alarmIteration && alarmCount < alarmsPerSecond;
                 DeviceGatewayClient client = devices.get(random.nextInt(deviceCount));
-                byte[] message = msgGenerator.getNextMessage(client.getDeviceName());
+                Msg message = msgGenerator.getNextMessage(client.getDeviceName(), alarmRequired);
+                if (message.isTriggersAlarm()) {
+                    alarmCount++;
+                }
                 workers.submit(() -> {
-                    client.getMqttClient().publish("v1/gateway/telemetry", Unpooled.wrappedBuffer(message), MqttQoS.AT_LEAST_ONCE)
+                    client.getMqttClient().publish("v1/gateway/telemetry", Unpooled.wrappedBuffer(message.getData()), MqttQoS.AT_LEAST_ONCE)
                             .addListener(future -> {
-                                        iterationLatch.countDown();
                                         if (future.isSuccess()) {
                                             totalSuccessPublishedCount.incrementAndGet();
                                             successPublishedCount.incrementAndGet();
@@ -229,12 +229,13 @@ public class MqttGatewayAPITest implements GatewayAPITest {
                                             failedPublishedCount.incrementAndGet();
                                             log.error("[{}] Error while publishing message to device: {} and gateway: {}", iteration, client.getDeviceName(), client.getGatewayName());
                                         }
+                                        iterationLatch.countDown();
                                     }
                             );
                 });
             }
             iterationLatch.await();
-            log.info("[{}] Completed performance iteration. Success: {}, Failed: {}", iteration, successPublishedCount.get(), failedPublishedCount.get());
+            log.info("[{}] Completed performance iteration. Success: {}, Failed: {}, Alarms: {}", iteration, successPublishedCount.get(), failedPublishedCount.get(), alarmCount);
             testDurationLatch.countDown();
         } catch (Throwable t) {
             log.warn("[{}] Failed to process iteration", iteration, t);
