@@ -1,12 +1,12 @@
 /**
  * Copyright © 2016-2018 The Thingsboard Authors
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -26,7 +26,7 @@ import java.util.Random;
 
 @Slf4j
 @Service
-public class RandomMessageGenerator implements MessageGenerator {
+public class RandomGatewayAttributesGenerator implements MessageGenerator {
 
     private final Random random = new Random();
     private static final ObjectMapper mapper = new ObjectMapper();
@@ -48,14 +48,11 @@ public class RandomMessageGenerator implements MessageGenerator {
     private byte[] getTinyRandomMessage(String deviceName, boolean shouldTriggerAlarm) {
         try {
             ObjectNode data = mapper.createObjectNode();
-            ArrayNode array = data.putArray(deviceName);
-            ObjectNode arrayElement = array.addObject();
-            arrayElement.put("ts", System.currentTimeMillis());
-            ObjectNode values = arrayElement.putObject("values");
+            ObjectNode values = data.putObject(deviceName);
             if (shouldTriggerAlarm) {
-                values.put("t1", 100);
+                values.put("a1", 100);
             } else {
-                values.put("t1", random.nextInt(100));
+                values.put("a1", random.nextInt(100));
             }
             return mapper.writeValueAsBytes(data);
         } catch (Exception e) {
@@ -67,12 +64,9 @@ public class RandomMessageGenerator implements MessageGenerator {
     private byte[] getSmallRandomMessage(String deviceName) {
         try {
             ObjectNode data = mapper.createObjectNode();
-            ArrayNode array = data.putArray(deviceName);
-            ObjectNode arrayElement = array.addObject();
-            arrayElement.put("ts", System.currentTimeMillis());
-            ObjectNode values = arrayElement.putObject("values");
+            ObjectNode values = data.putObject(deviceName);
             for (int i = 0; i < 20; i++) {
-                values.put("t2_" + i, random.nextInt(100));
+                values.put("a2_" + i, random.nextInt(100));
             }
             return mapper.writeValueAsBytes(data);
         } catch (Exception e) {
@@ -84,13 +78,8 @@ public class RandomMessageGenerator implements MessageGenerator {
     private byte[] getRandomMessage(String deviceName) {
         try {
             ObjectNode data = mapper.createObjectNode();
-            ArrayNode array = data.putArray(deviceName);
-            ObjectNode arrayElement = array.addObject();
-            arrayElement.put("ts", System.currentTimeMillis());
-            ObjectNode values = arrayElement.putObject("values");
-
-            values.put("t3", getValueToRandomMessage(100));
-
+            ObjectNode values = data.putObject(deviceName);
+            values.put("a3", getValueToRandomMessage(100));
             return mapper.writeValueAsBytes(data);
         } catch (Exception e) {
             log.warn("Failed to generate message", e);
@@ -101,13 +90,8 @@ public class RandomMessageGenerator implements MessageGenerator {
     private byte[] getHugeRandomMessage(String deviceName) {
         try {
             ObjectNode data = mapper.createObjectNode();
-            ArrayNode array = data.putArray(deviceName);
-            ObjectNode arrayElement = array.addObject();
-            arrayElement.put("ts", System.currentTimeMillis());
-            ObjectNode values = arrayElement.putObject("values");
-
-            values.put("t4", getValueToRandomMessage(1000));
-
+            ObjectNode values = data.putObject(deviceName);
+            values.put("a4", getValueToRandomMessage(1000));
             return mapper.writeValueAsBytes(data);
         } catch (Exception e) {
             log.warn("Failed to generate message", e);
