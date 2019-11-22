@@ -8,8 +8,36 @@
     "configuration": null
   },
   "metadata": {
-    "firstNodeIndex": 12,
+    "firstNodeIndex": 14,
     "nodes": [
+      {
+        "additionalInfo": {
+          "layoutX": 416,
+          "layoutY": 493
+        },
+        "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+        "name": "Is Alarm Msg",
+        "debugMode": false,
+        "configuration": {
+          "jsScript": "return msg.t1 >= 100;"
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 962,
+          "layoutY": 657
+        },
+        "type": "org.thingsboard.rule.engine.action.TbCreateAlarmNode",
+        "name": "Create Alarm",
+        "debugMode": false,
+        "configuration": {
+          "alarmType": "General Alarm",
+          "alarmDetailsBuildJs": "var details = {};\nif (metadata.prevAlarmDetails) {\n    details = JSON.parse(metadata.prevAlarmDetails);\n}\nreturn details;",
+          "severity": "CRITICAL",
+          "propagate": true,
+          "useMessageAlarmData": false
+        }
+      },
       {
         "additionalInfo": {
           "layoutX": 273,
@@ -216,103 +244,113 @@
         "type": "True"
       },
       {
-        "fromIndex": 1,
-        "toIndex": 10,
-        "type": "Success"
-      },
-      {
-        "fromIndex": 3,
-        "toIndex": 4,
+        "fromIndex": 2,
+        "toIndex": 3,
         "type": "True"
       },
       {
         "fromIndex": 3,
-        "toIndex": 0,
-        "type": "False"
-      },
-      {
-        "fromIndex": 4,
-        "toIndex": 10,
+        "toIndex": 12,
         "type": "Success"
       },
       {
         "fromIndex": 5,
+        "toIndex": 6,
+        "type": "True"
+      },
+      {
+        "fromIndex": 5,
         "toIndex": 2,
-        "type": "Success"
+        "type": "False"
+      },
+      {
+        "fromIndex": 5,
+        "toIndex": 0,
+        "type": "True"
       },
       {
         "fromIndex": 6,
-        "toIndex": 2,
+        "toIndex": 12,
         "type": "Success"
       },
       {
         "fromIndex": 7,
-        "toIndex": 2,
+        "toIndex": 4,
         "type": "Success"
       },
       {
         "fromIndex": 8,
-        "toIndex": 2,
+        "toIndex": 4,
         "type": "Success"
       },
       {
         "fromIndex": 9,
-        "toIndex": 5,
+        "toIndex": 4,
         "type": "Success"
-      },
-      {
-        "fromIndex": 9,
-        "toIndex": 6,
-        "type": "Failure"
       },
       {
         "fromIndex": 10,
+        "toIndex": 4,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 11,
         "toIndex": 7,
         "type": "Success"
       },
       {
-        "fromIndex": 10,
+        "fromIndex": 11,
         "toIndex": 8,
         "type": "Failure"
       },
       {
-        "fromIndex": 11,
+        "fromIndex": 12,
+        "toIndex": 9,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 12,
         "toIndex": 10,
+        "type": "Failure"
+      },
+      {
+        "fromIndex": 13,
+        "toIndex": 12,
         "type": "Post attributes"
       },
       {
-        "fromIndex": 11,
-        "toIndex": 9,
+        "fromIndex": 13,
+        "toIndex": 11,
         "type": "Post telemetry"
       },
       {
-        "fromIndex": 11,
-        "toIndex": 3,
+        "fromIndex": 13,
+        "toIndex": 5,
         "type": "Post telemetry"
-      },
-      {
-        "fromIndex": 12,
-        "toIndex": 11,
-        "type": "False"
-      },
-      {
-        "fromIndex": 12,
-        "toIndex": 13,
-        "type": "True"
-      },
-      {
-        "fromIndex": 13,
-        "toIndex": 11,
-        "type": "False"
-      },
-      {
-        "fromIndex": 13,
-        "toIndex": 14,
-        "type": "True"
       },
       {
         "fromIndex": 14,
-        "toIndex": 11,
+        "toIndex": 13,
+        "type": "False"
+      },
+      {
+        "fromIndex": 14,
+        "toIndex": 15,
+        "type": "True"
+      },
+      {
+        "fromIndex": 15,
+        "toIndex": 13,
+        "type": "False"
+      },
+      {
+        "fromIndex": 15,
+        "toIndex": 16,
+        "type": "True"
+      },
+      {
+        "fromIndex": 16,
+        "toIndex": 13,
         "type": "Success"
       }
     ],

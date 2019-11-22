@@ -1,12 +1,12 @@
 /**
  * Copyright © 2016-2018 The Thingsboard Authors
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -35,6 +35,8 @@ import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.DeviceId;
 import org.thingsboard.tools.service.msg.MessageGenerator;
 import org.thingsboard.tools.service.msg.Msg;
+import org.thingsboard.tools.service.msg.RandomGatewayAttributesGenerator;
+import org.thingsboard.tools.service.msg.RandomGatewayTelemetryGenerator;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -65,7 +67,9 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     private static final int CONNECT_TIMEOUT = 5;
 
     @Autowired
-    private MessageGenerator msgGenerator;
+    private RandomGatewayTelemetryGenerator tsMsgGenerator;
+    @Autowired
+    private RandomGatewayAttributesGenerator attrMsgGenerator;
 
     @Value("${mqtt.host}")
     private String mqttHost;
@@ -93,23 +97,24 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     String password;
     @Value("${warmup.packSize:100}")
     int warmUpPackSize;
-    @Value("${warmup.gateway.connect:10000}")
+    @Value("${warmup.gateway.connect:1000}")
     int gatewayConnectTime;
+    @Value("${test.telemetry:true}")
+    boolean telemetryTest;
     @Value("${test.mps:1000}")
     int testMessagesPerSecond;
     @Value("${test.duration:60}")
     int testDurationInSec;
-    @Value("${test.alarm.start:0}")
+    @Value("${test.alarms.start:0}")
     int alarmsStartTs;
-    @Value("${test.alarm.end:0}")
+    @Value("${test.alarms.end:0}")
     int alarmsEndTs;
-    @Value("${test.alarm.aps:0}")
+    @Value("${test.alarms.aps:0}")
     int alarmsPerSecond;
 
     private RestClient restClient;
 
     private int gatewayCount;
-    private int deviceCount;
 
     private final ExecutorService httpExecutor = Executors.newFixedThreadPool(100);
     private final ScheduledExecutorService schedulerLogExecutor = Executors.newScheduledThreadPool(10);
@@ -129,7 +134,6 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     @PostConstruct
     public void init() {
         gatewayCount = gatewayEndIdx - gatewayStartIdx;
-        deviceCount = deviceEndIdx - deviceStartIdx;
         restClient = new RestClient(restUrl);
         restClient.login(username, password);
         EVENT_LOOP_GROUP = new NioEventLoopGroup();
@@ -211,14 +215,15 @@ public class MqttGatewayAPITest implements GatewayAPITest {
             boolean alarmIteration = iteration >= alarmsStartTs && iteration < alarmsEndTs;
             int alarmCount = 0;
             for (int i = 0; i < testMessagesPerSecond; i++) {
-                boolean alarmRequired = alarmIteration && alarmCount < alarmsPerSecond;
+                boolean alarmRequired = alarmIteration && (alarmCount < alarmsPerSecond);
                 DeviceGatewayClient client = devices.get(random.nextInt(deviceCount));
-                Msg message = msgGenerator.getNextMessage(client.getDeviceName(), alarmRequired);
+                Msg message = (telemetryTest ? tsMsgGenerator : attrMsgGenerator).getNextMessage(client.getDeviceName(), alarmRequired);
                 if (message.isTriggersAlarm()) {
                     alarmCount++;
                 }
                 workers.submit(() -> {
-                    client.getMqttClient().publish("v1/gateway/telemetry", Unpooled.wrappedBuffer(message.getData()), MqttQoS.AT_LEAST_ONCE)
+                    String topic = telemetryTest ? "v1/gateway/telemetry" : "v1/gateway/attributes";
+                    client.getMqttClient().publish(topic, Unpooled.wrappedBuffer(message.getData()), MqttQoS.AT_LEAST_ONCE)
                             .addListener(future -> {
                                         if (future.isSuccess()) {
                                             totalSuccessPublishedCount.incrementAndGet();
