@@ -68,7 +68,7 @@ public class TestExecutor {
         if (testEnabled) {
             gatewayAPITest.warmUpDevices();
 
-            ruleChainManager.createRuleChainWithCountNodeAndSetAsRoot();
+//            ruleChainManager.createRuleChainWithCountNodeAndSetAsRoot();
             //TODO: deploy dashboard
 
             statisticsCollector.start();
@@ -79,7 +79,7 @@ public class TestExecutor {
 
             Thread.sleep(3000); // wait for messages delivery before removing rule chain
 
-            ruleChainManager.revertRootNodeAndCleanUp();
+//            ruleChainManager.revertRootNodeAndCleanUp();
 
             statisticsCollector.printResults();
         }

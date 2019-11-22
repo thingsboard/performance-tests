@@ -32,27 +32,31 @@ public class RandomMessageGenerator implements MessageGenerator {
     private static final ObjectMapper mapper = new ObjectMapper();
 
     @Override
-    public byte[] getNextMessage(String deviceName) {
+    public Msg getNextMessage(String deviceName, boolean shouldTriggerAlarm) {
         int percent = random.nextInt(100);
         if (percent < 29) {
-            return getTinyRandomMessage(deviceName);
+            return new Msg(getTinyRandomMessage(deviceName, shouldTriggerAlarm), true);
         } else if (percent < 59) {
-            return getSmallRandomMessage(deviceName);
+            return new Msg(getSmallRandomMessage(deviceName));
         } else if (percent < 99) {
-            return getRandomMessage(deviceName);
+            return new Msg(getRandomMessage(deviceName));
         } else {
-            return getHugeRandomMessage(deviceName);
+            return new Msg(getHugeRandomMessage(deviceName));
         }
     }
 
-    private byte[] getTinyRandomMessage(String deviceName) {
+    private byte[] getTinyRandomMessage(String deviceName, boolean shouldTriggerAlarm) {
         try {
             ObjectNode data = mapper.createObjectNode();
             ArrayNode array = data.putArray(deviceName);
             ObjectNode arrayElement = array.addObject();
             arrayElement.put("ts", System.currentTimeMillis());
             ObjectNode values = arrayElement.putObject("values");
-            values.put("t1", random.nextInt(100));
+            if (shouldTriggerAlarm) {
+                values.put("t1", 100);
+            } else {
+                values.put("t1", random.nextInt(100));
+            }
             return mapper.writeValueAsBytes(data);
         } catch (Exception e) {
             log.warn("Failed to generate message", e);

@@ -21,11 +21,11 @@ server:
   port: "${SERVER_PORT:19090}"
 
 rest:
-  url: "${REST_URL:http://192.168.1.109:8080}"
+  url: "${REST_URL:http://localhost:8080}"
   username: "${REST_USERNAME:tenant@thingsboard.org}"
   password: "${REST_PASSWORD:tenant}"
 mqtt:
-  host: "${MQTT_HOST:192.168.1.109}"
+  host: "${MQTT_HOST:localhost}"
   port: "${MQTT_PORT:1883}"
   ssl:
     enabled: "${MQTT_SSL_ENABLED:false}"
@@ -34,19 +34,26 @@ mqtt:
 device:
   # Device API to use - MQTT or HTTP
   api: "${DEVICE_API:MQTT}"
-  startIdx: "${DEVICE_START_IDX:10000}"
-  endIdx: "${DEVICE_END_IDX:10010}"
+  startIdx: "${DEVICE_START_IDX:0}"
+  endIdx: "${DEVICE_END_IDX:100}"
   createOnStart: "${DEVICE_CREATE_ON_START:true}"
-  deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:true}"
+  deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
 gateway:
-  startIdx: "${GATEWAY_START_IDX:10000}"
-  endIdx: "${GATEWAY_END_IDX:10010}"
+  startIdx: "${GATEWAY_START_IDX:0}"
+  endIdx: "${GATEWAY_END_IDX:10}"
   createOnStart: "${GATEWAY_CREATE_ON_START:true}"
-  deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:true}"
+  deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:false}"
 test:
-  enabled: "${TEST_ENABLED:false}"
+  enabled: "${TEST_ENABLED:true}"
   ruleChainName:  "${RULE_CHAIN_NAME:root_rule_chain_no_attr.json}"
-  mps: "${MESSAGES_PER_SECOND:0}"
-  duration: "${DURATION_IN_SECONDS:0}"
+  # messages per second.
+  mps: "${MESSAGES_PER_SECOND:100}"
+  duration: "${DURATION_IN_SECONDS:10}"
+  alarms:
+    start: "${ALARM_STORM_START_SECOND:10}"
+    end: "${ALARM_STORM_END_SECOND:20}"
+    # alarms per second should be less them messages per second.
+    aps: "${ALARMS_PER_SECOND:100}"
+
 
 
