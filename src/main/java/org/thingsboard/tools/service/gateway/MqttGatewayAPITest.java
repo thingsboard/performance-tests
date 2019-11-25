@@ -97,7 +97,7 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     String password;
     @Value("${warmup.packSize:100}")
     int warmUpPackSize;
-    @Value("${warmup.gateway.connect:1000}")
+    @Value("${warmup.gateway.connect:10000}")
     int gatewayConnectTime;
     @Value("${test.telemetry:true}")
     boolean telemetryTest;
@@ -232,7 +232,8 @@ public class MqttGatewayAPITest implements GatewayAPITest {
                                         } else {
                                             totalFailedPublishedCount.incrementAndGet();
                                             failedPublishedCount.incrementAndGet();
-                                            log.error("[{}] Error while publishing message to device: {} and gateway: {}", iteration, client.getDeviceName(), client.getGatewayName());
+                                            log.error("[{}] Error while publishing message to device: {} and gateway: {}", iteration, client.getDeviceName(), client.getGatewayName(),
+                                                    future.cause());
                                         }
                                         iterationLatch.countDown();
                                     }
@@ -265,8 +266,12 @@ public class MqttGatewayAPITest implements GatewayAPITest {
                         );
             });
         }
-        packLatch.await();
-        log.info("[{}] devices have been warmed up!", totalWarmedUpCount.get());
+        boolean succeeded = packLatch.await(10, TimeUnit.SECONDS);
+        if (succeeded) {
+            log.info("[{}] devices have been warmed up!", totalWarmedUpCount.get());
+        } else {
+            log.error("[{}] devices warmed up failed: {}!", totalWarmedUpCount.get(), packLatch.getCount());
+        }
     }
 
     private void connectGateways(double publishTelemetryPause) throws InterruptedException {
@@ -311,7 +316,7 @@ public class MqttGatewayAPITest implements GatewayAPITest {
             DeviceGatewayClient client = new DeviceGatewayClient();
             client.setMqttClient(mqttClients.get(gatewayIdx));
             client.setDeviceName(getToken(false, i));
-            client.setGatewayName(getToken(true, i));
+            client.setGatewayName(getToken(true, gatewayIdx));
             devices.add(client);
         }
     }
