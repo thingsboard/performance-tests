@@ -68,7 +68,7 @@ public class TestExecutor {
         if (testEnabled) {
             gatewayAPITest.warmUpDevices();
 
-//            ruleChainManager.createRuleChainWithCountNodeAndSetAsRoot();
+            ruleChainManager.createRuleChainWithCountNodeAndSetAsRoot();
             //TODO: deploy dashboard
 
             statisticsCollector.start();
