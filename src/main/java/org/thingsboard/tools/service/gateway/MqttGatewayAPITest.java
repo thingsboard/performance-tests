@@ -171,6 +171,7 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     @Override
     public void warmUpDevices() throws InterruptedException {
         connectGateways(gatewayConnectTime);
+        scheduler.scheduleAtFixedRate(this::reportGatewayStats, 10, 10, TimeUnit.SECONDS);
         mapDevicesToGatewayConnections();
         log.info("Warming up {} devices...", devices.size());
         AtomicInteger totalWarmedUpCount = new AtomicInteger();
@@ -189,6 +190,19 @@ public class MqttGatewayAPITest implements GatewayAPITest {
             sendAndWaitPack(pack, totalWarmedUpCount);
         }
         log.info("{} devices have been warmed up successfully!", devices.size());
+    }
+
+    private void reportGatewayStats() {
+        for (MqttClient mqttClient : mqttClients) {
+            mqttClient.publish("v1/devices/me/telemetry", Unpooled.wrappedBuffer("{\"msgCount\":0}".getBytes(StandardCharsets.UTF_8)), MqttQoS.AT_LEAST_ONCE).addListener(future -> {
+                        if (future.isSuccess()) {
+                            log.debug("[{}] Gateway statistics message was successfully published.", mqttClient.getClientConfig().getUsername());
+                        } else {
+                            log.error("[{}] Error while publishing gateway statistics message ", mqttClient.getClientConfig().getUsername(), future.cause());
+                        }
+                    }
+            );
+        }
     }
 
     @Override
