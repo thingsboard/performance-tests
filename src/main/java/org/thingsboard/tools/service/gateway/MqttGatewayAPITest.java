@@ -101,6 +101,8 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     int warmUpPackSize;
     @Value("${warmup.gateway.connect:10000}")
     int gatewayConnectTime;
+    @Value("${test.sequential:true}")
+    boolean sequentialTest;
     @Value("${test.telemetry:true}")
     boolean telemetryTest;
     @Value("${test.mps:1000}")
@@ -232,12 +234,11 @@ public class MqttGatewayAPITest implements GatewayAPITest {
             AtomicInteger successPublishedCount = new AtomicInteger();
             AtomicInteger failedPublishedCount = new AtomicInteger();
             CountDownLatch iterationLatch = new CountDownLatch(testMessagesPerSecond);
-            int deviceCount = devices.size();
             boolean alarmIteration = iteration >= alarmsStartTs && iteration < alarmsEndTs;
             int alarmCount = 0;
             for (int i = 0; i < testMessagesPerSecond; i++) {
                 boolean alarmRequired = alarmIteration && (alarmCount < alarmsPerSecond);
-                DeviceGatewayClient client = getDeviceGatewayClient(iterationDevices, deviceCount);
+                DeviceGatewayClient client = getDeviceGatewayClient(iterationDevices, iteration, i);
                 Msg message = (telemetryTest ? tsMsgGenerator : attrMsgGenerator).getNextMessage(client.getDeviceName(), alarmRequired);
                 if (message.isTriggersAlarm()) {
                     alarmCount++;
@@ -269,12 +270,17 @@ public class MqttGatewayAPITest implements GatewayAPITest {
         }
     }
 
-    private DeviceGatewayClient getDeviceGatewayClient(Set<DeviceGatewayClient> iterationDevices, int deviceCount) {
+    private DeviceGatewayClient getDeviceGatewayClient(Set<DeviceGatewayClient> iterationDevices, int iteration, int msgOffsetIdx) {
         DeviceGatewayClient client;
-        while (true) {
-            client = devices.get(random.nextInt(deviceCount));
-            if (iterationDevices.add(client)) {
-                break;
+        if (sequentialTest) {
+            int iterationOffset = (iteration * testMessagesPerSecond) % devices.size();
+            client = devices.get(iterationOffset + msgOffsetIdx);
+        } else {
+            while (true) {
+                client = devices.get(random.nextInt(devices.size()));
+                if (iterationDevices.add(client)) {
+                    break;
+                }
             }
         }
         return client;

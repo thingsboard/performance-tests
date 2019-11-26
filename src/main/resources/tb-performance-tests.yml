@@ -49,6 +49,7 @@ warmup:
     connect: "${WARMUP_GATEWAY_CONNECT:15000}"
 test:
   enabled: "${TEST_ENABLED:true}"
+  sequential: "${TEST_SEQUENTIAL:true}"
   ruleChainName:  "${RULE_CHAIN_NAME:root_rule_chain_pe.json}"
   # messages per second.
   telemetry: "${TEST_TELEMETRY:true}"
