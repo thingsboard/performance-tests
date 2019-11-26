@@ -172,9 +172,6 @@ public class MqttGatewayAPITest implements GatewayAPITest {
 
     @Override
     public void warmUpDevices() throws InterruptedException {
-        connectGateways(gatewayConnectTime);
-        scheduler.scheduleAtFixedRate(this::reportGatewayStats, 10, 10, TimeUnit.SECONDS);
-        mapDevicesToGatewayConnections();
         log.info("Warming up {} devices...", devices.size());
         AtomicInteger totalWarmedUpCount = new AtomicInteger();
         List<DeviceGatewayClient> pack = null;
@@ -192,6 +189,13 @@ public class MqttGatewayAPITest implements GatewayAPITest {
             sendAndWaitPack(pack, totalWarmedUpCount);
         }
         log.info("{} devices have been warmed up successfully!", devices.size());
+    }
+
+    @Override
+    public void connectGateways() throws InterruptedException {
+        connectGateways(gatewayConnectTime);
+        scheduler.scheduleAtFixedRate(this::reportGatewayStats, 10, 10, TimeUnit.SECONDS);
+        mapDevicesToGatewayConnections();
     }
 
     private void reportGatewayStats() {
