@@ -44,6 +44,7 @@ gateway:
   createOnStart: "${GATEWAY_CREATE_ON_START:false}"
   deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:false}"
 warmup:
+  enabled: "${WARMUP_ENABLED:true}"
   gateway:
     connect: "${WARMUP_GATEWAY_CONNECT:15000}"
 test:
