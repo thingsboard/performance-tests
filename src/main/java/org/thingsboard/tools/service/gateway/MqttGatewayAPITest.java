@@ -1,12 +1,12 @@
 /**
  * Copyright © 2016-2018 The Thingsboard Authors
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -46,8 +46,10 @@ import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -221,6 +223,7 @@ public class MqttGatewayAPITest implements GatewayAPITest {
 
     private void runApiTestIteration(int iteration, AtomicInteger totalSuccessPublishedCount, AtomicInteger totalFailedPublishedCount) {
         try {
+            Set<DeviceGatewayClient> iterationDevices = new HashSet<>();
             log.info("[{}] Starting performance iteration for {} devices...", iteration, mqttClients.size());
             AtomicInteger successPublishedCount = new AtomicInteger();
             AtomicInteger failedPublishedCount = new AtomicInteger();
@@ -230,7 +233,7 @@ public class MqttGatewayAPITest implements GatewayAPITest {
             int alarmCount = 0;
             for (int i = 0; i < testMessagesPerSecond; i++) {
                 boolean alarmRequired = alarmIteration && (alarmCount < alarmsPerSecond);
-                DeviceGatewayClient client = devices.get(random.nextInt(deviceCount));
+                DeviceGatewayClient client = getDeviceGatewayClient(iterationDevices, deviceCount);
                 Msg message = (telemetryTest ? tsMsgGenerator : attrMsgGenerator).getNextMessage(client.getDeviceName(), alarmRequired);
                 if (message.isTriggersAlarm()) {
                     alarmCount++;
@@ -260,6 +263,17 @@ public class MqttGatewayAPITest implements GatewayAPITest {
         } catch (Throwable t) {
             log.warn("[{}] Failed to process iteration", iteration, t);
         }
+    }
+
+    private DeviceGatewayClient getDeviceGatewayClient(Set<DeviceGatewayClient> iterationDevices, int deviceCount) {
+        DeviceGatewayClient client;
+        while (true) {
+            client = devices.get(random.nextInt(deviceCount));
+            if (iterationDevices.add(client)) {
+                break;
+            }
+        }
+        return client;
     }
 
     private void sendAndWaitPack(List<DeviceGatewayClient> pack, AtomicInteger totalWarmedUpCount) throws InterruptedException {
