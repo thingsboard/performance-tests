@@ -18,6 +18,8 @@ package org.thingsboard.tools.service.gateway;
 import lombok.Data;
 import org.thingsboard.mqtt.MqttClient;
 
+import java.util.Objects;
+
 @Data
 public class DeviceGatewayClient {
 
@@ -26,4 +28,18 @@ public class DeviceGatewayClient {
     private String deviceName;
 
     private MqttClient mqttClient;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        DeviceGatewayClient that = (DeviceGatewayClient) o;
+        return gatewayName.equals(that.gatewayName) &&
+                deviceName.equals(that.deviceName);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(gatewayName, deviceName);
+    }
 }
