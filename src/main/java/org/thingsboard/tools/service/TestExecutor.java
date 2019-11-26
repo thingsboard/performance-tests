@@ -68,7 +68,11 @@ public class TestExecutor {
             gatewayAPITest.createDevices();
         }
 
-        if(warmupEnabled){
+        if (testEnabled) {
+            gatewayAPITest.connectGateways();
+        }
+
+        if (warmupEnabled) {
             gatewayAPITest.warmUpDevices();
         }
 
