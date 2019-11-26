@@ -41,6 +41,9 @@ public class TestExecutor {
     @Value("${device.deleteOnComplete}")
     private boolean deviceDeleteOnComplete;
 
+    @Value("${warmup.enabled:true}")
+    private boolean warmupEnabled;
+
     @Value("${test.enabled:true}")
     private boolean testEnabled;
 
@@ -65,8 +68,11 @@ public class TestExecutor {
             gatewayAPITest.createDevices();
         }
 
-        if (testEnabled) {
+        if(warmupEnabled){
             gatewayAPITest.warmUpDevices();
+        }
+
+        if (testEnabled) {
 
             ruleChainManager.createRuleChainWithCountNodeAndSetAsRoot();
             //TODO: deploy dashboard
