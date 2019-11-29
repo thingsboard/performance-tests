@@ -115,6 +115,8 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     int alarmsEndTs;
     @Value("${test.alarms.aps:0}")
     int alarmsPerSecond;
+    @Value("${test.dashboardNames}")
+    String dashboardNames;
 
     private RestClient restClient;
 
@@ -160,6 +162,11 @@ public class MqttGatewayAPITest implements GatewayAPITest {
         if (!EVENT_LOOP_GROUP.isShutdown()) {
             EVENT_LOOP_GROUP.shutdownGracefully(0, 5, TimeUnit.SECONDS);
         }
+    }
+
+    @Override
+    public List<DeviceGatewayClient> getDevices() {
+        return devices;
     }
 
     @Override
@@ -274,7 +281,8 @@ public class MqttGatewayAPITest implements GatewayAPITest {
         DeviceGatewayClient client;
         if (sequentialTest) {
             int iterationOffset = (iteration * testMessagesPerSecond) % devices.size();
-            client = devices.get(iterationOffset + msgOffsetIdx);
+            int idx = (iterationOffset + msgOffsetIdx) % devices.size();
+            client = devices.get(idx);
         } else {
             while (true) {
                 client = devices.get(random.nextInt(devices.size()));

@@ -147,7 +147,7 @@
           "resolveMultiple": true,
           "groupType": "DEVICE",
           "entityGroupList": [
-            "bdc5cd70-0d3b-11ea-a3e6-bbf0b38a7781"
+            "DEVICE_GROUP_ALL"
           ]
         }
       }
