@@ -1,12 +1,12 @@
 /**
  * Copyright © 2016-2018 The Thingsboard Authors
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,6 +16,7 @@
 package org.thingsboard.tools.service.gateway;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -31,12 +32,26 @@ import org.thingsboard.client.tools.RestClient;
 import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.mqtt.MqttClientConfig;
 import org.thingsboard.mqtt.MqttConnectResult;
+import org.thingsboard.server.common.data.Customer;
 import org.thingsboard.server.common.data.Device;
+import org.thingsboard.server.common.data.EntityType;
+import org.thingsboard.server.common.data.group.EntityGroup;
+import org.thingsboard.server.common.data.group.EntityGroupInfo;
+import org.thingsboard.server.common.data.id.CustomerId;
 import org.thingsboard.server.common.data.id.DeviceId;
-import org.thingsboard.tools.service.msg.MessageGenerator;
+import org.thingsboard.server.common.data.page.TextPageData;
+import org.thingsboard.server.common.data.page.TextPageLink;
+import org.thingsboard.server.common.data.permission.Operation;
+import org.thingsboard.server.common.data.role.Role;
+import org.thingsboard.server.common.data.role.RoleType;
+import org.thingsboard.tools.service.customer.CustomerManager;
+import org.thingsboard.tools.service.customer.DefaultCustomerManager;
 import org.thingsboard.tools.service.msg.Msg;
 import org.thingsboard.tools.service.msg.RandomGatewayAttributesGenerator;
 import org.thingsboard.tools.service.msg.RandomGatewayTelemetryGenerator;
+import org.thingsboard.tools.service.shared.AbstractAPITest;
+import org.thingsboard.tools.service.shared.DefaultRestClientService;
+import org.thingsboard.tools.service.shared.RestClientService;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -58,14 +73,14 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-public class MqttGatewayAPITest implements GatewayAPITest {
+public class MqttGatewayAPITest extends AbstractAPITest implements GatewayAPITest {
 
     private static ObjectMapper mapper = new ObjectMapper();
 
-    private static final int LOG_PAUSE = 1;
     private static final int CONNECT_TIMEOUT = 5;
 
     @Autowired
@@ -82,7 +97,7 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     @Value("${mqtt.ssl.key_store}")
     String mqttSslKeyStore;
     @Value("${mqtt.ssl.key_store_password}")
-    String mqttSllKeyStorePassword;
+    String mqttSslKeyStorePassword;
     @Value("${device.startIdx}")
     int deviceStartIdx;
     @Value("${device.endIdx}")
@@ -91,16 +106,8 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     int gatewayStartIdx;
     @Value("${gateway.endIdx}")
     int gatewayEndIdx;
-    @Value("${rest.url}")
-    String restUrl;
-    @Value("${rest.username}")
-    String username;
-    @Value("${rest.password}")
-    String password;
     @Value("${warmup.packSize:100}")
     int warmUpPackSize;
-    @Value("${warmup.gateway.connect:10000}")
-    int gatewayConnectTime;
     @Value("${test.sequential:true}")
     boolean sequentialTest;
     @Value("${test.telemetry:true}")
@@ -115,20 +122,12 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     int alarmsEndTs;
     @Value("${test.alarms.aps:0}")
     int alarmsPerSecond;
-    @Value("${test.dashboardNames}")
+    @Value("${test.dashboardNames:}")
     String dashboardNames;
 
-    private RestClient restClient;
-
-    private int gatewayCount;
-
-    private final ExecutorService httpExecutor = Executors.newFixedThreadPool(100);
-    private final ScheduledExecutorService schedulerLogExecutor = Executors.newScheduledThreadPool(10);
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(10);
-    private final ExecutorService workers = Executors.newFixedThreadPool(10);
     private final List<MqttClient> mqttClients = Collections.synchronizedList(new ArrayList<>());
 
-    private final List<DeviceId> gatewayIds = Collections.synchronizedList(new ArrayList<>(1024));
+    private final List<Device> gateways = Collections.synchronizedList(new ArrayList<>(1024));
     private final List<DeviceId> deviceIds = Collections.synchronizedList(new ArrayList<>(1024 * 1024));
     private final List<DeviceGatewayClient> devices = new ArrayList<>(1024 * 1024);
 
@@ -137,30 +136,10 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     private volatile CountDownLatch testDurationLatch;
     private final Random random = new Random();
 
-    @PostConstruct
-    public void init() {
-        gatewayCount = gatewayEndIdx - gatewayStartIdx;
-        restClient = new RestClient(restUrl);
-        restClient.login(username, password);
-        EVENT_LOOP_GROUP = new NioEventLoopGroup();
-    }
-
     @PreDestroy
     public void destroy() {
         for (MqttClient mqttClient : mqttClients) {
             mqttClient.disconnect();
-        }
-        if (!this.httpExecutor.isShutdown()) {
-            this.httpExecutor.shutdownNow();
-        }
-        if (!this.scheduler.isShutdown()) {
-            this.scheduler.shutdownNow();
-        }
-        if (!this.workers.isShutdown()) {
-            this.workers.shutdownNow();
-        }
-        if (!EVENT_LOOP_GROUP.isShutdown()) {
-            EVENT_LOOP_GROUP.shutdownGracefully(0, 5, TimeUnit.SECONDS);
         }
     }
 
@@ -202,10 +181,53 @@ public class MqttGatewayAPITest implements GatewayAPITest {
 
     @Override
     public void connectGateways() throws InterruptedException {
-        connectGateways(gatewayConnectTime);
-        scheduler.scheduleAtFixedRate(this::reportGatewayStats, 10, 10, TimeUnit.SECONDS);
+        AtomicInteger totalConnectedCount = new AtomicInteger();
+        List<String> pack = null;
+        List<String> gatewayNames;
+        if (!gateways.isEmpty()) {
+            gatewayNames = gateways.stream().map(Device::getName).collect(Collectors.toList());
+        } else {
+            gatewayNames = new ArrayList<>();
+            for (int i = gatewayStartIdx; i < gatewayEndIdx; i++) {
+                gatewayNames.add(getToken(true, i));
+            }
+        }
+        for (String gateway : gatewayNames) {
+            if (pack == null) {
+                pack = new ArrayList<>(warmUpPackSize);
+            }
+            pack.add(gateway);
+            if (pack.size() == warmUpPackSize) {
+                connectGateways(pack, totalConnectedCount);
+                pack = null;
+            }
+        }
+        if (pack != null && !pack.isEmpty()) {
+            connectGateways(pack, totalConnectedCount);
+        }
+        restClientService.getScheduler().scheduleAtFixedRate(this::reportGatewayStats, 10, 10, TimeUnit.SECONDS);
         mapDevicesToGatewayConnections();
     }
+
+    private void connectGateways(List<String> pack, AtomicInteger totalConnectedCount) throws InterruptedException {
+        log.info("Connecting {} gateways...", pack.size());
+        CountDownLatch connectLatch = new CountDownLatch(pack.size());
+        for (String gwName : pack) {
+            restClientService.getWorkers().submit(() -> {
+                try {
+                    mqttClients.add(initClient(gwName));
+                    totalConnectedCount.incrementAndGet();
+                } catch (Exception e) {
+                    log.error("Error while connect device", e);
+                } finally {
+                    connectLatch.countDown();
+                }
+            });
+        }
+        connectLatch.await();
+        log.info("{} gateways have been connected successfully!", pack.size());
+    }
+
 
     private void reportGatewayStats() {
         for (MqttClient mqttClient : mqttClients) {
@@ -228,7 +250,7 @@ public class MqttGatewayAPITest implements GatewayAPITest {
         testDurationLatch = new CountDownLatch(testDurationInSec);
         for (int i = 0; i < testDurationInSec; i++) {
             int iterationNumber = i;
-            scheduler.schedule(() -> runApiTestIteration(iterationNumber, totalSuccessCount, totalFailedCount), i, TimeUnit.SECONDS);
+            restClientService.getScheduler().schedule(() -> runApiTestIteration(iterationNumber, totalSuccessCount, totalFailedCount), i, TimeUnit.SECONDS);
         }
         testDurationLatch.await((long) (testDurationInSec * 1.2), TimeUnit.SECONDS);
         log.info("Completed performance iteration. Success: {}, Failed: {}", totalSuccessCount.get(), totalFailedCount.get());
@@ -250,7 +272,7 @@ public class MqttGatewayAPITest implements GatewayAPITest {
                 if (message.isTriggersAlarm()) {
                     alarmCount++;
                 }
-                workers.submit(() -> {
+                restClientService.getWorkers().submit(() -> {
                     String topic = telemetryTest ? "v1/gateway/telemetry" : "v1/gateway/attributes";
                     client.getMqttClient().publish(topic, Unpooled.wrappedBuffer(message.getData()), MqttQoS.AT_LEAST_ONCE)
                             .addListener(future -> {
@@ -297,7 +319,7 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     private void sendAndWaitPack(List<DeviceGatewayClient> pack, AtomicInteger totalWarmedUpCount) throws InterruptedException {
         CountDownLatch packLatch = new CountDownLatch(pack.size());
         for (DeviceGatewayClient device : pack) {
-            scheduler.submit(() -> {
+            restClientService.getScheduler().submit(() -> {
                 device.getMqttClient().publish("v1/gateway/connect", Unpooled.wrappedBuffer(("{\"device\":\"" + device.getDeviceName() + "\"}").getBytes(StandardCharsets.UTF_8))
                         , MqttQoS.AT_LEAST_ONCE)
                         .addListener(future -> {
@@ -320,40 +342,6 @@ public class MqttGatewayAPITest implements GatewayAPITest {
         }
     }
 
-    private void connectGateways(double publishTelemetryPause) throws InterruptedException {
-        log.info("Connecting {} gateways...", gatewayCount);
-        AtomicInteger totalConnectedCount = new AtomicInteger();
-        CountDownLatch connectLatch = new CountDownLatch(gatewayCount);
-        int idx = 0;
-        for (int i = gatewayStartIdx; i < gatewayEndIdx; i++) {
-            final int tokenNumber = i;
-            final int delayPause = (int) (publishTelemetryPause / gatewayCount * idx);
-            idx++;
-            scheduler.schedule(() -> {
-                try {
-                    String token = getToken(true, tokenNumber);
-                    mqttClients.add(initClient(token));
-                } catch (Exception e) {
-                    log.error("Error while connect device", e);
-                } finally {
-                    connectLatch.countDown();
-                    totalConnectedCount.getAndIncrement();
-                }
-            }, delayPause, TimeUnit.MILLISECONDS);
-        }
-        ScheduledFuture<?> scheduledLogFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
-            try {
-                log.info("[{}] gateways have been connected!", totalConnectedCount.get());
-            } catch (Exception ignored) {
-            }
-        }, 0, LOG_PAUSE, TimeUnit.SECONDS);
-
-        connectLatch.await();
-        scheduledLogFuture.cancel(true);
-
-        log.info("{} gateways have been connected successfully!", mqttClients.size());
-    }
-
     private void mapDevicesToGatewayConnections() {
         int gatewayCount = mqttClients.size();
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
@@ -368,14 +356,14 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     }
 
     private void createEntities(int startIdx, int endIdx, boolean isGateway, boolean setCredentials) throws InterruptedException {
-        restClient.login(username, password);
         int entityCount = endIdx - startIdx;
         log.info("Creating {} {}...", entityCount, isGateway ? "gateways" : "devices");
         CountDownLatch latch = new CountDownLatch(entityCount);
         AtomicInteger count = new AtomicInteger();
+        List<CustomerId> customerIds = customerManager.getCustomerIds();
         for (int i = startIdx; i < endIdx; i++) {
             final int tokenNumber = i;
-            httpExecutor.submit(() -> {
+            restClientService.getHttpExecutor().submit(() -> {
                 Device entity = new Device();
                 try {
                     String token = getToken(isGateway, tokenNumber);
@@ -387,12 +375,19 @@ public class MqttGatewayAPITest implements GatewayAPITest {
                         entity.setName(token);
                         entity.setType("device");
                     }
-                    entity = restClient.createDevice(entity);
+
+                    if (!customerIds.isEmpty()) {
+                        int entityIdx = tokenNumber - startIdx;
+                        int customerIdx = entityIdx % customerIds.size();
+                        CustomerId customerId = customerIds.get(customerIdx);
+                        entity.setOwnerId(customerId);
+                    }
+                    entity = restClientService.getRestClient().createDevice(entity);
                     if (setCredentials) {
-                        restClient.updateDeviceCredentials(entity.getId(), token);
+                        restClientService.getRestClient().updateDeviceCredentials(entity.getId(), token);
                     }
                     if (isGateway) {
-                        gatewayIds.add(entity.getId());
+                        gateways.add(entity);
                     } else {
                         deviceIds.add(entity.getId());
                     }
@@ -400,7 +395,7 @@ public class MqttGatewayAPITest implements GatewayAPITest {
                 } catch (Exception e) {
                     log.error("Error while creating entity", e);
                     if (entity != null && entity.getId() != null) {
-                        restClient.getRestTemplate().delete(restUrl + "/api/entity/" + entity.getId().getId());
+                        restClientService.getRestClient().deleteDevice(entity.getId());
                     }
                 } finally {
                     latch.countDown();
@@ -408,29 +403,22 @@ public class MqttGatewayAPITest implements GatewayAPITest {
             });
         }
 
-        ScheduledFuture<?> logScheduleFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
+        ScheduledFuture<?> logScheduleFuture = restClientService.getLogScheduler().scheduleAtFixedRate(() -> {
             try {
                 log.info("{} devices have been created so far...", count.get());
             } catch (Exception ignored) {
             }
-        }, 0, LOG_PAUSE, TimeUnit.SECONDS);
+        }, 0, DefaultRestClientService.LOG_PAUSE, TimeUnit.SECONDS);
 
-        ScheduledFuture<?> tokenRefreshScheduleFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
-            try {
-                restClient.login(username, password);
-            } catch (Exception ignored) {
-            }
-        }, 10, 10, TimeUnit.MINUTES);
 
         latch.await();
-        tokenRefreshScheduleFuture.cancel(true);
         logScheduleFuture.cancel(true);
-        log.info("{} entities have been created successfully!", isGateway ? gatewayIds.size() : deviceIds.size());
+        log.info("{} entities have been created successfully!", isGateway ? gateways.size() : deviceIds.size());
     }
 
     @Override
     public void removeGateways() throws Exception {
-        removeEntities(gatewayIds, true);
+        removeEntities(gateways.stream().map(Device::getId).collect(Collectors.toList()), true);
     }
 
     @Override
@@ -439,14 +427,13 @@ public class MqttGatewayAPITest implements GatewayAPITest {
     }
 
     private void removeEntities(List<DeviceId> entityIds, boolean isGateway) throws InterruptedException {
-        restClient.login(username, password);
         log.info("Removing {} {}...", isGateway ? "gateways" : "devices", entityIds.size());
         CountDownLatch latch = new CountDownLatch(entityIds.size());
         AtomicInteger count = new AtomicInteger();
         for (DeviceId entityId : entityIds) {
-            httpExecutor.submit(() -> {
+            restClientService.getHttpExecutor().submit(() -> {
                 try {
-                    restClient.getRestTemplate().delete(restUrl + "/api/device/" + entityId.getId());
+                    restClientService.getRestClient().deleteDevice(entityId);
                     count.getAndIncrement();
                 } catch (Exception e) {
                     log.error("Error while deleting {}", isGateway ? "gateway" : "device", e);
@@ -456,29 +443,21 @@ public class MqttGatewayAPITest implements GatewayAPITest {
             });
         }
 
-        ScheduledFuture<?> logScheduleFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
+        ScheduledFuture<?> logScheduleFuture = restClientService.getLogScheduler().scheduleAtFixedRate(() -> {
             try {
                 log.info("{} {} have been removed so far...", isGateway ? "gateways" : "devices", count.get());
             } catch (Exception ignored) {
             }
-        }, 0, LOG_PAUSE, TimeUnit.SECONDS);
-
-        ScheduledFuture<?> tokenRefreshScheduleFuture = schedulerLogExecutor.scheduleAtFixedRate(() -> {
-            try {
-                restClient.login(username, password);
-            } catch (Exception ignored) {
-            }
-        }, 10, 10, TimeUnit.MINUTES);
+        }, 0, DefaultRestClientService.LOG_PAUSE, TimeUnit.SECONDS);
 
         latch.await();
         logScheduleFuture.cancel(true);
-        tokenRefreshScheduleFuture.cancel(true);
         Thread.sleep(1000);
         log.info("{} {} have been removed successfully! {} were failed for removal!", count.get(), isGateway ? "gateways" : "devices", entityIds.size() - count.get());
     }
 
     private String getToken(boolean isGateway, int token) {
-        return (isGateway ? "GW" : "DW") + String.format("%18d", token).replace(" ", "0");
+        return (isGateway ? "GW" : "DW") + String.format("%8d", token).replace(" ", "0");
     }
 
     private MqttClient initClient(String token) throws Exception {
@@ -509,7 +488,7 @@ public class MqttGatewayAPITest implements GatewayAPITest {
                 TrustManagerFactory trustFact = TrustManagerFactory.getInstance("SunX509");
                 KeyStore trustStore = KeyStore.getInstance("JKS");
                 FileInputStream stream = new FileInputStream(mqttSslKeyStore);
-                trustStore.load(stream, mqttSllKeyStorePassword.toCharArray());
+                trustStore.load(stream, mqttSslKeyStorePassword.toCharArray());
                 trustFact.init(trustStore);
                 return SslContextBuilder.forClient().trustManager(trustFact).build();
             } catch (Exception e) {

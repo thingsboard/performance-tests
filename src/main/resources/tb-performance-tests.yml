@@ -35,26 +35,35 @@ device:
   # Device API to use - MQTT or HTTP
   api: "${DEVICE_API:MQTT}"
   startIdx: "${DEVICE_START_IDX:0}"
-  endIdx: "${DEVICE_END_IDX:1000000}"
-  createOnStart: "${DEVICE_CREATE_ON_START:false}"
+  endIdx: "${DEVICE_END_IDX:30}"
+  createOnStart: "${DEVICE_CREATE_ON_START:true}"
   deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
 gateway:
   startIdx: "${GATEWAY_START_IDX:0}"
-  endIdx: "${GATEWAY_END_IDX:1000}"
-  createOnStart: "${GATEWAY_CREATE_ON_START:false}"
+  endIdx: "${GATEWAY_END_IDX:3}"
+  createOnStart: "${GATEWAY_CREATE_ON_START:true}"
   deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:false}"
+customer:
+  startIdx: "${CUSTOMER_START_IDX:0}"
+  endIdx: "${CUSTOMER_END_IDX:3}"
+  createOnStart: "${CUSTOMER_CREATE_ON_START:true}"
+  deleteOnComplete: "${CUSTOMER_DELETE_ON_COMPLETE:false}"
+dashboard:
+  createOnStart: "${DASHBOARD_CREATE_ON_START:true}"
+  deleteOnComplete: "${DASHBOARD_DELETE_ON_COMPLETE:false}"
+  deleteIfExists: "${DASHBOARD_DELETE_IF_EXISTS:true}"
+  tenant: alarms.json, shared_dashboard.json
+  shared: "shared_dashboard.json"
 warmup:
-  enabled: "${WARMUP_ENABLED:true}"
-  gateway:
-    connect: "${WARMUP_GATEWAY_CONNECT:15000}"
+  enabled: "${WARMUP_ENABLED:false}"
 test:
-  enabled: "${TEST_ENABLED:true}"
+  enabled: "${TEST_ENABLED:false}"
   sequential: "${TEST_SEQUENTIAL:true}"
   ruleChainName:  "${RULE_CHAIN_NAME:root_rule_chain_pe.json}"
   # messages per second.
   telemetry: "${TEST_TELEMETRY:true}"
-  mps: "${MESSAGES_PER_SECOND:1000}"
-  duration: "${DURATION_IN_SECONDS:600}"
+  mps: "${MESSAGES_PER_SECOND:100}"
+  duration: "${DURATION_IN_SECONDS:60}"
   alarms:
     start: "${ALARM_STORM_START_SECOND:0}"
     end: "${ALARM_STORM_END_SECOND:0}"
