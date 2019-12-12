@@ -19,16 +19,27 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.thingsboard.tools.service.dashboard.DashboardManager;
+import org.thingsboard.tools.service.customer.CustomerManager;
+import org.thingsboard.tools.service.dashboard.DefaultDashboardManager;
 import org.thingsboard.tools.service.gateway.GatewayAPITest;
 import org.thingsboard.tools.service.rule.RuleChainManager;
-import org.thingsboard.tools.service.stats.StatisticsCollector;
 
 import javax.annotation.PostConstruct;
 
 @Slf4j
 @Service
 public class TestExecutor {
+    @Value("${dashboard.createOnStart}")
+    private boolean dashboardCreateOnStart;
+
+    @Value("${dashboard.deleteOnComplete}")
+    private boolean dashboardDeleteOnComplete;
+
+    @Value("${customer.createOnStart}")
+    private boolean customerCreateOnStart;
+
+    @Value("${customer.deleteOnComplete}")
+    private boolean customerDeleteOnComplete;
 
     @Value("${gateway.createOnStart}")
     private boolean gatewayCreateOnStart;
@@ -52,19 +63,25 @@ public class TestExecutor {
     private String deviceAPIType;
 
     @Autowired
-    private StatisticsCollector statisticsCollector;
-
-    @Autowired
     private GatewayAPITest gatewayAPITest;
 
     @Autowired
     private RuleChainManager ruleChainManager;
 
     @Autowired
-    private DashboardManager dashboardManager;
+    private DefaultDashboardManager dashboardManager;
+
+    @Autowired
+    private CustomerManager customerManager;
 
     @PostConstruct
     public void init() throws Exception {
+        if (dashboardCreateOnStart) {
+            dashboardManager.createDashboards();
+        }
+        if (customerCreateOnStart) {
+            customerManager.createCustomers();
+        }
         if (gatewayCreateOnStart) {
             gatewayAPITest.createGateways();
         }
@@ -80,30 +97,28 @@ public class TestExecutor {
             gatewayAPITest.warmUpDevices();
         }
 
-        dashboardManager.createDashboards(gatewayAPITest.getDevices(), true);
-
         if (testEnabled) {
 
             ruleChainManager.createRuleChainWithCountNodeAndSetAsRoot();
 
-            statisticsCollector.start();
-
             gatewayAPITest.runApiTests();
-
-            statisticsCollector.end();
 
             Thread.sleep(3000); // wait for messages delivery before removing rule chain
 
             ruleChainManager.revertRootNodeAndCleanUp();
-
-            statisticsCollector.printResults();
         }
 
+        if (deviceDeleteOnComplete) {
+            gatewayAPITest.removeDevices();
+        }
         if (gatewayDeleteOnComplete) {
             gatewayAPITest.removeGateways();
         }
-        if (deviceDeleteOnComplete) {
-            gatewayAPITest.removeDevices();
+        if (customerDeleteOnComplete) {
+            customerManager.removeCustomers();
+        }
+        if (dashboardDeleteOnComplete) {
+            dashboardManager.removeDashboards();
         }
     }
 
