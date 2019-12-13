@@ -25,7 +25,6 @@ import org.thingsboard.tools.service.shared.AbstractAPITest;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -40,9 +39,16 @@ public class MqttDeviceAPITest extends AbstractAPITest implements DeviceAPITest 
     static byte[] data = dataAsStr.getBytes(StandardCharsets.UTF_8);
 
     @Override
+    public void createDevices() throws Exception {
+        createDevices(true);
+    }
+
+    @Override
     public void removeDevices() throws Exception {
         removeEntities(devices.stream().map(IdBased::getId).collect(Collectors.toList()), false);
     }
+
+
 
     @Override
     public void runApiTests() throws InterruptedException {

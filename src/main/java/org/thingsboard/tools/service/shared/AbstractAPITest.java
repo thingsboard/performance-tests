@@ -18,6 +18,7 @@ package org.thingsboard.tools.service.shared;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.handler.codec.mqtt.MqttQoS;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -37,6 +38,7 @@ import org.thingsboard.tools.service.msg.Msg;
 import org.thingsboard.tools.service.msg.RandomAttributesGenerator;
 import org.thingsboard.tools.service.msg.RandomTelemetryGenerator;
 
+import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.net.ssl.TrustManagerFactory;
 import java.io.FileInputStream;
@@ -111,15 +113,23 @@ public abstract class AbstractAPITest {
 
     protected final List<DeviceClient> deviceClients = new ArrayList<>(1024 * 1024);
 
+    @PostConstruct
+    void init() {
+        EVENT_LOOP_GROUP = new NioEventLoopGroup();
+    }
+
     @PreDestroy
     public void destroy() {
         for (MqttClient mqttClient : mqttClients) {
             mqttClient.disconnect();
         }
+        if (!EVENT_LOOP_GROUP.isShutdown()) {
+            EVENT_LOOP_GROUP.shutdownGracefully(0, 5, TimeUnit.SECONDS);
+        }
     }
 
-    public void createDevices() throws Exception {
-        List<Device> entities = createEntities(deviceStartIdx, deviceEndIdx, false, true);
+    protected void createDevices(boolean setCredentials) throws Exception {
+        List<Device> entities = createEntities(deviceStartIdx, deviceEndIdx, false, setCredentials);
         devices = Collections.synchronizedList(entities);
     }
 
