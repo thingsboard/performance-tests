@@ -13,26 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.thingsboard.tools.service.shared;
+package org.thingsboard.tools.service.device;
 
-import io.netty.channel.EventLoopGroup;
-import org.thingsboard.client.tools.RestClient;
+public interface DeviceAPITest {
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ScheduledExecutorService;
+    void createDevices() throws Exception;
 
-public interface RestClientService {
+    void removeDevices() throws Exception;
 
-    RestClient getRestClient();
+    void warmUpDevices() throws InterruptedException;
 
-    EventLoopGroup getEventLoopGroup();
+    void runApiTests() throws InterruptedException;
 
-    ExecutorService getWorkers();
-
-    ExecutorService getHttpExecutor();
-
-    ScheduledExecutorService getScheduler();
-
-    ScheduledExecutorService getLogScheduler();
-
+    void connectDevices() throws InterruptedException;
 }
+

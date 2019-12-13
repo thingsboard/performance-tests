@@ -16,26 +16,20 @@
 package org.thingsboard.tools.service.msg;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.Random;
-
 @Slf4j
 @Service
-public class RandomGatewayAttributesGenerator implements MessageGenerator {
-
-    private final Random random = new Random();
-    private static final ObjectMapper mapper = new ObjectMapper();
+public class RandomTelemetryGenerator extends BaseRandomGenerator implements MessageGenerator {
 
     @Override
     public Msg getNextMessage(String deviceName, boolean shouldTriggerAlarm) {
         int percent = random.nextInt(100);
         if (percent < 29) {
-            return new Msg(getTinyRandomMessage(deviceName, shouldTriggerAlarm), true);
+            return new Msg(getTinyRandomMessage(deviceName, shouldTriggerAlarm), shouldTriggerAlarm);
         } else if (percent < 59) {
             return new Msg(getSmallRandomMessage(deviceName));
         } else if (percent < 99) {
@@ -48,11 +42,19 @@ public class RandomGatewayAttributesGenerator implements MessageGenerator {
     private byte[] getTinyRandomMessage(String deviceName, boolean shouldTriggerAlarm) {
         try {
             ObjectNode data = mapper.createObjectNode();
-            ObjectNode values = data.putObject(deviceName);
-            if (shouldTriggerAlarm) {
-                values.put("a1", 100);
+            ObjectNode tsNode;
+            if (isGateway()) {
+                ArrayNode array = data.putArray(deviceName);
+                tsNode = array.addObject();
             } else {
-                values.put("a1", random.nextInt(100));
+                tsNode = data;
+            }
+            tsNode.put("ts", System.currentTimeMillis());
+            ObjectNode values = tsNode.putObject("values");
+            if (shouldTriggerAlarm) {
+                values.put("t1", 100);
+            } else {
+                values.put("t1", random.nextInt(100));
             }
             return mapper.writeValueAsBytes(data);
         } catch (Exception e) {
@@ -64,9 +66,17 @@ public class RandomGatewayAttributesGenerator implements MessageGenerator {
     private byte[] getSmallRandomMessage(String deviceName) {
         try {
             ObjectNode data = mapper.createObjectNode();
-            ObjectNode values = data.putObject(deviceName);
+            ObjectNode tsNode;
+            if (isGateway()) {
+                ArrayNode array = data.putArray(deviceName);
+                tsNode = array.addObject();
+            } else {
+                tsNode = data;
+            }
+            tsNode.put("ts", System.currentTimeMillis());
+            ObjectNode values = tsNode.putObject("values");
             for (int i = 0; i < 20; i++) {
-                values.put("a2_" + i, random.nextInt(100));
+                values.put("t2_" + i, random.nextInt(100));
             }
             return mapper.writeValueAsBytes(data);
         } catch (Exception e) {
@@ -78,8 +88,18 @@ public class RandomGatewayAttributesGenerator implements MessageGenerator {
     private byte[] getRandomMessage(String deviceName) {
         try {
             ObjectNode data = mapper.createObjectNode();
-            ObjectNode values = data.putObject(deviceName);
-            values.put("a3", getValueToRandomMessage(100));
+            ObjectNode tsNode;
+            if (isGateway()) {
+                ArrayNode array = data.putArray(deviceName);
+                tsNode = array.addObject();
+            } else {
+                tsNode = data;
+            }
+            tsNode.put("ts", System.currentTimeMillis());
+            ObjectNode values = tsNode.putObject("values");
+
+            values.put("t3", getValueToRandomMessage(100));
+
             return mapper.writeValueAsBytes(data);
         } catch (Exception e) {
             log.warn("Failed to generate message", e);
@@ -90,8 +110,18 @@ public class RandomGatewayAttributesGenerator implements MessageGenerator {
     private byte[] getHugeRandomMessage(String deviceName) {
         try {
             ObjectNode data = mapper.createObjectNode();
-            ObjectNode values = data.putObject(deviceName);
-            values.put("a4", getValueToRandomMessage(1000));
+            ObjectNode tsNode;
+            if (isGateway()) {
+                ArrayNode array = data.putArray(deviceName);
+                tsNode = array.addObject();
+            } else {
+                tsNode = data;
+            }
+            tsNode.put("ts", System.currentTimeMillis());
+            ObjectNode values = tsNode.putObject("values");
+
+            values.put("t4", getValueToRandomMessage(1000));
+
             return mapper.writeValueAsBytes(data);
         } catch (Exception e) {
             log.warn("Failed to generate message", e);

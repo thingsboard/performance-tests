@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.thingsboard.tools.service.gateway;
+package org.thingsboard.tools.service.mqtt;
 
 import lombok.Data;
 import org.thingsboard.mqtt.MqttClient;
@@ -21,8 +21,7 @@ import org.thingsboard.mqtt.MqttClient;
 import java.util.Objects;
 
 @Data
-public class DeviceGatewayClient {
-
+public class DeviceClient {
     private String gatewayName;
 
     private String deviceName;
@@ -33,7 +32,7 @@ public class DeviceGatewayClient {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        DeviceGatewayClient that = (DeviceGatewayClient) o;
+        DeviceClient that = (DeviceClient) o;
         return gatewayName.equals(that.gatewayName) &&
                 deviceName.equals(that.deviceName);
     }
