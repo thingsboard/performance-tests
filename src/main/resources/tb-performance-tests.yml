@@ -52,12 +52,14 @@ dashboard:
   createOnStart: "${DASHBOARD_CREATE_ON_START:true}"
   deleteOnComplete: "${DASHBOARD_DELETE_ON_COMPLETE:false}"
   deleteIfExists: "${DASHBOARD_DELETE_IF_EXISTS:true}"
-  tenant: alarms.json, shared_dashboard.json
-  shared: "shared_dashboard.json"
+  tenant: alarms.json # please use comma separated list for multiple dashboards: dashboard1.json, dashboard2.json
+  shared: "devices.json"
 warmup:
   enabled: "${WARMUP_ENABLED:false}"
 test:
   enabled: "${TEST_ENABLED:false}"
+  # Test API to use - device or gateway
+  api: "${TEST_API:device}"
   sequential: "${TEST_SEQUENTIAL:true}"
   ruleChainName:  "${RULE_CHAIN_NAME:root_rule_chain_pe.json}"
   # messages per second.

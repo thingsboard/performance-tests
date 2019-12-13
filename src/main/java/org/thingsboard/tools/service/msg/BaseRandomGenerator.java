@@ -13,26 +13,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.thingsboard.tools.service.shared;
+package org.thingsboard.tools.service.msg;
 
-import io.netty.channel.EventLoopGroup;
-import org.thingsboard.client.tools.RestClient;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.Random;
 
-public interface RestClientService {
+public abstract class BaseRandomGenerator {
 
-    RestClient getRestClient();
+    protected final Random random = new Random();
+    protected static final ObjectMapper mapper = new ObjectMapper();
 
-    EventLoopGroup getEventLoopGroup();
+    @Value("${test.api:gateway}")
+    private String testApi;
 
-    ExecutorService getWorkers();
-
-    ExecutorService getHttpExecutor();
-
-    ScheduledExecutorService getScheduler();
-
-    ScheduledExecutorService getLogScheduler();
-
+    protected boolean isGateway() {
+        return "gateway".equalsIgnoreCase(testApi);
+    }
 }
