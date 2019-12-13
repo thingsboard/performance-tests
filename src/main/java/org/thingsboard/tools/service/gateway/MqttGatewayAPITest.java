@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -43,6 +43,11 @@ public class MqttGatewayAPITest extends AbstractAPITest implements GatewayAPITes
     int gatewayEndIdx;
 
     private List<Device> gateways = Collections.synchronizedList(new ArrayList<>(1024));
+
+    @Override
+    public void createDevices() throws Exception {
+        createDevices(false);
+    }
 
     @Override
     public void createGateways() throws Exception {
