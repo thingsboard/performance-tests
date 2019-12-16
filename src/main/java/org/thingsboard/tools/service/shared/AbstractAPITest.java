@@ -55,6 +55,8 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 public abstract class AbstractAPITest {
@@ -78,11 +80,24 @@ public abstract class AbstractAPITest {
     @Value("${mqtt.ssl.key_store_password}")
     String mqttSslKeyStorePassword;
     @Value("${device.startIdx}")
-    protected int deviceStartIdx;
+    protected int deviceStartIdxConfig;
     @Value("${device.endIdx}")
-    protected int deviceEndIdx;
+    protected int deviceEndIdxConfig;
+    @Value("${device.count}")
+    protected int deviceCount;
     @Value("${warmup.packSize:100}")
     protected int warmUpPackSize;
+    @Value("${test.instanceIdx:0}")
+    protected int instanceIdxConfig;
+    @Value("${test.useInstanceIdx:false}")
+    protected boolean useInstanceIdx;
+    @Value("${test.useInstanceIdxRegex:false}")
+    protected boolean useInstanceIdxRegex;
+    @Value("${test.instanceIdxRegexSource:}")
+    protected String instanceIdxRegexSource;
+    @Value("${test.instanceIdxRegex:-([0-9]+)$}")
+    protected String instanceIdxRegex;
+
     @Value("${test.sequential:true}")
     protected boolean sequentialTest;
     @Value("${test.telemetry:true}")
@@ -115,8 +130,36 @@ public abstract class AbstractAPITest {
 
     protected final List<DeviceClient> deviceClients =  Collections.synchronizedList(new ArrayList<>(1024 * 1024));
 
+    protected int deviceStartIdx;
+    protected int deviceEndIdx;
+    protected int instanceIdx;
+
     @PostConstruct
-    void init() {
+    protected void init() {
+        if (this.useInstanceIdx) {
+            boolean parsed = false;
+            if (this.useInstanceIdxRegex) {
+                try {
+                    Pattern r = Pattern.compile(this.instanceIdxRegex);
+                    Matcher m = r.matcher(this.instanceIdxRegexSource);
+                    if (m.find()) {
+                        this.instanceIdx = Integer.parseInt(m.group(0));
+                        parsed = true;
+                    }
+                } catch (Exception e) {
+                    log.error("Failed to parse instanceIdx", e);
+                }
+            }
+            if (!parsed) {
+                this.instanceIdx = this.instanceIdxConfig;
+            }
+
+            this.deviceStartIdx = this.deviceCount * this.instanceIdx;
+            this.deviceEndIdx = this.deviceStartIdx + this.deviceCount;
+        } else {
+            this.deviceStartIdx = this.deviceStartIdxConfig;
+            this.deviceEndIdx = this.deviceEndIdxConfig;
+        }
         EVENT_LOOP_GROUP = new NioEventLoopGroup();
     }
 

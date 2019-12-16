@@ -24,6 +24,7 @@ import org.thingsboard.server.common.data.id.IdBased;
 import org.thingsboard.tools.service.mqtt.DeviceClient;
 import org.thingsboard.tools.service.shared.AbstractAPITest;
 
+import javax.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -38,11 +39,29 @@ import java.util.stream.Collectors;
 public class MqttGatewayAPITest extends AbstractAPITest implements GatewayAPITest {
 
     @Value("${gateway.startIdx}")
-    int gatewayStartIdx;
+    int gatewayStartIdxConfig;
     @Value("${gateway.endIdx}")
-    int gatewayEndIdx;
+    int gatewayEndIdxConfig;
+    @Value("${gateway.count}")
+    int gatewayCount;
 
     private List<Device> gateways = Collections.synchronizedList(new ArrayList<>(1024));
+
+    private int gatewayStartIdx;
+    private int gatewayEndIdx;
+
+
+    @PostConstruct
+    protected void init() {
+        super.init();
+        if (this.useInstanceIdx) {
+            this.gatewayStartIdx = this.gatewayCount * this.instanceIdx;
+            this.gatewayEndIdx = this.gatewayStartIdx + this.gatewayCount;
+        } else {
+            this.gatewayStartIdx = this.gatewayStartIdxConfig;
+            this.gatewayEndIdx = this.gatewayEndIdxConfig;
+        }
+    }
 
     @Override
     public void createDevices() throws Exception {
