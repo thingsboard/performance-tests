@@ -18,6 +18,7 @@ package org.thingsboard.tools.service.device;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.IdBased;
 import org.thingsboard.tools.service.mqtt.DeviceClient;
@@ -47,8 +48,6 @@ public class MqttDeviceAPITest extends AbstractAPITest implements DeviceAPITest 
     public void removeDevices() throws Exception {
         removeEntities(devices.stream().map(IdBased::getId).collect(Collectors.toList()), false);
     }
-
-
 
     @Override
     public void runApiTests() throws InterruptedException {
@@ -111,16 +110,15 @@ public class MqttDeviceAPITest extends AbstractAPITest implements DeviceAPITest 
         if (pack != null && !pack.isEmpty()) {
             connectDevices(pack, totalConnectedCount, false);
         }
-        restClientService.getScheduler().scheduleAtFixedRate(this::reportMqttClientsStats, 10, 10, TimeUnit.SECONDS);
+        reportScheduledFuture = restClientService.getScheduler().scheduleAtFixedRate(this::reportMqttClientsStats, 10, 10, TimeUnit.SECONDS);
         mapDevicesToDeviceClientConnections();
     }
 
     private void mapDevicesToDeviceClientConnections() {
-        for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
-            int deviceIdx = i - deviceStartIdx;
+        for (MqttClient mqttClient : mqttClients) {
             DeviceClient client = new DeviceClient();
-            client.setMqttClient(mqttClients.get(deviceIdx));
-            client.setDeviceName(getToken(false, i));
+            client.setMqttClient(mqttClient);
+            client.setDeviceName(mqttClient.getClientConfig().getUsername());
             deviceClients.add(client);
         }
     }

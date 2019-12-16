@@ -81,7 +81,7 @@ public class MqttGatewayAPITest extends AbstractAPITest implements GatewayAPITes
         if (pack != null && !pack.isEmpty()) {
             connectDevices(pack, totalConnectedCount, true);
         }
-        restClientService.getScheduler().scheduleAtFixedRate(this::reportMqttClientsStats, 10, 10, TimeUnit.SECONDS);
+        reportScheduledFuture = restClientService.getScheduler().scheduleAtFixedRate(this::reportMqttClientsStats, 10, 10, TimeUnit.SECONDS);
         mapDevicesToGatewayClientConnections();
     }
 

@@ -65,6 +65,8 @@ public abstract class AbstractAPITest {
 
     private static final int CONNECT_TIMEOUT = 5;
 
+    protected ScheduledFuture<?> reportScheduledFuture;
+
     @Value("${mqtt.host}")
     private String mqttHost;
     @Value("${mqtt.port}")
@@ -111,7 +113,7 @@ public abstract class AbstractAPITest {
     private volatile CountDownLatch testDurationLatch;
     private EventLoopGroup EVENT_LOOP_GROUP;
 
-    protected final List<DeviceClient> deviceClients = new ArrayList<>(1024 * 1024);
+    protected final List<DeviceClient> deviceClients =  Collections.synchronizedList(new ArrayList<>(1024 * 1024));
 
     @PostConstruct
     void init() {
@@ -123,6 +125,11 @@ public abstract class AbstractAPITest {
         for (MqttClient mqttClient : mqttClients) {
             mqttClient.disconnect();
         }
+
+        if (reportScheduledFuture != null) {
+            reportScheduledFuture.cancel(true);
+        }
+
         if (!EVENT_LOOP_GROUP.isShutdown()) {
             EVENT_LOOP_GROUP.shutdownGracefully(0, 5, TimeUnit.SECONDS);
         }
@@ -247,9 +254,9 @@ public abstract class AbstractAPITest {
     protected List<Device> createEntities(int startIdx, int endIdx, boolean isGateway, boolean setCredentials) throws InterruptedException {
         List<Device> result;
         if (isGateway) {
-            result = new ArrayList<>(1024);
+            result = Collections.synchronizedList(new ArrayList<>(1024));
         } else {
-            result = new ArrayList<>(1024 * 1024);
+            result = Collections.synchronizedList(new ArrayList<>(1024 * 1024));
         }
         int entityCount = endIdx - startIdx;
         log.info("Creating {} {}...", entityCount, isGateway ? "gateways" : "devices");
@@ -277,9 +284,10 @@ public abstract class AbstractAPITest {
                         CustomerId customerId = customerIds.get(customerIdx);
                         entity.setOwnerId(customerId);
                     }
-                    entity = restClientService.getRestClient().createDevice(entity);
                     if (setCredentials) {
-                        restClientService.getRestClient().updateDeviceCredentials(entity.getId(), token);
+                        entity = restClientService.getRestClient().createDevice(entity, token);
+                    } else {
+                        entity = restClientService.getRestClient().createDevice(entity);
                     }
 
                     result.add(entity);
@@ -303,9 +311,9 @@ public abstract class AbstractAPITest {
             }
         }, 0, DefaultRestClientService.LOG_PAUSE, TimeUnit.SECONDS);
 
-
         latch.await();
         logScheduleFuture.cancel(true);
+
         log.info("{} entities have been created successfully!", result.size());
 
         return result;
@@ -333,7 +341,7 @@ public abstract class AbstractAPITest {
             });
         }
         connectLatch.await();
-        log.info("{} {} have been connected successfully!", pack.size(), devicesType);
+        log.info("{} {} have been connected successfully!", totalConnectedCount.get(), devicesType);
     }
 
     private MqttClient initClient(String token) throws Exception {

@@ -59,7 +59,7 @@ warmup:
 test:
   enabled: "${TEST_ENABLED:false}"
   # Test API to use - device or gateway
-  api: "${TEST_API:device}"
+  api: "${TEST_API:gateway}"
   sequential: "${TEST_SEQUENTIAL:true}"
   ruleChainName:  "${RULE_CHAIN_NAME:root_rule_chain_pe.json}"
   # messages per second.
