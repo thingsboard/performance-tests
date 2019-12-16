@@ -61,6 +61,7 @@ public class MqttGatewayAPITest extends AbstractAPITest implements GatewayAPITes
             this.gatewayStartIdx = this.gatewayStartIdxConfig;
             this.gatewayEndIdx = this.gatewayEndIdxConfig;
         }
+        log.info("Initialized with gatewayStartIdx [{}], gatewayEndIdx [{}]", this.gatewayStartIdx, this.gatewayEndIdx);
     }
 
     @Override
