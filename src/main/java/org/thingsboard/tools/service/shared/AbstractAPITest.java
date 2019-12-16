@@ -153,6 +153,7 @@ public abstract class AbstractAPITest {
             if (!parsed) {
                 this.instanceIdx = this.instanceIdxConfig;
             }
+            log.info("Initialized with instanceIdx [{}]", this.instanceIdx);
 
             this.deviceStartIdx = this.deviceCount * this.instanceIdx;
             this.deviceEndIdx = this.deviceStartIdx + this.deviceCount;
@@ -161,6 +162,7 @@ public abstract class AbstractAPITest {
             this.deviceEndIdx = this.deviceEndIdxConfig;
         }
         EVENT_LOOP_GROUP = new NioEventLoopGroup();
+        log.info("Initialized with deviceStartIdx [{}], deviceEndIdx [{}]", this.deviceStartIdx, this.deviceEndIdx);
     }
 
     @PreDestroy
