@@ -95,7 +95,7 @@ public abstract class AbstractAPITest {
     protected boolean useInstanceIdxRegex;
     @Value("${test.instanceIdxRegexSource:}")
     protected String instanceIdxRegexSource;
-    @Value("${test.instanceIdxRegex:-([0-9]+)$}")
+    @Value("${test.instanceIdxRegex:([0-9]+)$}")
     protected String instanceIdxRegex;
 
     @Value("${test.sequential:true}")

@@ -63,7 +63,7 @@ test:
   useInstanceIdx: "${USE_INSTANCE_IDX:false}"
   useInstanceIdxRegex: "${USE_INSTANCE_IDX_REGEX:false}"
   instanceIdxRegexSource: "${INSTANCE_IDX_REGEX_SOURCE:}"
-  instanceIdxRegex: "${INSTANCE_IDX_REGEX:-([0-9]+)$}"
+  instanceIdxRegex: "${INSTANCE_IDX_REGEX:([0-9]+)$}"
   enabled: "${TEST_ENABLED:false}"
   # Test API to use - device or gateway
   api: "${TEST_API:gateway}"
