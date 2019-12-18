@@ -50,6 +50,12 @@ public abstract class BaseTestExecutor {
     @Value("${test.enabled:true}")
     protected boolean testEnabled;
 
+    @Value("${test.updateRootRuleChain:true}")
+    protected boolean updateRootRuleChain;
+
+    @Value("${test.revertRootRuleChain:true}")
+    protected boolean revertRootRuleChain;
+
     @Value("${device.api}")
     private String deviceAPIType;
 
@@ -73,12 +79,15 @@ public abstract class BaseTestExecutor {
 
         initEntities();
 
-        if (testEnabled) {
-
+        if (updateRootRuleChain) {
             ruleChainManager.createRuleChainWithCountNodeAndSetAsRoot();
+        }
 
+        if (testEnabled) {
             runApiTests();
+        }
 
+        if (revertRootRuleChain) {
             Thread.sleep(3000); // wait for messages delivery before removing rule chain
 
             ruleChainManager.revertRootNodeAndCleanUp();

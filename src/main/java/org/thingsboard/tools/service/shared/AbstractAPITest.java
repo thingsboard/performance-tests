@@ -351,7 +351,7 @@ public abstract class AbstractAPITest {
 
         ScheduledFuture<?> logScheduleFuture = restClientService.getLogScheduler().scheduleAtFixedRate(() -> {
             try {
-                log.info("{} devices have been created so far...", count.get());
+                log.info("{} {} have been created so far...", count.get(), isGateway ? "gateways" : "devices");
             } catch (Exception ignored) {
             }
         }, 0, DefaultRestClientService.LOG_PAUSE, TimeUnit.SECONDS);

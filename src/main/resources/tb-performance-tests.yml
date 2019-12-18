@@ -65,6 +65,8 @@ test:
   instanceIdxRegexSource: "${INSTANCE_IDX_REGEX_SOURCE:}"
   instanceIdxRegex: "${INSTANCE_IDX_REGEX:([0-9]+)$}"
   enabled: "${TEST_ENABLED:false}"
+  updateRootRuleChain: "${UPDATE_ROOT_RULE_CHAIN:true}"
+  revertRootRuleChain: "${REVERT_ROOT_RULE_CHAIN:true}"
   # Test API to use - device or gateway
   api: "${TEST_API:gateway}"
   sequential: "${TEST_SEQUENTIAL:true}"
