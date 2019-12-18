@@ -359,7 +359,7 @@ public abstract class AbstractAPITest {
         latch.await();
         logScheduleFuture.cancel(true);
 
-        log.info("{} entities have been created successfully!", result.size());
+        log.info("{} {} have been created successfully!", result.size(), isGateway ? "gateways" : "devices");
 
         return result;
     }
