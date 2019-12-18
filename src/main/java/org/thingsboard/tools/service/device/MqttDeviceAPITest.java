@@ -112,7 +112,7 @@ public class MqttDeviceAPITest extends AbstractAPITest implements DeviceAPITest 
         if (pack != null && !pack.isEmpty()) {
             connectDevices(pack, totalConnectedCount, false);
         }
-        reportScheduledFuture = restClientService.getScheduler().scheduleAtFixedRate(this::reportMqttClientsStats, 10, 10, TimeUnit.SECONDS);
+//        reportScheduledFuture = restClientService.getScheduler().scheduleAtFixedRate(this::reportMqttClientsStats, 10, 10, TimeUnit.SECONDS);
         mapDevicesToDeviceClientConnections();
     }
 
