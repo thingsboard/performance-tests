@@ -27,6 +27,7 @@ import org.thingsboard.tools.service.shared.AbstractAPITest;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -104,6 +105,7 @@ public class MqttDeviceAPITest extends AbstractAPITest implements DeviceAPITest 
             pack.add(device);
             if (pack.size() == warmUpPackSize) {
                 connectDevices(pack, totalConnectedCount, false);
+                Thread.sleep(100 + new Random().nextInt(100));
                 pack = null;
             }
         }

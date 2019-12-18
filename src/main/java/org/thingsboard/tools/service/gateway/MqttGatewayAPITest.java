@@ -29,6 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -95,6 +96,7 @@ public class MqttGatewayAPITest extends AbstractAPITest implements GatewayAPITes
             pack.add(gateway);
             if (pack.size() == warmUpPackSize) {
                 connectDevices(pack, totalConnectedCount, true);
+                Thread.sleep(100 + new Random().nextInt(100));
                 pack = null;
             }
         }
