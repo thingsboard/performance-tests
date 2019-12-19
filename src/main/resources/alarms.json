@@ -105,7 +105,9 @@
           "displayTimewindow": true,
           "actions": {},
           "datasources": [],
-          "enableDataExport": true
+          "enableDataExport": true,
+          "alarmsMaxCountLoad": 1000,
+          "alarmsFetchSize": 1000
         },
         "id": "360443d6-f3e6-7dfd-6ecf-e4a6b87c6c17"
       }

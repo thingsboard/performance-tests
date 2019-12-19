@@ -47,7 +47,36 @@
           "datasources": [
             {
               "type": "entity",
-              "dataKeys": [],
+              "dataKeys": [
+                {
+                  "name": "t1",
+                  "type": "timeseries",
+                  "label": "t1",
+                  "color": "#2196f3",
+                  "settings": {
+                    "columnWidth": "0px",
+                    "useCellStyleFunction": false,
+                    "cellStyleFunction": "",
+                    "useCellContentFunction": false,
+                    "cellContentFunction": ""
+                  },
+                  "_hash": 0.27301525003524074
+                },
+                {
+                  "name": "t2_0",
+                  "type": "attribute",
+                  "label": "t2_0",
+                  "color": "#4caf50",
+                  "settings": {
+                    "columnWidth": "0px",
+                    "useCellStyleFunction": false,
+                    "cellStyleFunction": "",
+                    "useCellContentFunction": false,
+                    "cellContentFunction": ""
+                  },
+                  "_hash": 0.3541484533397734
+                }
+              ],
               "entityAliasId": "b3390259-a758-76d2-79fc-6c83387a5013"
             }
           ],
@@ -96,18 +125,6 @@
       }
     },
     "entityAliases": {
-      "a5c65cf7-d9df-7a1f-c931-34c599ef75e8": {
-        "id": "a5c65cf7-d9df-7a1f-c931-34c599ef75e8",
-        "alias": "AlarmGroup",
-        "filter": {
-          "type": "entityGroupList",
-          "resolveMultiple": true,
-          "groupType": "DEVICE",
-          "entityGroupList": [
-            "d51dfa20-1ca3-11ea-994d-f3fd423db703"
-          ]
-        }
-      },
       "b3390259-a758-76d2-79fc-6c83387a5013": {
         "id": "b3390259-a758-76d2-79fc-6c83387a5013",
         "alias": "MyDevices",
@@ -115,7 +132,7 @@
           "type": "deviceType",
           "resolveMultiple": true,
           "deviceType": "device",
-          "deviceNameFilter": ""
+          "deviceNameFilter": "DW0000926"
         }
       }
     },
@@ -153,5 +170,5 @@
       "toolbarAlwaysOpen": true
     }
   },
-  "name": "Alarms"
+  "name": "Devices"
 }
