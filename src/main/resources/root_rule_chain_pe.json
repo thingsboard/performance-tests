@@ -8,8 +8,152 @@
     "configuration": null
   },
   "metadata": {
-    "firstNodeIndex": 14,
+    "firstNodeIndex": 20,
     "nodes": [
+      {
+        "additionalInfo": {
+          "layoutX": 1501,
+          "layoutY": 121
+        },
+        "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
+        "name": "Transform",
+        "debugMode": false,
+        "configuration": {
+          "jsScript": "var newMsg = {\n    attrSuccess: msg[Object.keys(msg)[0]]\n}\nreturn {msg: newMsg, metadata: metadata, msgType: msgType};"
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1718,
+          "layoutY": 247
+        },
+        "type": "org.thingsboard.rule.engine.analytics.incoming.TbSimpleAggMsgNode",
+        "name": "Sum Attribute Success",
+        "debugMode": false,
+        "configuration": {
+          "parentEntitiesQuery": {
+            "type": "group",
+            "entityGroupId": null
+          },
+          "periodTimeUnit": "MINUTES",
+          "periodValue": 5,
+          "mathFunction": "SUM",
+          "aggIntervalTimeUnit": "SECONDS",
+          "aggIntervalValue": 1,
+          "autoCreateIntervals": false,
+          "intervalPersistencePolicy": "ON_EACH_CHECK_AFTER_INTERVAL_END",
+          "intervalCheckTimeUnit": "SECONDS",
+          "intervalCheckValue": 1,
+          "intervalTtlTimeUnit": "DAYS",
+          "intervalTtlValue": 1,
+          "inputValueKey": "attrSuccess",
+          "outputValueKey": "totalAttrSuccess",
+          "statePersistencePolicy": "PERIODICALLY",
+          "statePersistenceTimeUnit": "MINUTES",
+          "statePersistenceValue": 1
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1285,
+          "layoutY": 241
+        },
+        "type": "org.thingsboard.rule.engine.transform.TbChangeOriginatorNode",
+        "name": "ToTenant",
+        "debugMode": false,
+        "configuration": {
+          "originatorSource": "TENANT",
+          "relationsQuery": {
+            "direction": "FROM",
+            "maxLevel": 1,
+            "filters": [
+              {
+                "relationType": "Contains",
+                "entityTypes": []
+              }
+            ],
+            "fetchLastLevelOnly": false
+          }
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1488,
+          "layoutY": 313
+        },
+        "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
+        "name": "Transform",
+        "debugMode": false,
+        "configuration": {
+          "jsScript": "var newMsg = {\n    attrFailure: msg[Object.keys(msg)[0]]\n}\nreturn {msg: newMsg, metadata: metadata, msgType: msgType};"
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1651,
+          "layoutY": 410
+        },
+        "type": "org.thingsboard.rule.engine.analytics.incoming.TbSimpleAggMsgNode",
+        "name": "Sum Attribute Failure",
+        "debugMode": false,
+        "configuration": {
+          "parentEntitiesQuery": {
+            "type": "group",
+            "entityGroupId": null
+          },
+          "periodTimeUnit": "MINUTES",
+          "periodValue": 5,
+          "mathFunction": "SUM",
+          "aggIntervalTimeUnit": "SECONDS",
+          "aggIntervalValue": 1,
+          "autoCreateIntervals": false,
+          "intervalPersistencePolicy": "ON_EACH_CHECK_AFTER_INTERVAL_END",
+          "intervalCheckTimeUnit": "SECONDS",
+          "intervalCheckValue": 1,
+          "intervalTtlTimeUnit": "DAYS",
+          "intervalTtlValue": 1,
+          "inputValueKey": "attrFailure",
+          "outputValueKey": "totalAttrFailure",
+          "statePersistencePolicy": "PERIODICALLY",
+          "statePersistenceTimeUnit": "MINUTES",
+          "statePersistenceValue": 1
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1301,
+          "layoutY": 414
+        },
+        "type": "org.thingsboard.rule.engine.transform.TbChangeOriginatorNode",
+        "name": "ToTenant",
+        "debugMode": false,
+        "configuration": {
+          "originatorSource": "TENANT",
+          "relationsQuery": {
+            "direction": "FROM",
+            "maxLevel": 1,
+            "filters": [
+              {
+                "relationType": "Contains",
+                "entityTypes": []
+              }
+            ],
+            "fetchLastLevelOnly": false
+          }
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1541,
+          "layoutY": 620
+        },
+        "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
+        "name": "Transform",
+        "debugMode": false,
+        "configuration": {
+          "jsScript": "var newMsg = {\n    telemetrySuccess: msg[Object.keys(msg)[0]]\n}\nreturn {msg: newMsg, metadata: metadata, msgType: msgType};"
+        }
+      },
       {
         "additionalInfo": {
           "layoutX": 416,
@@ -64,18 +208,6 @@
         "debugMode": false,
         "configuration": {
           "jsScript": "var newMsg = {};\nnewMsg[\"t2_0\"] = msg[\"t2_0\"];\nnewMsg[\"t2_1\"] = msg[\"t2_1\"];\nnewMsg[\"t2_2\"] = msg[\"t2_2\"];\nreturn {msg: newMsg, metadata: metadata, msgType: \"POST_ATTRIBUTES_REQUEST\"};"
-        }
-      },
-      {
-        "additionalInfo": {
-          "layoutX": 1286,
-          "layoutY": 348
-        },
-        "type": "org.thingsboard.rule.engine.telemetry.TbMsgTimeseriesNode",
-        "name": "SaveToDB",
-        "debugMode": false,
-        "configuration": {
-          "defaultTTL": 0
         }
       },
       {
@@ -235,122 +367,314 @@
           "entityGroupId": null,
           "entityGroupIsMessageOriginator": true
         }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 2033,
+          "layoutY": 409
+        },
+        "type": "org.thingsboard.rule.engine.telemetry.TbMsgTimeseriesNode",
+        "name": "Success",
+        "debugMode": false,
+        "configuration": {
+          "defaultTTL": 0
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1672,
+          "layoutY": 502
+        },
+        "type": "org.thingsboard.rule.engine.analytics.incoming.TbSimpleAggMsgNode",
+        "name": "Sum Telemetry Success",
+        "debugMode": false,
+        "configuration": {
+          "parentEntitiesQuery": {
+            "type": "group",
+            "entityGroupId": null
+          },
+          "periodTimeUnit": "MINUTES",
+          "periodValue": 5,
+          "mathFunction": "SUM",
+          "aggIntervalTimeUnit": "SECONDS",
+          "aggIntervalValue": 1,
+          "autoCreateIntervals": false,
+          "intervalPersistencePolicy": "ON_EACH_CHECK_AFTER_INTERVAL_END",
+          "intervalCheckTimeUnit": "SECONDS",
+          "intervalCheckValue": 1,
+          "intervalTtlTimeUnit": "DAYS",
+          "intervalTtlValue": 1,
+          "inputValueKey": "telemetrySuccess",
+          "outputValueKey": "totalTelemetrySuccess",
+          "statePersistencePolicy": "PERIODICALLY",
+          "statePersistenceTimeUnit": "MINUTES",
+          "statePersistenceValue": 1
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1326,
+          "layoutY": 546
+        },
+        "type": "org.thingsboard.rule.engine.transform.TbChangeOriginatorNode",
+        "name": "ToTenant",
+        "debugMode": false,
+        "configuration": {
+          "originatorSource": "TENANT",
+          "relationsQuery": {
+            "direction": "FROM",
+            "maxLevel": 1,
+            "filters": [
+              {
+                "relationType": "Contains",
+                "entityTypes": []
+              }
+            ],
+            "fetchLastLevelOnly": false
+          }
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1376,
+          "layoutY": 699
+        },
+        "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
+        "name": "Transform",
+        "debugMode": false,
+        "configuration": {
+          "jsScript": "var newMsg = {\n    telemetryFailure: msg[Object.keys(msg)[0]]\n}\nreturn {msg: newMsg, metadata: metadata, msgType: msgType};"
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1569,
+          "layoutY": 797
+        },
+        "type": "org.thingsboard.rule.engine.analytics.incoming.TbSimpleAggMsgNode",
+        "name": "Sum Telemetry Failure",
+        "debugMode": false,
+        "configuration": {
+          "parentEntitiesQuery": {
+            "type": "group",
+            "entityGroupId": null
+          },
+          "periodTimeUnit": "MINUTES",
+          "periodValue": 5,
+          "mathFunction": "SUM",
+          "aggIntervalTimeUnit": "SECONDS",
+          "aggIntervalValue": 1,
+          "autoCreateIntervals": false,
+          "intervalPersistencePolicy": "ON_EACH_CHECK_AFTER_INTERVAL_END",
+          "intervalCheckTimeUnit": "SECONDS",
+          "intervalCheckValue": 1,
+          "intervalTtlTimeUnit": "DAYS",
+          "intervalTtlValue": 1,
+          "inputValueKey": "telemetryFailure",
+          "outputValueKey": "totalTelemetryFailure",
+          "statePersistencePolicy": "PERIODICALLY",
+          "statePersistenceTimeUnit": "MINUTES",
+          "statePersistenceValue": 1
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1217,
+          "layoutY": 784
+        },
+        "type": "org.thingsboard.rule.engine.transform.TbChangeOriginatorNode",
+        "name": "ToTenant",
+        "debugMode": false,
+        "configuration": {
+          "originatorSource": "TENANT",
+          "relationsQuery": {
+            "direction": "FROM",
+            "maxLevel": 1,
+            "filters": [
+              {
+                "relationType": "Contains",
+                "entityTypes": []
+              }
+            ],
+            "fetchLastLevelOnly": false
+          }
+        }
       }
     ],
     "connections": [
       {
         "fromIndex": 0,
         "toIndex": 1,
-        "type": "True"
+        "type": "Success"
+      },
+      {
+        "fromIndex": 1,
+        "toIndex": 23,
+        "type": "Success"
       },
       {
         "fromIndex": 2,
-        "toIndex": 3,
-        "type": "True"
+        "toIndex": 0,
+        "type": "Success"
       },
       {
         "fromIndex": 3,
-        "toIndex": 12,
+        "toIndex": 4,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 4,
+        "toIndex": 23,
         "type": "Success"
       },
       {
         "fromIndex": 5,
-        "toIndex": 6,
-        "type": "True"
-      },
-      {
-        "fromIndex": 5,
-        "toIndex": 2,
-        "type": "False"
-      },
-      {
-        "fromIndex": 5,
-        "toIndex": 0,
-        "type": "True"
+        "toIndex": 3,
+        "type": "Success"
       },
       {
         "fromIndex": 6,
-        "toIndex": 12,
+        "toIndex": 24,
         "type": "Success"
       },
       {
         "fromIndex": 7,
-        "toIndex": 4,
-        "type": "Success"
-      },
-      {
-        "fromIndex": 8,
-        "toIndex": 4,
-        "type": "Success"
+        "toIndex": 8,
+        "type": "True"
       },
       {
         "fromIndex": 9,
-        "toIndex": 4,
-        "type": "Success"
+        "toIndex": 10,
+        "type": "True"
       },
       {
         "fromIndex": 10,
-        "toIndex": 4,
+        "toIndex": 18,
         "type": "Success"
+      },
+      {
+        "fromIndex": 11,
+        "toIndex": 12,
+        "type": "True"
+      },
+      {
+        "fromIndex": 11,
+        "toIndex": 9,
+        "type": "False"
       },
       {
         "fromIndex": 11,
         "toIndex": 7,
-        "type": "Success"
-      },
-      {
-        "fromIndex": 11,
-        "toIndex": 8,
-        "type": "Failure"
+        "type": "True"
       },
       {
         "fromIndex": 12,
-        "toIndex": 9,
+        "toIndex": 18,
         "type": "Success"
-      },
-      {
-        "fromIndex": 12,
-        "toIndex": 10,
-        "type": "Failure"
       },
       {
         "fromIndex": 13,
-        "toIndex": 12,
+        "toIndex": 25,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 14,
+        "toIndex": 28,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 15,
+        "toIndex": 2,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 16,
+        "toIndex": 5,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 17,
+        "toIndex": 13,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 17,
+        "toIndex": 14,
+        "type": "Failure"
+      },
+      {
+        "fromIndex": 18,
+        "toIndex": 15,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 18,
+        "toIndex": 16,
+        "type": "Failure"
+      },
+      {
+        "fromIndex": 19,
+        "toIndex": 18,
         "type": "Post attributes"
       },
       {
-        "fromIndex": 13,
+        "fromIndex": 19,
+        "toIndex": 17,
+        "type": "Post telemetry"
+      },
+      {
+        "fromIndex": 19,
         "toIndex": 11,
         "type": "Post telemetry"
       },
       {
-        "fromIndex": 13,
-        "toIndex": 5,
-        "type": "Post telemetry"
-      },
-      {
-        "fromIndex": 14,
-        "toIndex": 13,
+        "fromIndex": 20,
+        "toIndex": 19,
         "type": "False"
       },
       {
-        "fromIndex": 14,
-        "toIndex": 15,
+        "fromIndex": 20,
+        "toIndex": 21,
         "type": "True"
       },
       {
-        "fromIndex": 15,
-        "toIndex": 13,
+        "fromIndex": 21,
+        "toIndex": 19,
         "type": "False"
       },
       {
-        "fromIndex": 15,
-        "toIndex": 16,
+        "fromIndex": 21,
+        "toIndex": 22,
         "type": "True"
       },
       {
-        "fromIndex": 16,
-        "toIndex": 13,
+        "fromIndex": 22,
+        "toIndex": 19,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 24,
+        "toIndex": 23,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 25,
+        "toIndex": 6,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 26,
+        "toIndex": 27,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 27,
+        "toIndex": 23,
+        "type": "Success"
+      },
+      {
+        "fromIndex": 28,
+        "toIndex": 26,
         "type": "Success"
       }
     ],

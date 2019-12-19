@@ -54,7 +54,7 @@ dashboard:
   createOnStart: "${DASHBOARD_CREATE_ON_START:true}"
   deleteOnComplete: "${DASHBOARD_DELETE_ON_COMPLETE:false}"
   deleteIfExists: "${DASHBOARD_DELETE_IF_EXISTS:true}"
-  tenant: alarms.json # please use comma separated list for multiple dashboards: dashboard1.json, dashboard2.json
+  tenant: alarms.json, statistics.json # please use comma separated list for multiple dashboards: dashboard1.json, dashboard2.json
   shared: "devices.json"
 warmup:
   enabled: "${WARMUP_ENABLED:false}"

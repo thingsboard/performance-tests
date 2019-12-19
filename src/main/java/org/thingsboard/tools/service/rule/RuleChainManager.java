@@ -47,7 +47,7 @@ public class RuleChainManager {
     @Value("${rest.password}")
     private String password;
 
-    @Value("${test.ruleChainName:root_rule_chain.json}")
+    @Value("${test.ruleChainName:root_rule_chain_pe.json}")
     private String ruleChainName;
 
 
@@ -62,8 +62,6 @@ public class RuleChainManager {
         restClient.login(username, password);
 
         defaultRootRuleChainId = getDefaultRuleChainId();
-
-        deleteAllPreviousPerformanceTestRuleChains();
 
         try {
             JsonNode updatedRootRuleChainConfig = objectMapper.readTree(this.getClass().getClassLoader().getResourceAsStream(ruleChainName));
@@ -103,21 +101,6 @@ public class RuleChainManager {
                 .postForEntity(restUrl + "/api/ruleChain/metadata",
                         ruleChainMetaData,
                         RuleChainMetaData.class);
-    }
-
-    private void deleteAllPreviousPerformanceTestRuleChains() {
-        ResponseEntity<TextPageData<RuleChain>> ruleChains =
-                restClient.getRestTemplate().exchange(
-                        restUrl + "/api/ruleChains?limit=999&textSearch=Performance Test Rule Chain",
-                        HttpMethod.GET,
-                        null,
-                        new ParameterizedTypeReference<TextPageData<RuleChain>>() {
-                        });
-
-        List<RuleChainId> ruleChainIds = ruleChains.getBody().getData()
-                .stream().map(IdBased::getId).collect(Collectors.toList());
-
-        ruleChainIds.forEach(ruleChainId -> restClient.getRestTemplate().delete(restUrl + "/api/ruleChain/" + ruleChainId.getId()));
     }
 
     private RuleChainId getDefaultRuleChainId() {
