@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,11 +23,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.thingsboard.client.tools.RestClient;
 import org.thingsboard.server.common.data.Customer;
-import org.thingsboard.server.common.data.EntityType;
 import org.thingsboard.server.common.data.User;
-import org.thingsboard.server.common.data.group.EntityGroupInfo;
 import org.thingsboard.server.common.data.id.CustomerId;
-import org.thingsboard.server.common.data.permission.GroupPermission;
 import org.thingsboard.server.common.data.security.Authority;
 import org.thingsboard.tools.service.dashboard.DashboardManager;
 import org.thingsboard.tools.service.shared.DefaultRestClientService;
@@ -80,19 +77,6 @@ public class DefaultCustomerManager implements CustomerManager {
                 try {
                     String title = "C" + String.format("%8d", tokenNumber).replace(" ", "0");
                     customer = getRestClient().createCustomer(title);
-                    //TODO: REST client improvement
-                    List<EntityGroupInfo> groups = getRestClient().getEntityGroupsByOwnerAndType(
-                            customer.getId().getEntityType().name(), customer.getId().getId().toString(), EntityType.USER);
-                    EntityGroupInfo customerAdmins = groups.stream().filter(g -> g.getName().equalsIgnoreCase("Customer Administrators")).findFirst().orElseThrow(() -> new RuntimeException("Customer Administrator Group is not present!"));
-
-                    GroupPermission readOnlyPermission = new GroupPermission();
-                    readOnlyPermission.setEntityGroupId(dashboardManager.getSharedDashboardsGroup().getId());
-                    readOnlyPermission.setEntityGroupType(dashboardManager.getSharedDashboardsGroup().getType());
-                    readOnlyPermission.setPublic(false);
-                    readOnlyPermission.setRoleId(dashboardManager.getReadOnlyRole().getId());
-                    readOnlyPermission.setTenantId(customer.getTenantId());
-                    readOnlyPermission.setUserGroupId(customerAdmins.getId());
-                    getRestClient().saveGroupPermission(readOnlyPermission);
 
                     User customerAdmin = new User();
                     customerAdmin.setFirstName("User " + tokenNumber);
@@ -106,8 +90,6 @@ public class DefaultCustomerManager implements CustomerManager {
                     customerAdmin.setAdditionalInfo(dashboardInfo);
 
                     customerAdmin = getRestClient().saveUser(customerAdmin, false);
-                    //TODO: REST CLIENT
-                    getRestClient().addEntitiesToEntityGroup(customerAdmins.getId().toString(), new String[]{customerAdmin.getId().toString()});
                     getRestClient().activateUser(customerAdmin.getId().toString(), "customer");
                     customerIds.add(customer.getId());
                     count.getAndIncrement();

@@ -13,17 +13,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.thingsboard.tools.service.msg;
+package org.thingsboard.tools.service.msg.random;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
+import org.thingsboard.tools.service.msg.BaseMessageGenerator;
+import org.thingsboard.tools.service.msg.MessageGenerator;
+import org.thingsboard.tools.service.msg.Msg;
 
 @Slf4j
-@Service
-public class RandomTelemetryGenerator extends BaseRandomGenerator implements MessageGenerator {
+@Service(value = "randomTelemetryGenerator")
+@ConditionalOnProperty(prefix = "test", value = "payloadType", havingValue = "RANDOM")
+public class RandomTelemetryGenerator extends BaseMessageGenerator implements MessageGenerator {
 
     @Override
     public Msg getNextMessage(String deviceName, boolean shouldTriggerAlarm) {

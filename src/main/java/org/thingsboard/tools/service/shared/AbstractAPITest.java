@@ -25,6 +25,7 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.mqtt.MqttClientConfig;
@@ -34,9 +35,10 @@ import org.thingsboard.server.common.data.id.CustomerId;
 import org.thingsboard.server.common.data.id.DeviceId;
 import org.thingsboard.tools.service.customer.CustomerManager;
 import org.thingsboard.tools.service.mqtt.DeviceClient;
+import org.thingsboard.tools.service.msg.MessageGenerator;
 import org.thingsboard.tools.service.msg.Msg;
-import org.thingsboard.tools.service.msg.RandomAttributesGenerator;
-import org.thingsboard.tools.service.msg.RandomTelemetryGenerator;
+import org.thingsboard.tools.service.msg.random.RandomAttributesGenerator;
+import org.thingsboard.tools.service.msg.random.RandomTelemetryGenerator;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -114,9 +116,11 @@ public abstract class AbstractAPITest {
     protected int alarmsPerSecond;
 
     @Autowired
-    protected RandomTelemetryGenerator tsMsgGenerator;
+    @Qualifier("randomTelemetryGenerator")
+    protected MessageGenerator tsMsgGenerator;
     @Autowired
-    protected RandomAttributesGenerator attrMsgGenerator;
+    @Qualifier("randomAttributesGenerator")
+    protected MessageGenerator attrMsgGenerator;
     @Autowired
     protected RestClientService restClientService;
     @Autowired
@@ -323,12 +327,6 @@ public abstract class AbstractAPITest {
                         entity.setType("device");
                     }
 
-                    if (!customerIds.isEmpty()) {
-                        int entityIdx = tokenNumber - startIdx;
-                        int customerIdx = entityIdx % customerIds.size();
-                        CustomerId customerId = customerIds.get(customerIdx);
-                        entity.setOwnerId(customerId);
-                    }
                     if (setCredentials) {
                         entity = restClientService.getRestClient().createDevice(entity, token);
                     } else {
@@ -457,7 +455,7 @@ public abstract class AbstractAPITest {
             for (int i = 0; i < testMessagesPerSecond; i++) {
                 boolean alarmRequired = alarmIteration && (alarmCount < alarmsPerSecond);
                 DeviceClient client = getDeviceClient(iterationDevices, iteration, i);
-                Msg message = (telemetryTest ? tsMsgGenerator : attrMsgGenerator).getNextMessage(client.getDeviceName(), alarmRequired);
+                Msg message = getNextMessage(client, alarmRequired);
                 if (message.isTriggersAlarm()) {
                     alarmCount++;
                 }
@@ -484,6 +482,10 @@ public abstract class AbstractAPITest {
         } catch (Throwable t) {
             log.warn("[{}] Failed to process iteration", iteration, t);
         }
+    }
+
+    private Msg getNextMessage(DeviceClient client, boolean alarmRequired) {
+        return (telemetryTest ? tsMsgGenerator : attrMsgGenerator).getNextMessage(client.getDeviceName(), alarmRequired);
     }
 
     protected abstract String getTestTopic();
