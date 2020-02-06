@@ -35,51 +35,51 @@ device:
   # Device API to use - MQTT or HTTP
   api: "${DEVICE_API:MQTT}"
   startIdx: "${DEVICE_START_IDX:0}"
-  endIdx: "${DEVICE_END_IDX:30}"
-  count: "${DEVICE_COUNT:30}"
+  endIdx: "${DEVICE_END_IDX:1000}"
+  count: "${DEVICE_COUNT:1000}"
   createOnStart: "${DEVICE_CREATE_ON_START:true}"
   deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
 gateway:
   startIdx: "${GATEWAY_START_IDX:0}"
   endIdx: "${GATEWAY_END_IDX:3}"
   count: "${GATEWAY_COUNT:3}"
-  createOnStart: "${GATEWAY_CREATE_ON_START:true}"
+  createOnStart: "${GATEWAY_CREATE_ON_START:false}"
   deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:false}"
 customer:
   startIdx: "${CUSTOMER_START_IDX:0}"
   endIdx: "${CUSTOMER_END_IDX:3}"
-  createOnStart: "${CUSTOMER_CREATE_ON_START:true}"
+  createOnStart: "${CUSTOMER_CREATE_ON_START:false}"
   deleteOnComplete: "${CUSTOMER_DELETE_ON_COMPLETE:false}"
 dashboard:
-  createOnStart: "${DASHBOARD_CREATE_ON_START:true}"
+  createOnStart: "${DASHBOARD_CREATE_ON_START:false}"
   deleteOnComplete: "${DASHBOARD_DELETE_ON_COMPLETE:false}"
-  deleteIfExists: "${DASHBOARD_DELETE_IF_EXISTS:true}"
+  deleteIfExists: "${DASHBOARD_DELETE_IF_EXISTS:false}"
   tenant: alarms.json # please use comma separated list for multiple dashboards: dashboard1.json, dashboard2.json
   shared: "devices.json"
 warmup:
-  enabled: "${WARMUP_ENABLED:false}"
+  enabled: "${WARMUP_ENABLED:true}"
 test:
   # Type of the payload to send: DEFAULT, SMART_TRACKER, SMART_METER
   # RANDOM - TODO: add description
   # SMART_TRACKER - sample payload: {"latitude": 42.222222, "longitude": 73.333333, "speed": 55.5, "fuel": 92, "batteryLevel": 81}
   # SMART_METER - sample payload: {"pulseCounter": 1234567, "leakage": false, "batteryLevel": 81}
-  payloadType: "${TEST_PAYLOAD_TYPE:SMART_TRACKER}"
+  payloadType: "${TEST_PAYLOAD_TYPE:SMART_METER}"
   instanceIdx: "${INSTANCE_IDX:0}"
   useInstanceIdx: "${USE_INSTANCE_IDX:false}"
   useInstanceIdxRegex: "${USE_INSTANCE_IDX_REGEX:false}"
   instanceIdxRegexSource: "${INSTANCE_IDX_REGEX_SOURCE:}"
   instanceIdxRegex: "${INSTANCE_IDX_REGEX:([0-9]+)$}"
-  enabled: "${TEST_ENABLED:false}"
-  updateRootRuleChain: "${UPDATE_ROOT_RULE_CHAIN:true}"
-  revertRootRuleChain: "${REVERT_ROOT_RULE_CHAIN:true}"
+  enabled: "${TEST_ENABLED:true}"
+  updateRootRuleChain: "${UPDATE_ROOT_RULE_CHAIN:false}"
+  revertRootRuleChain: "${REVERT_ROOT_RULE_CHAIN:false}"
   # Test API to use - device or gateway
-  api: "${TEST_API:gateway}"
+  api: "${TEST_API:device}"
   sequential: "${TEST_SEQUENTIAL:true}"
-  ruleChainName:  "${RULE_CHAIN_NAME:root_rule_chain_pe.json}"
+  ruleChainName:  "${RULE_CHAIN_NAME:root_rule_chain_ce.json}"
   # messages per second.
   telemetry: "${TEST_TELEMETRY:true}"
-  mps: "${MESSAGES_PER_SECOND:100}"
-  duration: "${DURATION_IN_SECONDS:10}"
+  mps: "${MESSAGES_PER_SECOND:5000}"
+  duration: "${DURATION_IN_SECONDS:3600}"
   alarms:
     start: "${ALARM_STORM_START_SECOND:0}"
     end: "${ALARM_STORM_END_SECOND:0}"
