@@ -61,5 +61,5 @@ Where:
 
 Once params are configured to run test simple type from the folder where configuration file is located:
 ```bash
-docker run -it --env-file .env --name tb-perf-test thingsboard/tb-performance-test-ce
+docker run -it --env-file .env --name tb-perf-test thingsboard/tb-ce-performance-test
 ```

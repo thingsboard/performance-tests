@@ -27,7 +27,7 @@ import java.util.Arrays;
 public class PerformanceTestsApplication {
 
     private static final String SPRING_CONFIG_NAME_KEY = "--spring.config.name";
-    private static final String DEFAULT_SPRING_CONFIG_PARAM = SPRING_CONFIG_NAME_KEY + "=" + "tb-performance-tests";
+    private static final String DEFAULT_SPRING_CONFIG_PARAM = SPRING_CONFIG_NAME_KEY + "=" + "tb-ce-performance-tests";
 
     public static void main(String[] args) {
         ConfigurableApplicationContext ctx = SpringApplication.run(PerformanceTestsApplication.class, updateArguments(args));
