@@ -26,7 +26,7 @@ public class Msg {
     @Getter
     private final boolean triggersAlarm;
 
-    Msg(byte[] data) {
+    public Msg(byte[] data) {
         this.data = data;
         this.triggersAlarm = false;
     }

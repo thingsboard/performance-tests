@@ -42,7 +42,7 @@ device:
 gateway:
   startIdx: "${GATEWAY_START_IDX:0}"
   endIdx: "${GATEWAY_END_IDX:3}"
-  count: "${GATEWAY_COUNT:30}"
+  count: "${GATEWAY_COUNT:3}"
   createOnStart: "${GATEWAY_CREATE_ON_START:true}"
   deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:false}"
 customer:
@@ -59,6 +59,11 @@ dashboard:
 warmup:
   enabled: "${WARMUP_ENABLED:false}"
 test:
+  # Type of the payload to send: DEFAULT, SMART_TRACKER, SMART_METER
+  # RANDOM - TODO: add description
+  # SMART_TRACKER - sample payload: {"latitude": 42.222222, "longitude": 73.333333, "speed": 55.5, "fuel": 92, "batteryLevel": 81}
+  # SMART_METER - sample payload: {"pulseCounter": 1234567, "leakage": false, "batteryLevel": 81}
+  payloadType: "${TEST_PAYLOAD_TYPE:SMART_TRACKER}"
   instanceIdx: "${INSTANCE_IDX:0}"
   useInstanceIdx: "${USE_INSTANCE_IDX:false}"
   useInstanceIdxRegex: "${USE_INSTANCE_IDX_REGEX:false}"
@@ -74,7 +79,7 @@ test:
   # messages per second.
   telemetry: "${TEST_TELEMETRY:true}"
   mps: "${MESSAGES_PER_SECOND:100}"
-  duration: "${DURATION_IN_SECONDS:60}"
+  duration: "${DURATION_IN_SECONDS:10}"
   alarms:
     start: "${ALARM_STORM_START_SECOND:0}"
     end: "${ALARM_STORM_END_SECOND:0}"

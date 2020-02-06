@@ -20,7 +20,7 @@ import org.springframework.beans.factory.annotation.Value;
 
 import java.util.Random;
 
-public abstract class BaseRandomGenerator {
+public abstract class BaseMessageGenerator {
 
     protected final Random random = new Random();
     protected static final ObjectMapper mapper = new ObjectMapper();
