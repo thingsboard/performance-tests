@@ -36,13 +36,13 @@ device:
   api: "${DEVICE_API:MQTT}"
   startIdx: "${DEVICE_START_IDX:0}"
   endIdx: "${DEVICE_END_IDX:30}"
-  count: "${DEVICE_COUNT:30}"
+  count: "${DEVICE_COUNT:30}" # count of devices to be used by clients in k8s deployment run
   createOnStart: "${DEVICE_CREATE_ON_START:true}"
   deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
 gateway:
   startIdx: "${GATEWAY_START_IDX:0}"
   endIdx: "${GATEWAY_END_IDX:3}"
-  count: "${GATEWAY_COUNT:3}"
+  count: "${GATEWAY_COUNT:3}" # count of devices to be used by clients in k8s deployment run
   createOnStart: "${GATEWAY_CREATE_ON_START:true}"
   deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:false}"
 customer:
@@ -75,7 +75,7 @@ test:
   # Test API to use - device or gateway
   api: "${TEST_API:gateway}"
   sequential: "${TEST_SEQUENTIAL:true}"
-  ruleChainName:  "${RULE_CHAIN_NAME:root_rule_chain_pe.json}"
+  ruleChainName:  "${RULE_CHAIN_NAME:root_rule_chain_ce.json}"
   # messages per second.
   telemetry: "${TEST_TELEMETRY:true}"
   mps: "${MESSAGES_PER_SECOND:100}"
