@@ -18,11 +18,12 @@ package org.thingsboard.tools.service.gateway;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.IdBased;
 import org.thingsboard.tools.service.mqtt.DeviceClient;
-import org.thingsboard.tools.service.shared.AbstractAPITest;
+import org.thingsboard.tools.service.shared.BaseMqttAPITest;
 
 import javax.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
@@ -37,7 +38,8 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-public class MqttGatewayAPITest extends AbstractAPITest implements GatewayAPITest {
+@ConditionalOnProperty(prefix = "device", value = "api", havingValue = "MQTT")
+public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITest {
 
     @Value("${gateway.startIdx}")
     int gatewayStartIdxConfig;

@@ -15,8 +15,6 @@
  */
 package org.thingsboard.tools.service.gateway;
 
-import java.util.List;
-
 public interface GatewayAPITest {
 
     void createDevices() throws Exception;

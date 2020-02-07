@@ -17,25 +17,26 @@ package org.thingsboard.tools.service.device;
 
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.IdBased;
 import org.thingsboard.tools.service.mqtt.DeviceClient;
-import org.thingsboard.tools.service.shared.AbstractAPITest;
+import org.thingsboard.tools.service.shared.BaseMqttAPITest;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-public class MqttDeviceAPITest extends AbstractAPITest implements DeviceAPITest {
+@ConditionalOnProperty(prefix = "device", value = "api", havingValue = "MQTT")
+public class MqttDeviceAPITest extends BaseMqttAPITest implements DeviceAPITest {
 
     static String dataAsStr = "{\"t1\":73}";
     static byte[] data = dataAsStr.getBytes(StandardCharsets.UTF_8);
@@ -112,7 +113,6 @@ public class MqttDeviceAPITest extends AbstractAPITest implements DeviceAPITest 
         if (pack != null && !pack.isEmpty()) {
             connectDevices(pack, totalConnectedCount, false);
         }
-//        reportScheduledFuture = restClientService.getScheduler().scheduleAtFixedRate(this::reportMqttClientsStats, 10, 10, TimeUnit.SECONDS);
         mapDevicesToDeviceClientConnections();
     }
 
