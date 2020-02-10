@@ -47,7 +47,7 @@ public class RuleChainManager {
     @Value("${rest.password}")
     private String password;
 
-    @Value("${test.ruleChainName:root_rule_chain_pe.json}")
+    @Value("${test.ruleChainName:root_rule_chain_ce.json}")
     private String ruleChainName;
 
 

@@ -8,42 +8,30 @@
     "configuration": null
   },
   "metadata": {
-    "firstNodeIndex": 3,
+    "firstNodeIndex": 2,
     "nodes": [
       {
         "additionalInfo": {
-          "layoutX": 825,
-          "layoutY": 468
+          "layoutX": 824,
+          "layoutY": 156
         },
-        "type": "org.thingsboard.rule.engine.rpc.TbSendRPCRequestNode",
-        "name": "RPC Call Request",
+        "type": "org.thingsboard.rule.engine.telemetry.TbMsgTimeseriesNode",
+        "name": "Save Timeseries",
         "debugMode": false,
         "configuration": {
-          "timeoutInSeconds": 60
+          "defaultTTL": 0
         }
       },
       {
         "additionalInfo": {
           "layoutX": 825,
-          "layoutY": 379
+          "layoutY": 52
         },
-        "type": "org.thingsboard.rule.engine.action.TbLogNode",
-        "name": "Log Other",
+        "type": "org.thingsboard.rule.engine.telemetry.TbMsgAttributesNode",
+        "name": "Save Client Attributes",
         "debugMode": false,
         "configuration": {
-          "jsScript": "return '\\nIncoming message:\\n' + JSON.stringify(msg) + '\\nIncoming metadata:\\n' + JSON.stringify(metadata);"
-        }
-      },
-      {
-        "additionalInfo": {
-          "layoutX": 825,
-          "layoutY": 266
-        },
-        "type": "org.thingsboard.rule.engine.action.TbLogNode",
-        "name": "Log RPC from Device",
-        "debugMode": false,
-        "configuration": {
-          "jsScript": "return '\\nIncoming message:\\n' + JSON.stringify(msg) + '\\nIncoming metadata:\\n' + JSON.stringify(metadata);"
+          "scope": "CLIENT_SCOPE"
         }
       },
       {
@@ -61,53 +49,105 @@
       {
         "additionalInfo": {
           "layoutX": 825,
-          "layoutY": 52
+          "layoutY": 266
         },
-        "type": "org.thingsboard.rule.engine.telemetry.TbMsgAttributesNode",
-        "name": "Save Client Attributes",
+        "type": "org.thingsboard.rule.engine.action.TbLogNode",
+        "name": "Log RPC from Device",
         "debugMode": false,
         "configuration": {
-          "scope": "CLIENT_SCOPE"
+          "jsScript": "return '\\nIncoming message:\\n' + JSON.stringify(msg) + '\\nIncoming metadata:\\n' + JSON.stringify(metadata);"
         }
       },
       {
         "additionalInfo": {
-          "layoutX": 824,
-          "layoutY": 156
+          "layoutX": 825,
+          "layoutY": 379
+        },
+        "type": "org.thingsboard.rule.engine.action.TbLogNode",
+        "name": "Log Other",
+        "debugMode": false,
+        "configuration": {
+          "jsScript": "return '\\nIncoming message:\\n' + JSON.stringify(msg) + '\\nIncoming metadata:\\n' + JSON.stringify(metadata);"
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 825,
+          "layoutY": 468
+        },
+        "type": "org.thingsboard.rule.engine.rpc.TbSendRPCRequestNode",
+        "name": "RPC Call Request",
+        "debugMode": false,
+        "configuration": {
+          "timeoutInSeconds": 60
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1108,
+          "layoutY": 157
         },
         "type": "org.thingsboard.rule.engine.telemetry.TbMsgTimeseriesNode",
-        "name": "Save Timeseries",
+        "name": "Save ts",
         "debugMode": false,
         "configuration": {
           "defaultTTL": 0
+        }
+      },
+      {
+        "additionalInfo": {
+          "layoutX": 1107,
+          "layoutY": 52
+        },
+        "type": "org.thingsboard.rule.engine.action.TbMsgCountNode",
+        "name": "Calculate Number of Messages per second",
+        "debugMode": false,
+        "configuration": {
+          "telemetryPrefix": "messageCount",
+          "interval": 1
         }
       }
     ],
     "connections": [
       {
-        "fromIndex": 3,
-        "toIndex": 0,
-        "type": "RPC Request to Device"
+        "fromIndex": 0,
+        "toIndex": 7,
+        "type": "Success"
       },
       {
-        "fromIndex": 3,
-        "toIndex": 2,
-        "type": "RPC Request from Device"
+        "fromIndex": 1,
+        "toIndex": 7,
+        "type": "Success"
       },
       {
-        "fromIndex": 3,
-        "toIndex": 5,
-        "type": "Post telemetry"
-      },
-      {
-        "fromIndex": 3,
+        "fromIndex": 2,
         "toIndex": 4,
+        "type": "Other"
+      },
+      {
+        "fromIndex": 2,
+        "toIndex": 1,
         "type": "Post attributes"
       },
       {
-        "fromIndex": 3,
-        "toIndex": 1,
-        "type": "Other"
+        "fromIndex": 2,
+        "toIndex": 0,
+        "type": "Post telemetry"
+      },
+      {
+        "fromIndex": 2,
+        "toIndex": 3,
+        "type": "RPC Request from Device"
+      },
+      {
+        "fromIndex": 2,
+        "toIndex": 5,
+        "type": "RPC Request to Device"
+      },
+      {
+        "fromIndex": 7,
+        "toIndex": 6,
+        "type": "Success"
       }
     ],
     "ruleChainConnections": null
