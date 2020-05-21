@@ -27,4 +27,8 @@ RUN systemctl --no-reload disable --now ${pkg.name}.service > /dev/null 2>&1 || 
 
 RUN mv /tmp/${pkg.name}.conf ${pkg.installFolder}/conf
 
+RUN chmod 555 ${pkg.installFolder}/bin/${pkg.name}.jar
+
+USER ${pkg.user}
+
 CMD ["start-tests.sh"]

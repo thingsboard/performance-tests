@@ -16,7 +16,7 @@
 package org.thingsboard.tools.service.shared;
 
 import io.netty.channel.EventLoopGroup;
-import org.thingsboard.client.tools.RestClient;
+import org.thingsboard.rest.client.RestClient;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;

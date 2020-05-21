@@ -21,7 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.thingsboard.client.tools.RestClient;
+import org.thingsboard.rest.client.RestClient;
 import org.thingsboard.server.common.data.Customer;
 import org.thingsboard.server.common.data.User;
 import org.thingsboard.server.common.data.id.CustomerId;
@@ -90,7 +90,7 @@ public class DefaultCustomerManager implements CustomerManager {
                     customerAdmin.setAdditionalInfo(dashboardInfo);
 
                     customerAdmin = getRestClient().saveUser(customerAdmin, false);
-                    getRestClient().activateUser(customerAdmin.getId().toString(), "customer");
+                    getRestClient().activateUser(customerAdmin.getId(), "customer");
                     customerIds.add(customer.getId());
                     count.getAndIncrement();
                 } catch (Exception e) {

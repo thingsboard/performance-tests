@@ -109,7 +109,7 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
         CountDownLatch packLatch = new CountDownLatch(pack.size());
         for (DeviceClient deviceClient : pack) {
             restClientService.getScheduler().submit(() -> {
-                deviceClient.getMqttClient().publish(getWarmUpTopic(), Unpooled.wrappedBuffer(getData(deviceClient.getDeviceName())), MqttQoS.AT_LEAST_ONCE)
+                deviceClient.getMqttClient().publish(getWarmUpTopic(), Unpooled.wrappedBuffer(getData(deviceClient.getDeviceName())), MqttQoS.AT_MOST_ONCE)
                         .addListener(future -> {
                                     if (future.isSuccess()) {
                                         log.debug("Warm up Message was successfully published to device: {}", deviceClient.getDeviceName());
@@ -213,7 +213,7 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
 
     protected void reportMqttClientsStats() {
         for (MqttClient mqttClient : mqttClients) {
-            mqttClient.publish("v1/devices/me/telemetry", Unpooled.wrappedBuffer("{\"msgCount\":0}".getBytes(StandardCharsets.UTF_8)), MqttQoS.AT_LEAST_ONCE).addListener(future -> {
+            mqttClient.publish("v1/devices/me/telemetry", Unpooled.wrappedBuffer("{\"msgCount\":0}".getBytes(StandardCharsets.UTF_8)), MqttQoS.AT_MOST_ONCE).addListener(future -> {
                         if (future.isSuccess()) {
                             log.debug("[{}] Gateway statistics message was successfully published.", mqttClient.getClientConfig().getUsername());
                         } else {
@@ -238,6 +238,9 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
             boolean alarmIteration = iteration >= alarmsStartTs && iteration < alarmsEndTs;
             int alarmCount = 0;
             for (int i = 0; i < testMessagesPerSecond; i++) {
+                if (iterationDevices.size() >= deviceClients.size()) {
+                    iterationDevices = new HashSet<>();
+                }
                 boolean alarmRequired = alarmIteration && (alarmCount < alarmsPerSecond);
                 DeviceClient client = getDeviceClient(iterationDevices, iteration, i);
                 Msg message = getNextMessage(client.getDeviceName(), alarmRequired);
@@ -245,7 +248,7 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
                     alarmCount++;
                 }
                 restClientService.getWorkers().submit(() -> {
-                    client.getMqttClient().publish(getTestTopic(), Unpooled.wrappedBuffer(message.getData()), MqttQoS.AT_LEAST_ONCE)
+                    client.getMqttClient().publish(getTestTopic(), Unpooled.wrappedBuffer(message.getData()), MqttQoS.AT_MOST_ONCE)
                             .addListener(future -> {
                                         if (future.isSuccess()) {
                                             totalSuccessPublishedCount.incrementAndGet();
