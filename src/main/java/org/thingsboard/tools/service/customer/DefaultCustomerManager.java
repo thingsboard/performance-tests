@@ -27,11 +27,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.thingsboard.rest.client.RestClient;
 import org.thingsboard.server.common.data.Customer;
+import org.thingsboard.server.common.data.DataConstants;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.EntityType;
 import org.thingsboard.server.common.data.User;
 import org.thingsboard.server.common.data.group.EntityGroupInfo;
 import org.thingsboard.server.common.data.id.CustomerId;
+import org.thingsboard.server.common.data.id.DeviceId;
 import org.thingsboard.server.common.data.id.EntityId;
 import org.thingsboard.server.common.data.id.UserId;
 import org.thingsboard.server.common.data.permission.GroupPermission;
@@ -143,15 +145,27 @@ public class DefaultCustomerManager implements CustomerManager {
             device.setOwnerId(customerId);
             device.setName("CD" + deviceSeq.incrementAndGet());
             device.setType("default");
-            device = getRestClient().saveDevice(device);
-            DeviceCredentials deviceCredentials = new DeviceCredentials();
-            deviceCredentials.setDeviceId(device.getId());
-            deviceCredentials.setCredentialsId(device.getName());
-            deviceCredentials.setCredentialsValue(device.getName());
-            deviceCredentials.setCredentialsType(DeviceCredentialsType.ACCESS_TOKEN);
-            getRestClient().saveDeviceCredentials(deviceCredentials);
+            device = restClientService.getRestClient().createDevice(device, device.getName());
             customerDevices.add(device);
+            generateDeviceAttributes(device.getId(), device.getName());
         }
+    }
+
+    private void generateDeviceAttributes(DeviceId deviceId, String accessToken) {
+        restClientService.getRestClient().saveDeviceAttributes(deviceId, DataConstants.SERVER_SCOPE, createPayload(""));
+        restClientService.getRestClient().saveDeviceAttributes(deviceId, DataConstants.SHARED_SCOPE, createPayload("shared_"));
+        restClientService.getRestClient().getRestTemplate().postForEntity(restUrl + "/api/v1/" + accessToken + "/attributes/", createPayload("client_"),
+                ResponseEntity.class,
+                accessToken);
+    }
+
+    private JsonNode createPayload(String prefix) {
+        ObjectNode node = mapper.createObjectNode();
+        node.put(prefix+"stringKey", "value"+(int)(Math.random()*1000));
+        node.put(prefix+"booleanKey", Math.random() > 0.5);
+        node.put(prefix+"doubleKey", Math.random()*1000);
+        node.put(prefix+"longKey", (long)(Math.random()*1000));
+        return node;
     }
 
     private void createSubCustomer(CustomerProfile profile, CustomerId parentId, int tokenNumber, int subCustomerIdx) {
