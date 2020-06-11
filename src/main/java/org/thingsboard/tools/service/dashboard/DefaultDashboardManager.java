@@ -26,7 +26,7 @@ import org.thingsboard.rest.client.RestClient;
 import org.thingsboard.server.common.data.Dashboard;
 import org.thingsboard.server.common.data.DashboardInfo;
 import org.thingsboard.server.common.data.id.DashboardId;
-import org.thingsboard.server.common.data.page.TextPageLink;
+import org.thingsboard.server.common.data.page.PageLink;
 import org.thingsboard.tools.service.shared.RestClientService;
 
 import javax.annotation.PostConstruct;
@@ -73,7 +73,7 @@ public class DefaultDashboardManager implements DashboardManager {
 
     private void createDashboards(String[] dashboardNames, boolean deleteIfExists, boolean shared) {
         // Deleting existing dashboards if needed
-        List<DashboardInfo> dashboards = getRestClient().getTenantDashboards(new TextPageLink(1000)).getData();
+        List<DashboardInfo> dashboards = getRestClient().getTenantDashboards(new PageLink(1000)).getData();
         for (String dashboardName : dashboardNames) {
             for (DashboardInfo existing : dashboards) {
                 if (existing.getName().equalsIgnoreCase(dashboardName.replace(".json", ""))) {

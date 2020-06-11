@@ -19,13 +19,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.thingsboard.rest.client.RestClient;
 import org.thingsboard.server.common.data.id.RuleChainId;
-import org.thingsboard.server.common.data.page.TextPageData;
+import org.thingsboard.server.common.data.page.PageData;
+import org.thingsboard.server.common.data.page.PageLink;
 import org.thingsboard.server.common.data.rule.RuleChain;
 import org.thingsboard.server.common.data.rule.RuleChainMetaData;
 
@@ -101,15 +101,10 @@ public class RuleChainManager {
     }
 
     private RuleChainId getDefaultRuleChainId() {
-        ResponseEntity<TextPageData<RuleChain>> ruleChains =
-                restClient.getRestTemplate().exchange(
-                        restUrl + "/api/ruleChains?limit=999&textSearch=Root Rule Chain",
-                        HttpMethod.GET,
-                        null,
-                        new ParameterizedTypeReference<TextPageData<RuleChain>>() {
-                        });
+        PageData<RuleChain> ruleChains =
+                restClient.getRuleChains(new PageLink(999, 0, "Root Rule Chain"));
 
-        Optional<RuleChain> defaultRuleChain = ruleChains.getBody().getData()
+        Optional<RuleChain> defaultRuleChain = ruleChains.getData()
                 .stream()
                 .findFirst();
 
