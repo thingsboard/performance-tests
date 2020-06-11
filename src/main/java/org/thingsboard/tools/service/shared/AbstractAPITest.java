@@ -203,7 +203,6 @@ public abstract class AbstractAPITest {
         log.info("Creating {} {}...", entityCount, isGateway ? "gateways" : "devices");
         CountDownLatch latch = new CountDownLatch(entityCount);
         AtomicInteger count = new AtomicInteger();
-        List<CustomerId> customerIds = customerManager.getCustomerIds();
         for (int i = startIdx; i < endIdx; i++) {
             final int tokenNumber = i;
             restClientService.getHttpExecutor().submit(() -> {

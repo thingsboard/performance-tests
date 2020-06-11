@@ -37,22 +37,48 @@ device:
   startIdx: "${DEVICE_START_IDX:0}"
   endIdx: "${DEVICE_END_IDX:100}"
   count: "${DEVICE_COUNT:100}" # count of devices to be used by clients in k8s deployment run
-  createOnStart: "${DEVICE_CREATE_ON_START:true}"
+  createOnStart: "${DEVICE_CREATE_ON_START:false}"
   deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
 gateway:
   startIdx: "${GATEWAY_START_IDX:0}"
-  endIdx: "${GATEWAY_END_IDX:3}"
+  endIdx: "${GATEWAY_END_IDX:0}"
   count: "${GATEWAY_COUNT:3}" # count of devices to be used by clients in k8s deployment run
-  createOnStart: "${GATEWAY_CREATE_ON_START:true}"
+  createOnStart: "${GATEWAY_CREATE_ON_START:false}"
   deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:false}"
 customer:
-  startIdx: "${CUSTOMER_START_IDX:0}"
-  endIdx: "${CUSTOMER_END_IDX:10}"
   createOnStart: "${CUSTOMER_CREATE_ON_START:true}"
   deleteOnComplete: "${CUSTOMER_DELETE_ON_COMPLETE:false}"
-
+  profiles:
+    - name: "Small"
+      count: "${SMALL_CUSTOMER_COUNT:10000}"
+      minDevices: "${SMALL_CUSTOMER_MIN_DEVICES:5}"
+      maxDevices: "${SMALL_CUSTOMER_MAX_DEVICES:10}"
+      subCustomers:
+        count: "${SMALL_CUSTOMER_SUB_COUNT:5}"
+        minDevices: "${SMALL_CUSTOMER_SUB_MIN_DEVICES:5}"
+        maxDevices: "${SMALL_CUSTOMER_SUB_MAX_DEVICES:10}"
+    - name: "Big"
+      count: "${BIG_CUSTOMER_COUNT:100}"
+      minDevices: "${BIG_CUSTOMER_MIN_DEVICES:1000}"
+      maxDevices: "${BIG_CUSTOMER_MAX_DEVICES:1000}"
+      subCustomers:
+        count: "${BIG_CUSTOMER_SUB_COUNT:100}"
+        minDevices: "${BIG_CUSTOMER_SUB_MIN_DEVICES:20}"
+        maxDevices: "${BIG_CUSTOMER_SUB_MAX_DEVICES:20}"
+shared:
+  createOnStart: "${SHARED_CREATE_ON_START:false}"
+  deleteOnComplete: "${SHARED_DELETE_ON_COMPLETE:false}"
+  profiles:
+    - name: "SuperGroup"
+      count: 1
+      devices: 10
+      customers: 10
+    - name: "SmallGroup"
+      count: 10
+      devices: 10
+      customers: 10
 dashboard:
-  createOnStart: "${DASHBOARD_CREATE_ON_START:true}"
+  createOnStart: "${DASHBOARD_CREATE_ON_START:false}"
   deleteOnComplete: "${DASHBOARD_DELETE_ON_COMPLETE:false}"
   deleteIfExists: "${DASHBOARD_DELETE_IF_EXISTS:true}"
   tenant: alarms.json # please use comma separated list for multiple dashboards: dashboard1.json, dashboard2.json
