@@ -16,7 +16,7 @@
 
 FROM thingsboard/openjdk8
 
-COPY start-tests.sh ${pkg.name}.conf ${pkg.name}.deb /tmp/
+COPY start-tests.sh ${pkg.name}.deb /tmp/
 
 RUN chmod a+x /tmp/*.sh \
     && mv /tmp/start-tests.sh /usr/bin
@@ -24,8 +24,6 @@ RUN chmod a+x /tmp/*.sh \
 RUN dpkg -i /tmp/${pkg.name}.deb
 
 RUN systemctl --no-reload disable --now ${pkg.name}.service > /dev/null 2>&1 || :
-
-RUN mv /tmp/${pkg.name}.conf ${pkg.installFolder}/conf
 
 RUN chmod 555 ${pkg.installFolder}/bin/${pkg.name}.jar
 
