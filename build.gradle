@@ -17,7 +17,7 @@ import org.apache.tools.ant.filters.ReplaceTokens
 
 buildscript {
     ext {
-        osPackageVersion = "3.8.0"
+        osPackageVersion = "8.3.0"
     }
     repositories {
         jcenter()
@@ -57,7 +57,7 @@ ospackage {
     }
 
     // Copy the config files
-    from("target/conf") {
+    from("${buildDir}/conf") {
         exclude "${pkgName}.conf"
         fileType CONFIG | NOREPLACE
         fileMode 0754
@@ -71,12 +71,12 @@ buildRpm {
 
     arch = NOARCH
 
-    version = projectVersion.replace('-', '')
-    archiveName = "${pkgName}.rpm"
+    archiveVersion = projectVersion.replace('-', '')
+    archiveFileName = "${pkgName}.rpm"
 
     requires("java-1.8.0")
 
-    from("target/conf") {
+    from("${buildDir}/conf") {
         include "${pkgName}.conf"
         filter(ReplaceTokens, tokens: ['pkg.platform': 'rpm'])
         fileType CONFIG | NOREPLACE
@@ -93,13 +93,15 @@ buildRpm {
     permissionGroup pkgUser
 
     // Copy the system unit files
-    from("${buildDir}/control/${pkgName}.service") {
+    from("${buildDir}/control/template.service") {
         addParentDirs = false
         fileMode 0644
         into "/usr/lib/systemd/system"
+        rename { String filename ->
+            "${pkgName}.service"
+        }
     }
 
-    directory(pkgLogFolder, 0755)
     link("${pkgInstallFolder}/bin/${pkgName}.yml", "${pkgInstallFolder}/conf/${pkgName}.yml")
     link("/etc/${pkgName}/conf", "${pkgInstallFolder}/conf")
 }
@@ -109,11 +111,11 @@ buildDeb {
 
     arch = "all"
 
-    archiveName = "${pkgName}.deb"
+    archiveFileName = "${pkgName}.deb"
 
     requires("openjdk-8-jre").or("java8-runtime").or("oracle-java8-installer").or("openjdk-8-jre-headless")
 
-    from("target/conf") {
+    from("${buildDir}/conf") {
         include "${pkgName}.conf"
         filter(ReplaceTokens, tokens: ['pkg.platform': 'deb'])
         fileType CONFIG | NOREPLACE
@@ -133,8 +135,36 @@ buildDeb {
     user pkgUser
     permissionGroup pkgUser
 
-    directory(pkgLogFolder, 0755)
-    link("/etc/init.d/${pkgName}", "${pkgInstallFolder}/bin/${pkgName}.jar")
+    // Copy the system unit files
+    from("${buildDir}/control/template.service") {
+        addParentDirs = false
+        fileMode 0644
+        into "/lib/systemd/system"
+        rename { String filename ->
+            "${pkgName}.service"
+        }
+    }
+
     link("${pkgInstallFolder}/bin/${pkgName}.yml", "${pkgInstallFolder}/conf/${pkgName}.yml")
     link("/etc/${pkgName}/conf", "${pkgInstallFolder}/conf")
+}
+
+task renameDeb(type: Copy) {
+    from("${buildDir}/") {
+        include '*.deb'
+        destinationDir file("${buildDir}/")
+        rename { String filename ->
+            "${pkgName}.deb"
+        }
+    }
+}
+
+task renameRpm(type: Copy) {
+    from("${buildDir}/") {
+        include '*.rpm'
+        destinationDir file("${buildDir}/")
+        rename { String filename ->
+            "${pkgName}.rpm"
+        }
+    }
 }
