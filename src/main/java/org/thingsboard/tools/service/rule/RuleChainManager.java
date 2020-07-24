@@ -25,7 +25,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.thingsboard.rest.client.RestClient;
 import org.thingsboard.server.common.data.id.RuleChainId;
-import org.thingsboard.server.common.data.page.TextPageData;
+import org.thingsboard.server.common.data.page.PageData;
 import org.thingsboard.server.common.data.rule.RuleChain;
 import org.thingsboard.server.common.data.rule.RuleChainMetaData;
 
@@ -101,12 +101,12 @@ public class RuleChainManager {
     }
 
     private RuleChainId getDefaultRuleChainId() {
-        ResponseEntity<TextPageData<RuleChain>> ruleChains =
+        ResponseEntity<PageData<RuleChain>> ruleChains =
                 restClient.getRestTemplate().exchange(
-                        restUrl + "/api/ruleChains?limit=999&textSearch=Root Rule Chain",
+                        restUrl + "/api/ruleChains?pageSize=100&page=0&textSearch=Root Rule Chain",
                         HttpMethod.GET,
                         null,
-                        new ParameterizedTypeReference<TextPageData<RuleChain>>() {
+                        new ParameterizedTypeReference<PageData<RuleChain>>() {
                         });
 
         Optional<RuleChain> defaultRuleChain = ruleChains.getBody().getData()

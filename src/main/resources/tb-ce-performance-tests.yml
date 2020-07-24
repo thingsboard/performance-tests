@@ -47,13 +47,13 @@ gateway:
   deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:false}"
 customer:
   startIdx: "${CUSTOMER_START_IDX:0}"
-  endIdx: "${CUSTOMER_END_IDX:3}"
-  createOnStart: "${CUSTOMER_CREATE_ON_START:true}"
+  endIdx: "${CUSTOMER_END_IDX:0}"
+  createOnStart: "${CUSTOMER_CREATE_ON_START:false}"
   deleteOnComplete: "${CUSTOMER_DELETE_ON_COMPLETE:false}"
 dashboard:
-  createOnStart: "${DASHBOARD_CREATE_ON_START:true}"
+  createOnStart: "${DASHBOARD_CREATE_ON_START:false}"
   deleteOnComplete: "${DASHBOARD_DELETE_ON_COMPLETE:false}"
-  deleteIfExists: "${DASHBOARD_DELETE_IF_EXISTS:true}"
+  deleteIfExists: "${DASHBOARD_DELETE_IF_EXISTS:false}"
   tenant: alarms.json # please use comma separated list for multiple dashboards: dashboard1.json, dashboard2.json
   shared: "devices.json"
 warmup:
