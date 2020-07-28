@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -107,7 +108,7 @@ public class DefaultCustomerManager implements CustomerManager {
                     createCustomerDevice(customer.getId(), deviceCount);
 
                     for (int subCustomerIdx = 0; subCustomerIdx < profile.getSubCustomers().getCount(); subCustomerIdx++) {
-                            createSubCustomer(profile, customer.getId(), tokenNumber, subCustomerIdx);
+                        createSubCustomer(profile, customer.getId(), tokenNumber, subCustomerIdx);
                     }
 
                     customerIds.add(customer.getId());
@@ -148,24 +149,39 @@ public class DefaultCustomerManager implements CustomerManager {
             device = restClientService.getRestClient().createDevice(device, device.getName());
             customerDevices.add(device);
             generateDeviceAttributes(device.getId(), device.getName());
+            generateDeviceTelemetry(device.getName());
         }
     }
 
     private void generateDeviceAttributes(DeviceId deviceId, String accessToken) {
         restClientService.getRestClient().saveDeviceAttributes(deviceId, DataConstants.SERVER_SCOPE, createPayload(""));
-        restClientService.getRestClient().saveDeviceAttributes(deviceId, DataConstants.SHARED_SCOPE, createPayload("shared_"));
-        restClientService.getRestClient().getRestTemplate().postForEntity(restUrl + "/api/v1/" + accessToken + "/attributes/", createPayload("client_"),
+        restClientService.getRestClient().saveDeviceAttributes(deviceId, DataConstants.SHARED_SCOPE, createPayload("shared"));
+        restClientService.getRestClient().getRestTemplate().postForEntity(restUrl + "/api/v1/" + accessToken + "/attributes/", createPayload("client"),
+                ResponseEntity.class,
+                accessToken);
+    }
+
+    private void generateDeviceTelemetry(String accessToken) {
+        restClientService.getRestClient().getRestTemplate().postForEntity(restUrl + "/api/v1/" + accessToken + "/telemetry/", createPayload("ts"),
                 ResponseEntity.class,
                 accessToken);
     }
 
     private JsonNode createPayload(String prefix) {
         ObjectNode node = mapper.createObjectNode();
-        node.put(prefix+"stringKey", "value"+(int)(Math.random()*1000));
-        node.put(prefix+"booleanKey", Math.random() > 0.5);
-        node.put(prefix+"doubleKey", Math.random()*1000);
-        node.put(prefix+"longKey", (long)(Math.random()*1000));
+        node.put(buildKey(prefix, "stringKey"), "value" + (int) (Math.random() * 1000));
+        node.put(buildKey(prefix, "booleanKey"), Math.random() > 0.5);
+        node.put(buildKey(prefix, "doubleKey"), Math.random() * 1000);
+        node.put(buildKey(prefix, "longKey"), (long) (Math.random() * 1000));
         return node;
+    }
+
+    private String buildKey(String prefix, String key) {
+        if (StringUtils.isEmpty(prefix)) {
+            return key;
+        } else {
+            return prefix + key.substring(0, 1).toUpperCase() + key.substring(1);
+        }
     }
 
     private void createSubCustomer(CustomerProfile profile, CustomerId parentId, int tokenNumber, int subCustomerIdx) {

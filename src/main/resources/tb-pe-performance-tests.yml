@@ -54,13 +54,13 @@ customer:
       minDevices: "${SMALL_CUSTOMER_MIN_DEVICES:5}"
       maxDevices: "${SMALL_CUSTOMER_MAX_DEVICES:10}"
       subCustomers:
-        count: "${SMALL_CUSTOMER_SUB_COUNT:5}"
-        minDevices: "${SMALL_CUSTOMER_SUB_MIN_DEVICES:5}"
+        count: "${SMALL_CUSTOMER_SUB_COUNT:10}"
+        minDevices: "${SMALL_CUSTOMER_SUB_MIN_DEVICES:10}"
         maxDevices: "${SMALL_CUSTOMER_SUB_MAX_DEVICES:10}"
     - name: "Big"
       count: "${BIG_CUSTOMER_COUNT:100}"
-      minDevices: "${BIG_CUSTOMER_MIN_DEVICES:1000}"
-      maxDevices: "${BIG_CUSTOMER_MAX_DEVICES:1000}"
+      minDevices: "${BIG_CUSTOMER_MIN_DEVICES:100}"
+      maxDevices: "${BIG_CUSTOMER_MAX_DEVICES:100}"
       subCustomers:
         count: "${BIG_CUSTOMER_SUB_COUNT:100}"
         minDevices: "${BIG_CUSTOMER_SUB_MIN_DEVICES:20}"
