@@ -43,7 +43,8 @@
         <pkg.unixLogFolder>/var/log/${pkg.name}</pkg.unixLogFolder>
         <pkg.installFolder>/usr/share/${pkg.name}</pkg.installFolder>
         <pkg.win.dist>${project.build.directory}/windows</pkg.win.dist>
-        <thingsboard.version>3.0.1PE-SNAPSHOT</thingsboard.version>
+        <thingsboardce.version>3.1.0</thingsboardce.version>
+        <thingsboard.version>3.1.0PE</thingsboard.version>
         <docker.repo>volodymyrbabak</docker.repo>
         <tb-ce-performance-test.docker.name>tb-ce-performance-test</tb-ce-performance-test.docker.name>
     </properties>
@@ -83,15 +84,15 @@
             <version>${lombok.version}</version>
             <optional>true</optional>
         </dependency>
-        <dependency>
-            <groupId>org.thingsboard</groupId>
-            <artifactId>tools</artifactId>
-            <version>${thingsboard.version}</version>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>org.thingsboard</groupId>-->
+<!--            <artifactId>tools</artifactId>-->
+<!--            <version>${thingsboard.version}</version>-->
+<!--        </dependency>-->
         <dependency>
             <groupId>org.thingsboard</groupId>
             <artifactId>netty-mqtt</artifactId>
-            <version>${thingsboard.version}</version>
+            <version>${thingsboardce.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
@@ -159,9 +160,9 @@
                     <version>${spring-boot.version}</version>
                 </plugin>
                 <plugin>
-                    <groupId>org.fortasoft</groupId>
+                    <groupId>org.thingsboard</groupId>
                     <artifactId>gradle-maven-plugin</artifactId>
-                    <version>1.0.8</version>
+                    <version>1.0.10</version>
                 </plugin>
                 <plugin>
                     <groupId>com.mycila</groupId>
@@ -427,7 +428,7 @@
                 </executions>
             </plugin>
             <plugin>
-                <groupId>org.fortasoft</groupId>
+                <groupId>org.thingsboard</groupId>
                 <artifactId>gradle-maven-plugin</artifactId>
                 <configuration>
                     <tasks>
@@ -576,7 +577,7 @@
     <repositories>
         <repository>
             <id>central</id>
-            <url>http://repo1.maven.org/maven2/</url>
+            <url>https://repo1.maven.org/maven2/</url>
         </repository>
         <repository>
             <id>spring-snapshots</id>
@@ -597,7 +598,7 @@
         <repository>
             <id>typesafe</id>
             <name>Typesafe Repository</name>
-            <url>http://repo.typesafe.com/typesafe/releases/</url>
+            <url>https://repo.typesafe.com/typesafe/releases/</url>
         </repository>
         <repository>
             <id>sonatype</id>
@@ -606,7 +607,7 @@
         <repository>
             <id>jenkins</id>
             <name>Jenkins Repository</name>
-            <url>http://repo.jenkins-ci.org/releases</url>
+            <url>https://repo.jenkins-ci.org/releases</url>
             <snapshots>
                 <enabled>false</enabled>
             </snapshots>

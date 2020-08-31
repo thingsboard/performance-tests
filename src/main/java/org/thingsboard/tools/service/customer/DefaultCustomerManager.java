@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,10 +19,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
@@ -36,11 +35,10 @@ import org.thingsboard.server.common.data.group.EntityGroupInfo;
 import org.thingsboard.server.common.data.id.CustomerId;
 import org.thingsboard.server.common.data.id.DeviceId;
 import org.thingsboard.server.common.data.id.EntityId;
-import org.thingsboard.server.common.data.id.UserId;
-import org.thingsboard.server.common.data.permission.GroupPermission;
+import org.thingsboard.server.common.data.id.TenantId;
+import org.thingsboard.server.common.data.relation.EntityRelation;
+import org.thingsboard.server.common.data.relation.RelationTypeGroup;
 import org.thingsboard.server.common.data.security.Authority;
-import org.thingsboard.server.common.data.security.DeviceCredentials;
-import org.thingsboard.server.common.data.security.DeviceCredentialsType;
 import org.thingsboard.tools.service.dashboard.DashboardManager;
 import org.thingsboard.tools.service.shared.DefaultRestClientService;
 import org.thingsboard.tools.service.shared.RestClientService;
@@ -48,7 +46,7 @@ import org.thingsboard.tools.service.shared.RestClientService;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -60,6 +58,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Service
 public class DefaultCustomerManager implements CustomerManager {
 
+
+    private static double MIN_LAT = 47.38;
+    private static double MAX_LAT = 51.01;
+    private static double MIN_LONG = 0.67;
+    private static double MAX_LONG = 17.66;
+    private static final Random RANDOM = new Random();
     private static final ObjectMapper mapper = new ObjectMapper();
     private final List<CustomerId> customerIds = Collections.synchronizedList(new ArrayList<>(1024));
 
@@ -70,6 +74,7 @@ public class DefaultCustomerManager implements CustomerManager {
     private final DashboardManager dashboardManager;
     private final RestClientService restClientService;
     private final AtomicInteger tokenSeq = new AtomicInteger();
+    private final String randomPrefix = RandomStringUtils.randomAlphanumeric(3);
     private final AtomicInteger deviceSeq = new AtomicInteger();
     private final Set<Device> customerDevices = ConcurrentHashMap.newKeySet();
 
@@ -100,8 +105,9 @@ public class DefaultCustomerManager implements CustomerManager {
                 try {
                     String title = profile.getName() + " C" + String.format("%8d", tokenNumber).replace(" ", "0");
                     customer = saveCustomer(null, title);
+                    restClientService.getRestClient().saveRelation(new EntityRelation(customer.getTenantId(), customer.getId(), "Manages", RelationTypeGroup.COMMON));
 
-                    String email = "user@customer" + tokenNumber + "." + profile.getName().toLowerCase() + ".com";
+                    String email = "user" + randomPrefix + "@customer" + tokenNumber + "." + profile.getName().toLowerCase() + ".com";
                     saveCustomerAdmin(customer, email);
 
                     int deviceCount = random(profile.getMinDevices(), profile.getMaxDevices());
@@ -144,30 +150,60 @@ public class DefaultCustomerManager implements CustomerManager {
         for (int i = 0; i < deviceCount; i++) {
             Device device = new Device();
             device.setOwnerId(customerId);
-            device.setName("CD" + deviceSeq.incrementAndGet());
+            device.setName(randomPrefix + deviceSeq.incrementAndGet());
             device.setType("default");
             device = restClientService.getRestClient().createDevice(device, device.getName());
             customerDevices.add(device);
             generateDeviceAttributes(device.getId(), device.getName());
             generateDeviceTelemetry(device.getName());
+            restClientService.getRestClient().saveRelation(new EntityRelation(customerId, device.getId(), "Manages", RelationTypeGroup.COMMON));
         }
     }
 
     private void generateDeviceAttributes(DeviceId deviceId, String accessToken) {
-        restClientService.getRestClient().saveDeviceAttributes(deviceId, DataConstants.SERVER_SCOPE, createPayload(""));
-        restClientService.getRestClient().saveDeviceAttributes(deviceId, DataConstants.SHARED_SCOPE, createPayload("shared"));
-        restClientService.getRestClient().getRestTemplate().postForEntity(restUrl + "/api/v1/" + accessToken + "/attributes/", createPayload("client"),
-                ResponseEntity.class,
-                accessToken);
+        restClientService.getRestClient().saveDeviceAttributes(deviceId, DataConstants.SERVER_SCOPE, createAttrPayload());
+//        restClientService.getRestClient().saveDeviceAttributes(deviceId, DataConstants.SHARED_SCOPE, createPayload("shared"));
+//        restClientService.getRestClient().getRestTemplate().postForEntity(restUrl + "/api/v1/" + accessToken + "/attributes/", createDummyPayload("client"),
+//                ResponseEntity.class,
+//                accessToken);
     }
 
     private void generateDeviceTelemetry(String accessToken) {
-        restClientService.getRestClient().getRestTemplate().postForEntity(restUrl + "/api/v1/" + accessToken + "/telemetry/", createPayload("ts"),
+        restClientService.getRestClient().getRestTemplate().postForEntity(restUrl + "/api/v1/" + accessToken + "/telemetry/", createTsPayload(),
                 ResponseEntity.class,
                 accessToken);
     }
 
-    private JsonNode createPayload(String prefix) {
+    private JsonNode createAttrPayload() {
+        ObjectNode node = mapper.createObjectNode();
+        // Current time - random day 0-365 - random hour 0-24
+        node.put("installDate", System.currentTimeMillis() - ((1000 * 60 * 60 * 24 * RANDOM.nextInt(365)) + 1000 * 60 * 60 * RANDOM.nextInt(24)));
+        node.put("latitude", MIN_LAT + (MAX_LAT - MIN_LAT) * RANDOM.nextDouble());
+        node.put("longitude", MIN_LONG + (MAX_LONG - MIN_LONG) * RANDOM.nextDouble());
+        return node;
+    }
+
+    private JsonNode createTsPayload() {
+        ObjectNode node = mapper.createObjectNode();
+        if (RANDOM.nextInt(100) > 2) {
+            node.put("batteryLevel", 50 + RANDOM.nextInt(50));
+        } else {
+            node.put("batteryLevel", RANDOM.nextInt(20));
+        }
+        if (RANDOM.nextInt(100) > 20) {
+            node.put("firmwareVersion", "v1.1");
+        } else {
+            node.put("firmwareVersion", "v1.0");
+        }
+        if (RANDOM.nextInt(100) > 1) {
+            node.put("temperature", RANDOM.nextInt(30));
+        } else {
+            node.put("temperature", 30 + RANDOM.nextInt(50));
+        }
+        return node;
+    }
+
+    private JsonNode createDummyPayload(String prefix) {
         ObjectNode node = mapper.createObjectNode();
         node.put(buildKey(prefix, "stringKey"), "value" + (int) (Math.random() * 1000));
         node.put(buildKey(prefix, "booleanKey"), Math.random() > 0.5);
@@ -189,7 +225,8 @@ public class DefaultCustomerManager implements CustomerManager {
         try {
             String title = profile.getName() + " C" + String.format("%8d", tokenNumber).replace(" ", "0") + "-" + String.format("%4d", subCustomerIdx).replace(" ", "0");
             customer = saveCustomer(parentId, title);
-            String email = "user@" + subCustomerIdx + ".customer" + tokenNumber + "." + profile.getName().toLowerCase() + ".com";
+            restClientService.getRestClient().saveRelation(new EntityRelation(parentId, customer.getId(), "Manages", RelationTypeGroup.COMMON));
+            String email = "user" + randomPrefix + "@" + subCustomerIdx + ".customer" + tokenNumber + "." + profile.getName().toLowerCase() + ".com";
             saveCustomerAdmin(customer, email);
             int deviceCount = random(profile.getSubCustomers().getMinDevices(), profile.getSubCustomers().getMaxDevices());
             createCustomerDevice(customer.getId(), deviceCount);
