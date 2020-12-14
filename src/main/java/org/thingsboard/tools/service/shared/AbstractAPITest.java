@@ -218,10 +218,15 @@ public abstract class AbstractAPITest {
                         entity.setType("device");
                     }
 
-                    if (setCredentials) {
-                        entity = restClientService.getRestClient().createDevice(entity, token);
-                    } else {
-                        entity = restClientService.getRestClient().createDevice(entity);
+                    try {
+
+                        if (setCredentials) {
+                            entity = restClientService.getRestClient().saveDevice(entity, token);
+                        } else {
+                            entity = restClientService.getRestClient().saveDevice(entity);
+                        }
+                    }catch (Exception e){
+                        throw e;
                     }
 
                     result.add(entity);

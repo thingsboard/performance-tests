@@ -21,11 +21,11 @@ server:
   port: "${SERVER_PORT:19090}"
 
 rest:
-  url: "${REST_URL:http://localhost:8080}"
-  username: "${REST_USERNAME:tenant@thingsboard.org}"
-  password: "${REST_PASSWORD:tenant}"
+  url: "${REST_URL:https://thingsboard.cloud}"
+  username: "${REST_USERNAME:}"
+  password: "${REST_PASSWORD:}"
 mqtt:
-  host: "${MQTT_HOST:localhost}"
+  host: "${MQTT_HOST:thingsboard.cloud}"
   port: "${MQTT_PORT:1883}"
   ssl:
     enabled: "${MQTT_SSL_ENABLED:false}"
@@ -35,8 +35,8 @@ device:
   # Device API to use - MQTT or HTTP
   api: "${DEVICE_API:MQTT}"
   startIdx: "${DEVICE_START_IDX:0}"
-  endIdx: "${DEVICE_END_IDX:100}"
-  count: "${DEVICE_COUNT:100}" # count of devices to be used by clients in k8s deployment run
+  endIdx: "${DEVICE_END_IDX:2000}"
+  count: "${DEVICE_COUNT:2000}" # count of devices to be used by clients in k8s deployment run
   createOnStart: "${DEVICE_CREATE_ON_START:false}"
   deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
 gateway:
@@ -46,23 +46,23 @@ gateway:
   createOnStart: "${GATEWAY_CREATE_ON_START:false}"
   deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:false}"
 customer:
-  createOnStart: "${CUSTOMER_CREATE_ON_START:true}"
+  createOnStart: "${CUSTOMER_CREATE_ON_START:false}"
   deleteOnComplete: "${CUSTOMER_DELETE_ON_COMPLETE:false}"
   profiles:
     - name: "Small"
-      count: "${SMALL_CUSTOMER_COUNT:1000}"
-      minDevices: "${SMALL_CUSTOMER_MIN_DEVICES:10}"
-      maxDevices: "${SMALL_CUSTOMER_MAX_DEVICES:10}"
+      count: "${SMALL_CUSTOMER_COUNT:0}"
+      minDevices: "${SMALL_CUSTOMER_MIN_DEVICES:0}"
+      maxDevices: "${SMALL_CUSTOMER_MAX_DEVICES:0}"
       subCustomers:
-        count: "${SMALL_CUSTOMER_SUB_COUNT:10}"
+        count: "${SMALL_CUSTOMER_SUB_COUNT:0}"
         minDevices: "${SMALL_CUSTOMER_SUB_MIN_DEVICES:7}"
         maxDevices: "${SMALL_CUSTOMER_SUB_MAX_DEVICES:7}"
     - name: "Big"
-      count: "${BIG_CUSTOMER_COUNT:10}"
+      count: "${BIG_CUSTOMER_COUNT:0}"
       minDevices: "${BIG_CUSTOMER_MIN_DEVICES:500}"
       maxDevices: "${BIG_CUSTOMER_MAX_DEVICES:500}"
       subCustomers:
-        count: "${BIG_CUSTOMER_SUB_COUNT:100}"
+        count: "${BIG_CUSTOMER_SUB_COUNT:0}"
         minDevices: "${BIG_CUSTOMER_SUB_MIN_DEVICES:15}"
         maxDevices: "${BIG_CUSTOMER_SUB_MAX_DEVICES:15}"
 shared:
@@ -96,17 +96,17 @@ test:
   useInstanceIdxRegex: "${USE_INSTANCE_IDX_REGEX:false}"
   instanceIdxRegexSource: "${INSTANCE_IDX_REGEX_SOURCE:}"
   instanceIdxRegex: "${INSTANCE_IDX_REGEX:([0-9]+)$}"
-  enabled: "${TEST_ENABLED:false}"
-  updateRootRuleChain: "${UPDATE_ROOT_RULE_CHAIN:true}"
-  revertRootRuleChain: "${REVERT_ROOT_RULE_CHAIN:true}"
+  enabled: "${TEST_ENABLED:true}"
+  updateRootRuleChain: "${UPDATE_ROOT_RULE_CHAIN:false}"
+  revertRootRuleChain: "${REVERT_ROOT_RULE_CHAIN:false}"
   # Test API to use - device or gateway
-  api: "${TEST_API:gateway}"
+  api: "${TEST_API:device}"
   sequential: "${TEST_SEQUENTIAL:true}"
   ruleChainName:  "${RULE_CHAIN_NAME:root_rule_chain_ce.json}"
   # messages per second.
   telemetry: "${TEST_TELEMETRY:true}"
-  mps: "${MESSAGES_PER_SECOND:100}"
-  duration: "${DURATION_IN_SECONDS:10}"
+  mps: "${MESSAGES_PER_SECOND:2000}"
+  duration: "${DURATION_IN_SECONDS:86400}"
   alarms:
     start: "${ALARM_STORM_START_SECOND:0}"
     end: "${ALARM_STORM_END_SECOND:0}"

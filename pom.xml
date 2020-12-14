@@ -43,8 +43,8 @@
         <pkg.unixLogFolder>/var/log/${pkg.name}</pkg.unixLogFolder>
         <pkg.installFolder>/usr/share/${pkg.name}</pkg.installFolder>
         <pkg.win.dist>${project.build.directory}/windows</pkg.win.dist>
-        <thingsboardce.version>3.1.0</thingsboardce.version>
-        <thingsboard.version>3.1.0PE</thingsboard.version>
+        <thingsboardce.version>3.2.0</thingsboardce.version>
+        <thingsboard.version>3.2.0PE</thingsboard.version>
         <docker.repo>volodymyrbabak</docker.repo>
         <tb-ce-performance-test.docker.name>tb-ce-performance-test</tb-ce-performance-test.docker.name>
     </properties>

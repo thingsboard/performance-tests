@@ -91,7 +91,7 @@ public class DefaultCustomerManager implements CustomerManager {
 
     @Override
     public void createCustomers() throws Exception {
-        profiles.getProfiles().forEach(this::createCustomers);
+        profiles.getProfiles().stream().filter(profile -> profile.getCount() > 0).forEach(this::createCustomers);
     }
 
     private void createCustomers(CustomerProfile profile) {
