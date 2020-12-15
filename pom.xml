@@ -21,7 +21,7 @@
 
     <groupId>org.thingsboard</groupId>
     <artifactId>performance-tests</artifactId>
-    <version>3.0.0</version>
+    <version>3.3.0</version>
     <packaging>jar</packaging>
 
     <name>ThingsBoard Performance Tests</name>
@@ -43,7 +43,7 @@
         <pkg.unixLogFolder>/var/log/${pkg.name}</pkg.unixLogFolder>
         <pkg.installFolder>/usr/share/${pkg.name}</pkg.installFolder>
         <pkg.win.dist>${project.build.directory}/windows</pkg.win.dist>
-        <thingsboard.version>3.0.1</thingsboard.version>
+        <thingsboard.version>3.3.0-SNAPSHOT</thingsboard.version>
         <docker.repo>thingsboard</docker.repo>
         <dockerfile.skip>true</dockerfile.skip>
         <docker.name>tb-ce-performance-tests</docker.name>
