@@ -43,7 +43,7 @@ public class MqttDeviceAPITest extends BaseMqttAPITest implements DeviceAPITest 
 
     @Override
     public void createDevices() throws Exception {
-        createDevices(true);
+        createDevices(true, false);
     }
 
     @Override
@@ -96,7 +96,7 @@ public class MqttDeviceAPITest extends BaseMqttAPITest implements DeviceAPITest 
         } else {
             devicesNames = new ArrayList<>();
             for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
-                devicesNames.add(getToken(false, i));
+                devicesNames.add(getToken(false, false, i));
             }
         }
         for (String device : devicesNames) {

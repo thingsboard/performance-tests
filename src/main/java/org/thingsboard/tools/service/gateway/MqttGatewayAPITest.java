@@ -69,12 +69,12 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
 
     @Override
     public void createDevices() throws Exception {
-        createDevices(false);
+        createDevices(false, false);
     }
 
     @Override
     public void createGateways() throws Exception {
-        List<Device> entities = createEntities(gatewayStartIdx, gatewayEndIdx, true, true);
+        List<Device> entities = createEntities(gatewayStartIdx, gatewayEndIdx, true, false,true);
         gateways = Collections.synchronizedList(entities);
     }
 
@@ -88,7 +88,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         } else {
             gatewayNames = new ArrayList<>();
             for (int i = gatewayStartIdx; i < gatewayEndIdx; i++) {
-                gatewayNames.add(getToken(true, i));
+                gatewayNames.add(getToken(true, false, i));
             }
         }
         for (String gateway : gatewayNames) {
@@ -116,8 +116,8 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
             int gatewayIdx = deviceIdx % gatewayCount;
             DeviceClient client = new DeviceClient();
             client.setMqttClient(mqttClients.get(gatewayIdx));
-            client.setDeviceName(getToken(false, i));
-            client.setGatewayName(getToken(true, gatewayIdx));
+            client.setDeviceName(getToken(false, false, i));
+            client.setGatewayName(getToken(true, false, gatewayIdx));
             deviceClients.add(client);
         }
     }

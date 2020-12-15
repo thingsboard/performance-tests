@@ -71,7 +71,7 @@ public class HttpDeviceAPITest extends AbstractAPITest implements DeviceAPITest 
 
     @Override
     public void createDevices() throws Exception {
-        createDevices(true);
+        createDevices(true, false);
     }
 
     @Override
@@ -155,10 +155,10 @@ public class HttpDeviceAPITest extends AbstractAPITest implements DeviceAPITest 
         if (sequentialTest) {
             int iterationOffset = (iteration * testMessagesPerSecond) % deviceCount;
             int idx = (iterationOffset + msgOffsetIdx) % deviceCount;
-            return getToken(false, idx);
+            return getToken(false, false, idx);
         } else {
             while (true) {
-                client = getToken(false, random.nextInt(deviceCount));
+                client = getToken(false, false, random.nextInt(deviceCount));
                 if (iterationDevices.add(client)) {
                     break;
                 }
