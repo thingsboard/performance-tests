@@ -15,11 +15,16 @@
  */
 package org.thingsboard.tools.service.shared;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.thingsboard.server.common.data.Dashboard;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.CustomerId;
 import org.thingsboard.server.common.data.id.DeviceCredentialsId;
@@ -32,6 +37,7 @@ import org.thingsboard.tools.service.msg.Msg;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -47,7 +53,7 @@ import java.util.regex.Pattern;
 @Slf4j
 public abstract class AbstractAPITest {
 
-    private static ObjectMapper mapper = new ObjectMapper();
+    protected static ObjectMapper mapper = new ObjectMapper();
 
     protected ScheduledFuture<?> reportScheduledFuture;
 
@@ -85,21 +91,13 @@ public abstract class AbstractAPITest {
     @Value("${test.alarms.aps:0}")
     protected int alarmsPerSecond;
 
-    @Value("${lwm2m.noSec.enabled:false}")
-    protected boolean lwm2mNoSecEnabled;
-    @Value("${lwm2m.psk.enabled:false}")
-    protected boolean lwm2mPSKEnabled;
-    @Value("${lwm2m.rpk.enabled:false}")
-    protected boolean lwm2mRPKEnabled;
-    @Value("${lwm2m.x509.enabled:false}")
-    protected boolean lwm2mX509Enabled;
-
     @Autowired
     @Qualifier("randomTelemetryGenerator")
     protected MessageGenerator tsMsgGenerator;
     @Autowired
     @Qualifier("randomAttributesGenerator")
     protected MessageGenerator attrMsgGenerator;
+
     @Autowired
     protected RestClientService restClientService;
     @Autowired
@@ -152,8 +150,8 @@ public abstract class AbstractAPITest {
         }
     }
 
-    protected void createDevices(boolean setCredentials, boolean isLwm2m) throws Exception {
-        List<Device> entities = createEntities(deviceStartIdx, deviceEndIdx, false, isLwm2m, setCredentials);
+    protected void createDevices(boolean setCredentials) throws Exception {
+        List<Device> entities = createEntities(deviceStartIdx, deviceEndIdx, false, setCredentials);
         devices = Collections.synchronizedList(entities);
     }
 
@@ -172,8 +170,8 @@ public abstract class AbstractAPITest {
 
     protected abstract void runApiTestIteration(int iteration, AtomicInteger totalSuccessPublishedCount, AtomicInteger totalFailedPublishedCount, CountDownLatch testDurationLatch);
 
-    protected void removeEntities(List<DeviceId> entityIds, boolean isGateway) throws InterruptedException {
-        log.info("Removing {} {}...", isGateway ? "gateways" : "devices", entityIds.size());
+    protected void removeEntities(List<DeviceId> entityIds, String typeDevice) throws InterruptedException {
+        log.info("Removing [{}] [{}]...", typeDevice, entityIds.size());
         CountDownLatch latch = new CountDownLatch(entityIds.size());
         AtomicInteger count = new AtomicInteger();
         for (DeviceId entityId : entityIds) {
@@ -182,7 +180,7 @@ public abstract class AbstractAPITest {
                     restClientService.getRestClient().deleteDevice(entityId);
                     count.getAndIncrement();
                 } catch (Exception e) {
-                    log.error("Error while deleting {}", isGateway ? "gateway" : "device", e);
+                    log.error("Error while deleting [{}]", typeDevice, getHttpErrorException (e));
                 } finally {
                     latch.countDown();
                 }
@@ -191,7 +189,7 @@ public abstract class AbstractAPITest {
 
         ScheduledFuture<?> logScheduleFuture = restClientService.getLogScheduler().scheduleAtFixedRate(() -> {
             try {
-                log.info("{} {} have been removed so far...", isGateway ? "gateways" : "devices", count.get());
+                log.info("[{}] [{}] have been removed so far...", typeDevice, count.get());
             } catch (Exception ignored) {
             }
         }, 0, DefaultRestClientService.LOG_PAUSE, TimeUnit.SECONDS);
@@ -199,11 +197,11 @@ public abstract class AbstractAPITest {
         latch.await();
         logScheduleFuture.cancel(true);
         Thread.sleep(1000);
-        log.info("{} {} have been removed successfully! {} were failed for removal!", count.get(), isGateway ? "gateways" : "devices", entityIds.size() - count.get());
+        log.info("[{}] [{}] have been removed successfully! {} were failed for removal!", count.get(), typeDevice, entityIds.size() - count.get());
     }
 
 
-    protected List<Device> createEntities(int startIdx, int endIdx, boolean isGateway, boolean isLwm2m, boolean setCredentials) throws InterruptedException {
+    protected List<Device> createEntities(int startIdx, int endIdx, boolean isGateway, boolean setCredentials) throws InterruptedException {
         List<Device> result;
         if (isGateway) {
             result = Collections.synchronizedList(new ArrayList<>(1024));
@@ -214,13 +212,7 @@ public abstract class AbstractAPITest {
 
 
         List<CustomerId> customerIds = customerManager.getCustomerIds();
-        if (isLwm2m) {
-            log.info("Creating on one SecurityMode [{}] lwm2m devices...", entityCount);
-            if (this.lwm2mNoSecEnabled) this.createEntitiesLwm2m(entityCount, startIdx, endIdx, result, Lwm2mProfile.NO_SEC);
-            if (this.lwm2mPSKEnabled) this.createEntitiesLwm2m(entityCount, startIdx, endIdx, result, Lwm2mProfile.PSK);
-            if (this.lwm2mRPKEnabled) this.createEntitiesLwm2m(entityCount, startIdx, endIdx, result, Lwm2mProfile.RPK);
-            if (this.lwm2mX509Enabled) this.createEntitiesLwm2m(entityCount, startIdx, endIdx, result, Lwm2mProfile.X509);
-        } else {
+
             log.info("Creating {} {}...", entityCount, (isGateway ? "gateways" : "devices"));
             CountDownLatch latch = new CountDownLatch(entityCount);
             AtomicInteger count = new AtomicInteger();
@@ -229,7 +221,7 @@ public abstract class AbstractAPITest {
                 restClientService.getHttpExecutor().submit(() -> {
                     Device entity = new Device();
                     try {
-                        String token = getToken(isGateway, isLwm2m, tokenNumber);
+                        String token = getToken(isGateway, tokenNumber);
                         if (isGateway) {
                             entity.setName(token);
                             entity.setType("gateway");
@@ -249,7 +241,7 @@ public abstract class AbstractAPITest {
 
                         count.getAndIncrement();
                     } catch (Exception e) {
-                        log.error("Error while creating entity", e);
+                        log.error("Error while creating entity [{}] [{}]", entity.getName(), getHttpErrorException (e));
                         if (entity != null && entity.getId() != null) {
                             restClientService.getRestClient().deleteDevice(entity.getId());
                         }
@@ -270,113 +262,47 @@ public abstract class AbstractAPITest {
             logScheduleFuture.cancel(true);
 
             log.info("{} {} have been created successfully!", result.size(), isGateway ? "gateways" : "devices");
-        }
         return result;
     }
 
-    private void createEntitiesLwm2m(int entityCount, int startIdx, int endIdx, List<Device> result, Lwm2mProfile profileName)  throws InterruptedException {
-        CountDownLatch latch = new CountDownLatch(entityCount);
-        AtomicInteger count = new AtomicInteger();
-        for (int i = startIdx; i < endIdx; i++) {
-            final int tokenNumber = i;
-            restClientService.getHttpExecutor().submit(() -> {
-                Device entity = new Device();
-                try {
-                    String token = getToken(false, true, tokenNumber);
-                    entity.setName(token);
-                    entity.setType(profileName.type);
-//                    UUID id = UUIDConverter.fromString("3fce0eb03edf11eb90efd1a8958d2f78");
-//                    entity.setDeviceProfileId(new DeviceProfileId(id));
-                    /**
-                     * Api -> /device?accessToken=null
-                     * 1) create
-                     Device
-                     [tenantId=null,
-                     customerId=null,
-                     name=Nooo,
-                     type=null,
-                     label=,
-                     deviceProfileId=3fce0eb0-3edf-11eb-90ef-d1a8958d2f78,
-                     deviceData=null,
-                     additionalInfo={"gateway":false,"description":""},
-                     createdTime=0,
-                     id=null]
-                     *
-                     * 2) after create:
-                     * DeviceCredentials
-                     *     private DeviceId deviceId;
-                     *     private DeviceCredentialsType credentialsType;
-                     *     private String credentialsId;
-                     *     private String credentialsValue;
-                     * saveDeviceCredentials
-                     * DeviceCredentials [
-                     * deviceId=1c8c1360-3eef-11eb-90ef-d1a8958d2f78,
-                     * credentialsType=LWM2M_CREDENTIALS,
-                     * credentialsId=default_client_lwm2m_end_point_no_sec,
-                     * credentialsValue={"client":{"securityConfigClientMode":"NO_SEC"},"bootstrap":{"bootstrapServer":{"securityMode":"NO_SEC","clientPublicKeyOrId":"","clientSecretKey":""},"lwm2mServer":{"securityMode":"NO_SEC","clientPublicKeyOrId":"","clientSecretKey":""}}},
-                     * createdTime=1608048226210,
-                     * id=1c8de820-3eef-11eb-90ef-d1a8958d2f78
-                     * ]
-                     *
-                     */
-//                    entity = restClientService.getRestClient().createDevice(entity, token);
-//                    entity = restClientService.getRestClient().createDevice(entity);
-                    entity = restClientService.getRestClient().saveDevice(entity, token);
-                    Optional<DeviceCredentials> deviceCredentialsOpt = restClientService.getRestClient().getDeviceCredentialsByDeviceId(entity.getId());
-                    if (deviceCredentialsOpt.isPresent()) {
-                        DeviceCredentials deviceCredentials = deviceCredentialsOpt.get();
-                        this.updateDeviceCredentials(deviceCredentials);
-
-                        DeviceCredentials entityCredo = restClientService.getRestClient().saveDeviceCredentials(deviceCredentials);
-                        result.add(entity);
-                    }
-                    count.getAndIncrement();
-                } catch (Exception e) {
-                    log.error("Error while creating entity", e);
-                    if (entity != null && entity.getId() != null) {
-                        restClientService.getRestClient().deleteDevice(entity.getId());
-                    }
-                } finally {
-                    latch.countDown();
-                }
-            });
-        }
-        ScheduledFuture<?> logScheduleFuture = restClientService.getLogScheduler().scheduleAtFixedRate(() -> {
-            try {
-                log.info("[{}] [{}] have been created so far...", count.get(), "lwm2m_" + profileName.type);
-            } catch (Exception ignored) {
-            }
-        }, 0, DefaultRestClientService.LOG_PAUSE, TimeUnit.SECONDS);
-
-        latch.await();
-        logScheduleFuture.cancel(true);
-
-        log.info("[{}] [{}] have been created successfully!", result.size(), "lwm2m");
-    }
-
-    /**
-     * DeviceCredentials [
-     * deviceId=1c8c1360-3eef-11eb-90ef-d1a8958d2f78,
-     * credentialsType=LWM2M_CREDENTIALS,
-     * credentialsId=default_client_lwm2m_end_point_no_sec,
-     * credentialsValue={"client":{"securityConfigClientMode":"NO_SEC"},"bootstrap":{"bootstrapServer":{"securityMode":"NO_SEC","clientPublicKeyOrId":"","clientSecretKey":""},"lwm2mServer":{"securityMode":"NO_SEC","clientPublicKeyOrId":"","clientSecretKey":""}}},
-     * createdTime=1608048226210,
-     * id=1c8de820-3eef-11eb-90ef-d1a8958d2f78
-     * ]
-     *
-     * @return
-     */
-    private void updateDeviceCredentials(DeviceCredentials deviceCredentials) {
-        deviceCredentials.setCredentialsType(DeviceCredentialsType.LWM2M_CREDENTIALS);
-        String credentialsValue = "{\"client\":{\"securityConfigClientMode\":\"NO_SEC\"},\"bootstrap\":{\"bootstrapServer\":{\"securityMode\":\"NO_SEC\",\"clientPublicKeyOrId\":\"\",\"clientSecretKey\":\"\"},\"lwm2mServer\":{\"securityMode\":\"NO_SEC\",\"clientPublicKeyOrId\":\"\",\"clientSecretKey\":\"\"}}}";
-        deviceCredentials.setCredentialsValue(credentialsValue);
-    }
-
-    protected String getToken(boolean isGateway, boolean isLwm2m, int token) {
-        return (isGateway ? "GW" : isLwm2m ? "LW" : "DW") + String.format("%8d", token).replace(" ", "0");
+    protected String getToken(boolean isGateway, int token) {
+        return (isGateway ? "GW" : "DW") + String.format("%8d", token).replace(" ", "0");
     }
 
     protected Msg getNextMessage(String deviceName, boolean alarmRequired) {
         return (telemetryTest ? tsMsgGenerator : attrMsgGenerator).getNextMessage(deviceName, alarmRequired);
     }
+
+    protected String getHttpErrorException (Exception e) {
+        if( e instanceof HttpClientErrorException) {
+           return ((HttpClientErrorException) e).getResponseBodyAsString();
+        }
+        else if (e instanceof HttpServerErrorException) {
+            return  ((HttpServerErrorException) e).getResponseBodyAsString();
+        }
+        else {
+            return e.toString();
+        }
+    }
+
+    protected <T> T loadJsonResource(String pathResource, Class<T> type) throws IOException {
+//        try {
+            JsonNode node = mapper.readTree(this.getClass().getClassLoader().getResourceAsStream(pathResource));
+            if (type.equals(JsonNode.class)) {
+                return (T) node;
+            }
+            else if (type.equals(String.class)) {
+                return (T) mapper.writeValueAsString(node);
+            }
+            else {
+//                String dashboardConfigStr = mapper.writeValueAsString(node);
+//                node = mapper.readTree(dashboardConfigStr);
+                return mapper.treeToValue(node, type);
+            }
+//        } catch (Exception e) {
+//            log.warn("[{}] Failed to load from resource", pathResource, e);
+//            throw new RuntimeException(e);
+//        }
+    }
+
 }
