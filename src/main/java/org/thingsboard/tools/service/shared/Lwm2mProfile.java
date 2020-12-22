@@ -15,6 +15,8 @@
  */
 package org.thingsboard.tools.service.shared;
 
+import org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode;
+
 public enum Lwm2mProfile {
     PSK(0, "lwm2mProfilePsk"),
     RPK(1, "lwm2mProfileRpk"),
@@ -22,10 +24,23 @@ public enum Lwm2mProfile {
     NO_SEC(3, "lwm2mProfileNoSec");
 
     public int code;
-    public String type;
+    public String profileName;
 
-    Lwm2mProfile(int code, String type) {
+    Lwm2mProfile(int code, String profileName) {
         this.code = code;
-        this.type = type;
+        this.profileName = profileName;
+    }
+
+    public static LwM2MSecurityMode fromSecurityMode(long code) {
+        return fromSecurityMode((int) code);
+    }
+
+    public static LwM2MSecurityMode fromSecurityMode(int code) {
+        for (LwM2MSecurityMode sm : LwM2MSecurityMode.values()) {
+            if (sm.code == code) {
+                return sm;
+            }
+        }
+        throw new IllegalArgumentException(String.format("Unsupported security code : %d", code));
     }
 }

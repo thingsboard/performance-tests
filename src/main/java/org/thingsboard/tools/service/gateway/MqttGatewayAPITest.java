@@ -69,12 +69,12 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
 
     @Override
     public void createDevices() throws Exception {
-        createDevices(false, false);
+        createDevices(false);
     }
 
     @Override
     public void createGateways() throws Exception {
-        List<Device> entities = createEntities(gatewayStartIdx, gatewayEndIdx, true, false,true);
+        List<Device> entities = createEntities(gatewayStartIdx, gatewayEndIdx, true,true);
         gateways = Collections.synchronizedList(entities);
     }
 
@@ -88,7 +88,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         } else {
             gatewayNames = new ArrayList<>();
             for (int i = gatewayStartIdx; i < gatewayEndIdx; i++) {
-                gatewayNames.add(getToken(true, false, i));
+                gatewayNames.add(getToken(true, i));
             }
         }
         for (String gateway : gatewayNames) {
@@ -116,8 +116,8 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
             int gatewayIdx = deviceIdx % gatewayCount;
             DeviceClient client = new DeviceClient();
             client.setMqttClient(mqttClients.get(gatewayIdx));
-            client.setDeviceName(getToken(false, false, i));
-            client.setGatewayName(getToken(true, false, gatewayIdx));
+            client.setDeviceName(getToken(false, i));
+            client.setGatewayName(getToken(true, gatewayIdx));
             deviceClients.add(client);
         }
     }
@@ -161,11 +161,11 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
 
     @Override
     public void removeGateways() throws Exception {
-        removeEntities(gateways.stream().map(Device::getId).collect(Collectors.toList()), true);
+        removeEntities(gateways.stream().map(Device::getId).collect(Collectors.toList()), "gateways");
     }
 
     @Override
     public void removeDevices() throws Exception {
-        removeEntities(devices.stream().map(IdBased::getId).collect(Collectors.toList()), false);
+        removeEntities(devices.stream().map(IdBased::getId).collect(Collectors.toList()), "devices");
     }
 }
