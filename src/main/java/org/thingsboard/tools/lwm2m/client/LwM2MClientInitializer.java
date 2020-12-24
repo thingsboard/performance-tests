@@ -82,34 +82,33 @@ public class LwM2MClientInitializer {
 
             @Override
             public void onRegistrationStarted(ServerIdentity server, RegisterRequest request) {
-
-                log.info("ClientObserver -> onRegistrationStarted... ServerIdentity [{}]", server);
+//                log.info("ClientObserver -> onRegistrationStarted...  EndpointName [{}]", request.getEndpointName());
             }
 
             @Override
             public void onRegistrationSuccess(ServerIdentity server, RegisterRequest request, String registrationID) {
 //                log.info("ClientObserver -> onRegistrationSuccess... ServerIdentity [{}] client.coapServer [{}]", server, client.triggerRegistrationUpdate());
-                log.info("ClientObserver -> onRegistrationSuccess... ServerIdentity [{}] \n request: {} \n registrationID {}", server, request, registrationID);
+//                log.info("ClientObserver -> onRegistrationSuccess...  EndpointName [{}]", request.getEndpointName());
             }
 
             @Override
             public void onRegistrationFailure(ServerIdentity server, RegisterRequest request, ResponseCode responseCode, String errorMessage, Exception cause) {
-                log.info("ClientObserver -> onRegistrationFailure... ServerIdentity [{}]", server);
+//                log.info("ClientObserver -> onRegistrationFailure... ServerIdentity [{}]", server);
             }
 
             @Override
             public void onRegistrationTimeout(ServerIdentity server, RegisterRequest request) {
-                log.info("ClientObserver -> onRegistrationTimeout... RegisterRequest [{}]", request);
+//                log.info("ClientObserver -> onRegistrationTimeout... RegisterRequest [{}]", request);
             }
 
             @Override
             public void onUpdateStarted(ServerIdentity server, UpdateRequest request) {
-                log.info("ClientObserver -> onUpdateStarted...  UpdateRequest [{}]", request);
+//                log.info("ClientObserver -> onUpdateStarted...  UpdateRequest [{}]", request);
             }
 
             @Override
             public void onUpdateSuccess(ServerIdentity server, UpdateRequest request) {
-
+//                log.info("ClientObserver -> onUpdateSuccess...  UpdateRequest [{}]", request);
             }
 
             @Override
@@ -129,7 +128,7 @@ public class LwM2MClientInitializer {
 
             @Override
             public void onDeregistrationSuccess(ServerIdentity server, DeregisterRequest request) {
-
+//                log.info("ClientObserver ->onDeregistrationSuccess...  DeregisterRequest [{}]", request.getRegistrationId());
             }
 
             @Override

@@ -162,7 +162,7 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
     private final Boolean supportOldFormat = false;
 
     @Getter
-    private final String addAttributes = "ManufacturerattrX509:Thingsboard;Model:\"Dvice LwM2M\";Serial:1111-2222-3333-000";
+    private final String addAttributes = "ManufactureX509:Thingsboard;Model:\"Device LwM2M\";Serial:1111-2222-3333-000";
 
     @Getter
     private final String locationPos = "50.4501:30.5234";

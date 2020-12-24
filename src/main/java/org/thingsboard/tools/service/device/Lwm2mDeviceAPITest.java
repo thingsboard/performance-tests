@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,6 +17,7 @@ package org.thingsboard.tools.service.device;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -85,7 +86,8 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
     @Override
     public void connectDevices() throws InterruptedException {
         int nextPortNumber = 0;
-        if (this.lwm2mNoSecEnabled) nextPortNumber = this.connectEntitiesLwm2m(LwM2MSecurityMode.NO_SEC, nextPortNumber);
+        if (this.lwm2mNoSecEnabled)
+            nextPortNumber = this.connectEntitiesLwm2m(LwM2MSecurityMode.NO_SEC, nextPortNumber);
         if (this.lwm2mPSKEnabled) nextPortNumber = this.connectEntitiesLwm2m(LwM2MSecurityMode.PSK, nextPortNumber);
         if (this.lwm2mRPKEnabled) nextPortNumber = this.connectEntitiesLwm2m(LwM2MSecurityMode.RPK, nextPortNumber);
         if (this.lwm2mX509Enabled) nextPortNumber = this.connectEntitiesLwm2m(LwM2MSecurityMode.X509, nextPortNumber);
@@ -130,8 +132,8 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
 //            int finalTokenNumber = tokenNumber;
             int finalI = i;
-            restClientService.getHttpExecutor().submit(() -> {
-                Device entity =new Device();
+            restClientService.getLwm2mExecutor().submit(() -> {
+                Device entity = new Device();
                 try {
                     String token = this.getToken(finalI, mode);
                     entity.setName(token);
@@ -167,7 +169,7 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
     private DeviceCredentials getDeviceCredentials(LwM2MSecurityMode mode, String credentialsId) throws IOException {
         DeviceCredentials deviceCredentials = new DeviceCredentials();
         deviceCredentials.setCredentialsType(DeviceCredentialsType.LWM2M_CREDENTIALS);
-        String credentialsEndpoint = mode == LwM2MSecurityMode.PSK? credentialsId + this.getLwm2mPSKIdentitySub() : credentialsId;
+        String credentialsEndpoint = mode == LwM2MSecurityMode.PSK ? credentialsId + this.getLwm2mPSKIdentitySub() : credentialsId;
         deviceCredentials.setCredentialsId(credentialsEndpoint);
         deviceCredentials.setCredentialsValue(getDeviceCredentialsConfig(mode, credentialsId));
         return deviceCredentials;
@@ -202,50 +204,46 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
         return mapper.writeValueAsString(nodeConfigClient);
     }
 
-    private int connectEntitiesLwm2m(LwM2MSecurityMode mode, int nextPortNumber)  {
-        int entityCount = deviceEndIdx - deviceStartIdx;
-        CountDownLatch latch = new CountDownLatch(entityCount);
-        AtomicInteger count = new AtomicInteger();
-//        int endPointNumber = 0;
+    private int connectEntitiesLwm2m(LwM2MSecurityMode mode, int nextPortNumber) {
         try {
+            int entityCount = deviceEndIdx - deviceStartIdx;
+            CountDownLatch latch = new CountDownLatch(entityCount);
+            AtomicInteger count = new AtomicInteger();
+            int ff = 500;
             for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
-                String endPoint = this.getToken(i, mode);
-                try {
-                    LwM2MClientConfiguration clientConfiguration = new LwM2MClientConfiguration(context, locationParams, endPoint, nextPortNumber, mode);
-                    clientConfiguration.init();
-                    count.getAndIncrement();
-                } finally {
-                    latch.countDown();
-                }
-//            endPointNumber++;
-                log.warn("Connected client [{}] [{}]", endPoint, (context.getClientStartPort() + nextPortNumber));
+//            int finalTokenNumber = tokenNumber;
+                int finalI = i;
+                int finalNextPortNumber = nextPortNumber;
+                restClientService.getLwm2mExecutor().submit(() -> {
+                    try {
+
+                            String endPoint = this.getToken(finalI, mode);
+                            LwM2MClientConfiguration clientConfiguration = new LwM2MClientConfiguration(context, locationParams, endPoint, finalNextPortNumber, mode, restClientService.getScheduler());
+                            clientConfiguration.init();
+                        if (finalI == finalI/500*500) {
+//                            Thread
+                        }
+//                    result.add(entity);
+                        count.incrementAndGet();
+                    } catch (Throwable e) {
+                        e.printStackTrace();
+                        log.error("[{}]", e.toString());
+                    } finally {
+                        latch.countDown();
+                    }
+                });
                 nextPortNumber++;
-
             }
-            ScheduledFuture<?> logScheduleFuture = restClientService.getLogScheduler().scheduleAtFixedRate(() -> {
-                try {
-                    log.info("[{}] [{}] have been connected so far...", count.get(), "lwm2m_" + mode.name());
-                } catch (Exception ignored) {
-                }
-            }, 0, DefaultRestClientService.LOG_PAUSE, TimeUnit.SECONDS);
-
-            try {
-                latch.await();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            logScheduleFuture.cancel(true);
-            log.info("[{}] [{}] have been connected successfully!", entityCount, "lwm2m");
+            latch.await();
+            return nextPortNumber;
+        } catch (Throwable t) {
+            t.printStackTrace();
+            throw new RuntimeException();
         }
-        catch (Exception e) {
-            e.printStackTrace();
-            log.error("[{}]", e.toString());
-        }
-        return nextPortNumber;
     }
 
     protected String getToken(int token, LwM2MSecurityMode mode) {
-        return "Lw" + LwM2MSecurityMode.fromNameCamelCase(mode.code) +  String.format("%8d", token).replace(" ", "0");
+        return "Lw" + LwM2MSecurityMode.fromNameCamelCase(mode.code) + String.format("%8d", token).replace(" ", "0");
     }
 
 }

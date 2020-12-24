@@ -53,6 +53,7 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -71,23 +72,26 @@ public class LwM2MClientConfiguration {
     private String endPoint;
     private int clientPort;
     private LwM2MSecurityMode mode;
+    private final ScheduledExecutorService executorService;
 
 
     private LwM2MClientContext context;
     private LwM2MLocationParams locationParams;
 
-    public LwM2MClientConfiguration (LwM2MClientContext context, LwM2MLocationParams locationParams, String endPoint, int portNumber, LwM2MSecurityMode mode) {
+    public LwM2MClientConfiguration (LwM2MClientContext context, LwM2MLocationParams locationParams, String endPoint,
+                                     int portNumber, LwM2MSecurityMode mode, ScheduledExecutorService executorService) {
         this.mode = mode;
         this.context = context;
         this.locationParams = locationParams;
         this.endPoint = endPoint;
         this.clientPort = context.getClientStartPort() + portNumber;
+        this.executorService = executorService;
     }
 
 //    @Bean
     public LeshanClient getLeshanClient() {
         /** Create client */
-        log.info("Starting LwM2M client... PostConstruct. BootstrapEnable: ???");
+//        log.info("Starting LwM2M client... PostConstruct. BootstrapEnable: ???");
         /** Initialize model */
 //        List<ObjectModel> models = ObjectLoader.loadDefault();
         List<ObjectModel> models = context.getModelsValue();
@@ -105,13 +109,13 @@ public class LwM2MClientConfiguration {
         new LwM2MSecurityStore(context, initializer, this.endPoint, this.mode);
 
         /** Initialize other objects */
-        initializer.setInstancesForObject(DEVICE, new LwM2mDevice());
-        initializer.setInstancesForObject(CONNECTIVITY_MONITORING, new LwM2mConnectivityMonitoring());
-        initializer.setInstancesForObject(BINARY_APP_DATA_CONTAINER, new LwM2mBinaryAppDataContainer());
+        initializer.setInstancesForObject(DEVICE, new LwM2mDevice(executorService));
+        initializer.setInstancesForObject(CONNECTIVITY_MONITORING, new LwM2mConnectivityMonitoring(executorService));
+        initializer.setInstancesForObject(BINARY_APP_DATA_CONTAINER, new LwM2mBinaryAppDataContainer(executorService));
 //        initializer.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
         initializer.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
 
-        LwM2mInstanceEnabler [] instances = {new LwM2mTemperatureSensor(), new LwM2mTemperatureSensor()};
+        LwM2mInstanceEnabler [] instances = {new LwM2mTemperatureSensor(executorService), new LwM2mTemperatureSensor(executorService)};
         initializer.setInstancesForObject(TEMPERATURE_SENSOR, instances);
 //        initializer.setInstancesForObject(OBJECT_ID_TEMPERATURE_SENSOR, new LwM2mTemperatureSensor());
 
@@ -214,6 +218,7 @@ public class LwM2MClientConfiguration {
         builder.setDtlsConfig(dtlsConfig);
         builder.setRegistrationEngineFactory(engineFactory);
         builder.setEndpointFactory(endpointFactory);
+        builder.setSharedExecutor(executorService);
         if (context.getSupportOldFormat()) {
             builder.setDecoder(new DefaultLwM2mNodeDecoder(true));
             builder.setEncoder(new DefaultLwM2mNodeEncoder(true));
@@ -225,7 +230,7 @@ public class LwM2MClientConfiguration {
 
 //    @PostConstruct
     public void init(){
-        log.info("initilizer client");
+//        log.info("initilizer client");
         LwM2MClientInitializer clientInitializer= new LwM2MClientInitializer(getLeshanClient());
         clientInitializer.init();
     }

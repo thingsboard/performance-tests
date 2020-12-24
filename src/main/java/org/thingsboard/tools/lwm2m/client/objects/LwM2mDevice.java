@@ -27,6 +27,8 @@ import org.eclipse.leshan.core.response.WriteResponse;
 
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class LwM2mDevice extends BaseInstanceEnabler {
@@ -34,15 +36,19 @@ public class LwM2mDevice extends BaseInstanceEnabler {
     private static final List<Integer> supportedResources = Arrays.asList(0, 1, 2, 3, 9, 10, 11, 13, 14, 15, 16, 17, 18,
             19, 20, 21);
 
-    public LwM2mDevice() {
-        // notify new date each 5 second
-        Timer timer = new Timer("Device-Current Time, Value betery, utcOffse, timeZone");
-        timer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                fireResourcesChange(9, 13, 14, 15);
-            }
-        }, 5000, 5000);
+    public LwM2mDevice(){}
+
+    public LwM2mDevice(ScheduledExecutorService executorService) {
+        executorService.scheduleWithFixedDelay(() ->
+                fireResourcesChange(9, 13, 14, 15), 5000, 5000, TimeUnit.MILLISECONDS);
+//         notify new date each 5 second
+//        Timer timer = new Timer("Device-Current Time, Value betery, utcOffse, timeZone");
+//        timer.schedule(new TimerTask() {
+//            @Override
+//            public void run() {
+//                fireResourcesChange(9, 13, 14, 15);
+//            }
+//        }, 5000, 5000);
     }
 
     @Override
