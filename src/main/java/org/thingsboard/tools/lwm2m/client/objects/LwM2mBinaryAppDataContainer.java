@@ -27,6 +27,8 @@ import org.eclipse.leshan.core.response.WriteResponse;
 import org.eclipse.leshan.core.util.Hex;
 
 import java.util.*;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 
 @EqualsAndHashCode(callSuper = true)
@@ -76,16 +78,21 @@ public class LwM2mBinaryAppDataContainer extends BaseInstanceEnabler {
 
     private int appID;
     private static final Random RANDOM = new Random();
-
     public LwM2mBinaryAppDataContainer() {
-        Timer timer = new Timer("Data byte");
-        timer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                fireResourcesChange(0);
-            }
+
+    }
+
+    public LwM2mBinaryAppDataContainer(ScheduledExecutorService executorService) {
+        executorService.scheduleWithFixedDelay(() ->
+                fireResourcesChange(0), 5000, 5000, TimeUnit.MILLISECONDS);
+//        Timer timer = new Timer("Data byte");
+//        timer.schedule(new TimerTask() {
+//            @Override
+//            public void run() {
+//                fireResourcesChange(0);
+//            }
+////        }, 5000, 5000);
 //        }, 5000, 5000);
-        }, 5000, 5000);
     }
 
     @Override

@@ -23,6 +23,8 @@ import org.eclipse.leshan.client.servers.ServerIdentity;
 import org.eclipse.leshan.core.response.ReadResponse;
 
 import java.util.*;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 
 @Slf4j
@@ -44,13 +46,19 @@ public class LwM2mConnectivityMonitoring extends BaseInstanceEnabler {
     private Integer sMCC = 10;  // 10
 
     public LwM2mConnectivityMonitoring () {
-        Timer timer = new Timer("Device-Current Time, Value betery");
-        timer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                fireResourcesChange(8);
-            }
-        }, 5000, 5000);
+
+    }
+
+    public LwM2mConnectivityMonitoring (ScheduledExecutorService executorService) {
+        executorService.scheduleWithFixedDelay(() ->
+                fireResourcesChange(8), 5000, 5000, TimeUnit.MILLISECONDS);
+//        Timer timer = new Timer("Device-Current Time, Value betery");
+//        timer.schedule(new TimerTask() {
+//            @Override
+//            public void run() {
+//                fireResourcesChange(8);
+//            }
+//        }, 5000, 5000);
     }
 
     @Override

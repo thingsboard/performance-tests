@@ -31,6 +31,8 @@ public interface RestClientService {
 
     ExecutorService getHttpExecutor();
 
+    ExecutorService getLwm2mExecutor();
+
     ScheduledExecutorService getScheduler();
 
     ScheduledExecutorService getLogScheduler();

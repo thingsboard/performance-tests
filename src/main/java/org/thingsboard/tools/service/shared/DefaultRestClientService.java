@@ -20,6 +20,8 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.thingsboard.rest.client.RestClient;
 
@@ -46,6 +48,7 @@ public class DefaultRestClientService implements RestClientService {
     public static final int LOG_PAUSE = 1;
 
     private final ExecutorService httpExecutor = Executors.newFixedThreadPool(100);
+    private final ExecutorService lwm2mExecutor = Executors.newFixedThreadPool(10);
     private final ScheduledExecutorService logScheduler = Executors.newScheduledThreadPool(10);
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(10);
     private final ExecutorService workers = Executors.newFixedThreadPool(10);
@@ -56,6 +59,8 @@ public class DefaultRestClientService implements RestClientService {
     private String username;
     @Value("${rest.password}")
     private String password;
+    @Value("${rest.connect_server}")
+    private boolean connectServer;
 
     static {
         disableSslVerification();
@@ -113,6 +118,11 @@ public class DefaultRestClientService implements RestClientService {
     }
 
     @Override
+    public ExecutorService getLwm2mExecutor() {
+        return lwm2mExecutor;
+    }
+
+    @Override
     public ScheduledExecutorService getScheduler() {
         return scheduler;
     }
@@ -124,9 +134,11 @@ public class DefaultRestClientService implements RestClientService {
 
     @PostConstruct
     public void init() {
-        restClient = new RestClient(restUrl);
-        restClient.login(username, password);
-        eventLoopGroup = new NioEventLoopGroup();
+        if (connectServer) {
+            restClient = new RestClient(restUrl);
+            restClient.login(username, password);
+            eventLoopGroup = new NioEventLoopGroup();
+        }
     }
 
 
@@ -134,6 +146,9 @@ public class DefaultRestClientService implements RestClientService {
     public void destroy() {
         if (!this.httpExecutor.isShutdown()) {
             this.httpExecutor.shutdownNow();
+        }
+        if (!this.lwm2mExecutor.isShutdown()) {
+            this.lwm2mExecutor.shutdownNow();
         }
         if (!this.scheduler.isShutdown()) {
             this.scheduler.shutdownNow();

@@ -42,18 +42,18 @@ public class LwM2mLocation extends BaseInstanceEnabler {
     }
 
     public LwM2mLocation(Float latitude, Float longitude, float scaleFactor) {
-        if (latitude != null) {
-            this.latitude = latitude + 90f;
-        } else {
-            this.latitude = RANDOM.nextInt(180);
-        }
-        if (longitude != null) {
-            this.longitude = longitude + 180f;
-        } else {
-            this.longitude = RANDOM.nextInt(360);
-        }
-        this.scaleFactor = scaleFactor;
-        timestamp = new Date();
+//        if (latitude != null) {
+//            this.latitude = latitude + 90f;
+//        } else {
+//            this.latitude = RANDOM.nextInt(180);
+//        }
+//        if (longitude != null) {
+//            this.longitude = longitude + 180f;
+//        } else {
+//            this.longitude = RANDOM.nextInt(360);
+//        }
+//        this.scaleFactor = scaleFactor;
+//        timestamp = new Date();
     }
 
     @Override
