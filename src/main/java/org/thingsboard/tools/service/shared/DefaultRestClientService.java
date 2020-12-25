@@ -19,6 +19,10 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.eclipse.californium.core.network.config.NetworkConfig;
+import org.eclipse.californium.elements.util.DaemonThreadFactory;
+import org.eclipse.californium.elements.util.ExecutorsUtil;
+import org.eclipse.californium.elements.util.NamedThreadFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -48,9 +52,16 @@ public class DefaultRestClientService implements RestClientService {
     public static final int LOG_PAUSE = 1;
 
     private final ExecutorService httpExecutor = Executors.newFixedThreadPool(100);
-    private final ExecutorService lwm2mExecutor = Executors.newFixedThreadPool(10);
+    private final ExecutorService lwm2mExecutor = Executors.newFixedThreadPool(100);
+//    private final ExecutorService lwm2mExecutor =  ExecutorsUtil
+//            .newSingleThreadScheduledExecutor(new DaemonThreadFactory(":CoapEndpoint-test"  + '#')); //$NON-NLS-1$
+
     private final ScheduledExecutorService logScheduler = Executors.newScheduledThreadPool(10);
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(10);
+    private final ScheduledExecutorService schedulerCoapConfig = ExecutorsUtil.newScheduledThreadPool(2500,
+        new NamedThreadFactory("TestServer(test)#"));
+//    private final ScheduledExecutorService scheduler =  ExecutorsUtil
+//                .newSingleThreadScheduledExecutor(new DaemonThreadFactory(":CoapEndpoint-test"  + '#')); //$NON-NLS-1$
     private final ExecutorService workers = Executors.newFixedThreadPool(10);
 
     @Value("${rest.url}")
@@ -128,6 +139,11 @@ public class DefaultRestClientService implements RestClientService {
     }
 
     @Override
+    public ScheduledExecutorService getSchedulerCoapConfig() {
+        return schedulerCoapConfig;
+    }
+
+    @Override
     public ScheduledExecutorService getLogScheduler() {
         return logScheduler;
     }
@@ -156,7 +172,7 @@ public class DefaultRestClientService implements RestClientService {
         if (!this.workers.isShutdown()) {
             this.workers.shutdownNow();
         }
-        if (!eventLoopGroup.isShutdown()) {
+        if (eventLoopGroup != null && !eventLoopGroup.isShutdown()) {
             eventLoopGroup.shutdownGracefully(0, 5, TimeUnit.SECONDS);
         }
 

@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -217,24 +217,27 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
                 restClientService.getLwm2mExecutor().submit(() -> {
                     try {
 
-                            String endPoint = this.getToken(finalI, mode);
-                            LwM2MClientConfiguration clientConfiguration = new LwM2MClientConfiguration(context, locationParams, endPoint, finalNextPortNumber, mode, restClientService.getScheduler());
-                            clientConfiguration.init();
-                        if (finalI == finalI/500*500) {
-//                            Thread
-                        }
+                        String endPoint = this.getToken(finalI, mode);
+                        LwM2MClientConfiguration clientConfiguration = new LwM2MClientConfiguration(context, locationParams, endPoint, finalNextPortNumber, mode, restClientService.getSchedulerCoapConfig());
+                        clientConfiguration.init();
+
 //                    result.add(entity);
                         count.incrementAndGet();
                     } catch (Throwable e) {
+                        log.error("[{}][{}] Throwable [{}]", count, finalNextPortNumber, e.toString());
                         e.printStackTrace();
-                        log.error("[{}]", e.toString());
+
                     } finally {
                         latch.countDown();
                     }
                 });
                 nextPortNumber++;
+                if (finalI > 0 && finalI == finalI / 2500 * 2500) {
+                    Thread.sleep(180000); // wait for registration sent to server
+                }
             }
             latch.await();
+            log.info("Trying to register to coap [{}] lwm2m clients... nextPortNumber [{}]", count, nextPortNumber);
             return nextPortNumber;
         } catch (Throwable t) {
             t.printStackTrace();

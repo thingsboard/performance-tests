@@ -110,13 +110,14 @@ public class LwM2MClientConfiguration {
 
         /** Initialize other objects */
         initializer.setInstancesForObject(DEVICE, new LwM2mDevice(executorService));
-        initializer.setInstancesForObject(CONNECTIVITY_MONITORING, new LwM2mConnectivityMonitoring(executorService));
-        initializer.setInstancesForObject(BINARY_APP_DATA_CONTAINER, new LwM2mBinaryAppDataContainer(executorService));
+//        initializer.setInstancesForObject(DEVICE, new LwM2mDevice());
+//        initializer.setInstancesForObject(CONNECTIVITY_MONITORING, new LwM2mConnectivityMonitoring(executorService));
+//        initializer.setInstancesForObject(BINARY_APP_DATA_CONTAINER, new LwM2mBinaryAppDataContainer(executorService));
+////        initializer.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
 //        initializer.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
-        initializer.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
-
-        LwM2mInstanceEnabler [] instances = {new LwM2mTemperatureSensor(executorService), new LwM2mTemperatureSensor(executorService)};
-        initializer.setInstancesForObject(TEMPERATURE_SENSOR, instances);
+//
+//        LwM2mInstanceEnabler [] instances = {new LwM2mTemperatureSensor(executorService), new LwM2mTemperatureSensor(executorService)};
+//        initializer.setInstancesForObject(TEMPERATURE_SENSOR, instances);
 //        initializer.setInstancesForObject(OBJECT_ID_TEMPERATURE_SENSOR, new LwM2mTemperatureSensor());
 
 
@@ -139,7 +140,9 @@ public class LwM2MClientConfiguration {
 
         /** Configure Registration Engine */
         DefaultRegistrationEngineFactory engineFactory = new DefaultRegistrationEngineFactory();
-        engineFactory.setCommunicationPeriod((context.getCommunicationPeriod() == null) ? null : context.getCommunicationPeriod() * 1000);
+        if (context.getRequestTimeoutInMs() != null) {
+            engineFactory.setRequestTimeoutInMs(context.getRequestTimeoutInMs());
+        }
         engineFactory.setReconnectOnUpdate(context.getReconnectOnUpdate());
         engineFactory.setResumeOnConnect(!context.getForceFullHandshake());
 
@@ -232,7 +235,8 @@ public class LwM2MClientConfiguration {
     public void init(){
 //        log.info("initilizer client");
         LwM2MClientInitializer clientInitializer= new LwM2MClientInitializer(getLeshanClient());
-        clientInitializer.init();
+        LeshanClient client = clientInitializer.init();
+        client.start();
     }
 
    private Map<String, String> getAddAttrs(String addAttrs) {

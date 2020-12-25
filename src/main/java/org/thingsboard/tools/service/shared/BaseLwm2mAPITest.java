@@ -74,7 +74,7 @@ public abstract class BaseLwm2mAPITest extends AbstractAPITest {
     @PreDestroy
     public void destroy() {
         super.destroy();
-        if (!EVENT_LOOP_GROUP.isShutdown()) {
+        if (EVENT_LOOP_GROUP != null && !EVENT_LOOP_GROUP.isShutdown()) {
             EVENT_LOOP_GROUP.shutdownGracefully(0, 5, TimeUnit.SECONDS);
         }
     }

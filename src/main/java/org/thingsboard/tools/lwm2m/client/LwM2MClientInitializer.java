@@ -46,8 +46,8 @@ public class LwM2MClientInitializer {
     }
 
 //    @PostConstruct
-    public void init() {
-        log.info("init client");
+    public LeshanClient init() {
+//        log.info("init client");
         this.client.getObjectTree().addListener(new ObjectsListenerAdapter() {
             @Override
             public void objectRemoved(LwM2mObjectEnabler object) {
@@ -88,7 +88,7 @@ public class LwM2MClientInitializer {
             @Override
             public void onRegistrationSuccess(ServerIdentity server, RegisterRequest request, String registrationID) {
 //                log.info("ClientObserver -> onRegistrationSuccess... ServerIdentity [{}] client.coapServer [{}]", server, client.triggerRegistrationUpdate());
-//                log.info("ClientObserver -> onRegistrationSuccess...  EndpointName [{}]", request.getEndpointName());
+                log.info("ClientObserver -> onRegistrationSuccess...  EndpointName [{}]", request.getEndpointName());
             }
 
             @Override
@@ -143,7 +143,7 @@ public class LwM2MClientInitializer {
         };
         this.client.addObserver(observer);
         /** Start the client */
-        this.client.start();
+//        this.client.start();
 
         /** De-register on shutdown and stop client. */
         Runtime.getRuntime().addShutdownHook(new Thread() {
@@ -152,7 +152,7 @@ public class LwM2MClientInitializer {
                 client.destroy(true); // send de-registration request before destroy
             }
         });
-
+        return this.client;
     }
 
     @PreDestroy

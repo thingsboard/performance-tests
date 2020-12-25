@@ -147,6 +147,10 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
     private Integer communicationPeriod;
 
     @Getter
+    @Value("${lwm2m.client.request_timeout:}")
+    private Integer requestTimeoutInMs;
+
+    @Getter
     private final Boolean oldCiphers = false;
 
     @Getter
