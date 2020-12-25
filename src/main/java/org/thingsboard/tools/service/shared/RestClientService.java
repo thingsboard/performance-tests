@@ -35,6 +35,8 @@ public interface RestClientService {
 
     ScheduledExecutorService getScheduler();
 
+    ScheduledExecutorService getSchedulerCoapConfig();
+
     ScheduledExecutorService getLogScheduler();
 
 }

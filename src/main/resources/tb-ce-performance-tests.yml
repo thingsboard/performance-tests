@@ -33,7 +33,7 @@ endpoints:
     enabled: "${ENDPOINTS_SHUTDOWN_ENABLED:true}"
 
 rest:
-  connect_server: "${REST_CONNECT_SERVER:false}"
+  connect_server: "${REST_CONNECT_SERVER:true}"
   url: "${REST_URL:http://localhost:8080}"
   username: "${REST_USERNAME:tenant@thingsboard.org}"
   password: "${REST_PASSWORD:tenant}"
@@ -87,13 +87,16 @@ lwm2m:
     startPort: "${START_PORT:10000}"
     # The communication period in seconds which should be smaller than the lifetime, will be used even if bootstrap_enable==true.
     communication_period: "${COMMUNICATION_PERIOD:}"
+    # requestTimeoutInMs = 2 * 60 * 1000l; // 2min in ms
+#    request_timeout: "${REQUEST_TIMEOUT:1000}"
+    request_timeout: "${REQUEST_TIMEOUT:}"
 device:
   # Device API to use - MQTT, HTTP or LWM2M
   api: "${DEVICE_API:LWM2M}"
   startIdx: "${DEVICE_START_IDX:0}"
-  endIdx: "${DEVICE_END_IDX:4800}"
+  endIdx: "${DEVICE_END_IDX:10000}"
   count: "${DEVICE_COUNT:30}" # count of devices to be used by clients in k8s deployment run
-  createOnStart: "${DEVICE_CREATE_ON_START:false}"
+  createOnStart: "${DEVICE_CREATE_ON_START:true}"
   deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
 gateway:
   startIdx: "${GATEWAY_START_IDX:0}"
@@ -125,7 +128,7 @@ test:
   useInstanceIdxRegex: "${USE_INSTANCE_IDX_REGEX:false}"
   instanceIdxRegexSource: "${INSTANCE_IDX_REGEX_SOURCE:}"
   instanceIdxRegex: "${INSTANCE_IDX_REGEX:([0-9]+)$}"
-  enabled: "${TEST_ENABLED:true}"
+  enabled: "${TEST_ENABLED:false}"
   updateRootRuleChain: "${UPDATE_ROOT_RULE_CHAIN:false}"
   revertRootRuleChain: "${REVERT_ROOT_RULE_CHAIN:false}"
   # Test API to use - device or gateway

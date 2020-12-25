@@ -36,19 +36,27 @@ public class LwM2mDevice extends BaseInstanceEnabler {
     private static final List<Integer> supportedResources = Arrays.asList(0, 1, 2, 3, 9, 10, 11, 13, 14, 15, 16, 17, 18,
             19, 20, 21);
 
-    public LwM2mDevice(){}
+    public LwM2mDevice() {
+//                 notify new date each 5 second
+        Timer timer = new Timer("Device-Current Time, Value betery, utcOffse, timeZone");
+        timer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                fireResourcesChange(9, 13, 14, 15);
+            }
+        }, 5000, 5000);
+    }
 
     public LwM2mDevice(ScheduledExecutorService executorService) {
-        executorService.scheduleWithFixedDelay(() ->
-                fireResourcesChange(9, 13, 14, 15), 5000, 5000, TimeUnit.MILLISECONDS);
-//         notify new date each 5 second
-//        Timer timer = new Timer("Device-Current Time, Value betery, utcOffse, timeZone");
-//        timer.schedule(new TimerTask() {
-//            @Override
-//            public void run() {
-//                fireResourcesChange(9, 13, 14, 15);
-//            }
-//        }, 5000, 5000);
+        try {
+            executorService.scheduleWithFixedDelay(() ->
+//                    fireResourcesChange(9, 13, 14, 15), 10000, 10000, TimeUnit.MILLISECONDS);
+                    fireResourcesChange(9), 500, 500, TimeUnit.MILLISECONDS);
+        } catch (Throwable e) {
+            log.error("[{}]Throwable", e.toString());
+            e.printStackTrace();
+        }
+
     }
 
     @Override
@@ -116,7 +124,7 @@ public class LwM2mDevice extends BaseInstanceEnabler {
             }, 500);
         }
         if (resourceid == 5) {
-             getLwM2mClient().triggerRegistrationUpdate();
+            getLwM2mClient().triggerRegistrationUpdate();
         }
         return ExecuteResponse.success();
     }
