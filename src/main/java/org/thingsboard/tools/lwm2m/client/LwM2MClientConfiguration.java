@@ -232,9 +232,9 @@ public class LwM2MClientConfiguration {
 
 
 //    @PostConstruct
-    public void init(){
+    public void init(Map<String, String> clientAccessConnect){
 //        log.info("initilizer client");
-        LwM2MClientInitializer clientInitializer= new LwM2MClientInitializer(getLeshanClient());
+        LwM2MClientInitializer clientInitializer= new LwM2MClientInitializer(getLeshanClient(), clientAccessConnect);
         LeshanClient client = clientInitializer.init();
         client.start();
     }

@@ -33,8 +33,9 @@ endpoints:
     enabled: "${ENDPOINTS_SHUTDOWN_ENABLED:true}"
 
 rest:
-  connect_server: "${REST_CONNECT_SERVER:true}"
-  url: "${REST_URL:http://localhost:8080}"
+  connect_server: "${REST_CONNECT_SERVER:false}"
+#  url: "${REST_URL:http://localhost:8080}"
+  url: "${REST_URL:http://192.168.8.197:8080}"
   username: "${REST_USERNAME:tenant@thingsboard.org}"
   password: "${REST_PASSWORD:tenant}"
 mqtt:
@@ -48,7 +49,7 @@ lwm2m:
   noSec:
     enabled: "${NO_SEC_ENABLED:true}"
     server:
-      host: "${NO_SEC_HOST:localhost}"
+      host: "${NO_SEC_HOST:192.168.8.197}"
       port: "${NO_SEC_PORT:5685}"
     bootStrap:
       enabled: "${NO_SEC_BS_ENABLED:false}"
@@ -94,9 +95,9 @@ device:
   # Device API to use - MQTT, HTTP or LWM2M
   api: "${DEVICE_API:LWM2M}"
   startIdx: "${DEVICE_START_IDX:0}"
-  endIdx: "${DEVICE_END_IDX:10000}"
+  endIdx: "${DEVICE_END_IDX:8}"
   count: "${DEVICE_COUNT:30}" # count of devices to be used by clients in k8s deployment run
-  createOnStart: "${DEVICE_CREATE_ON_START:true}"
+  createOnStart: "${DEVICE_CREATE_ON_START:false}"
   deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
 gateway:
   startIdx: "${GATEWAY_START_IDX:0}"
@@ -128,7 +129,7 @@ test:
   useInstanceIdxRegex: "${USE_INSTANCE_IDX_REGEX:false}"
   instanceIdxRegexSource: "${INSTANCE_IDX_REGEX_SOURCE:}"
   instanceIdxRegex: "${INSTANCE_IDX_REGEX:([0-9]+)$}"
-  enabled: "${TEST_ENABLED:false}"
+  enabled: "${TEST_ENABLED:true}"
   updateRootRuleChain: "${UPDATE_ROOT_RULE_CHAIN:false}"
   revertRootRuleChain: "${REVERT_ROOT_RULE_CHAIN:false}"
   # Test API to use - device or gateway

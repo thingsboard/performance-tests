@@ -732,6 +732,16 @@
             <version>${thingsboard.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.thingsboard</groupId>
+            <artifactId>tools</artifactId>
+            <version>${thingsboard.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.thingsboard</groupId>
+            <artifactId>netty-mqtt</artifactId>
+            <version>${thingsboard.version}</version>
+        </dependency>
+        <dependency>
             <groupId>com.sun.winsw</groupId>
             <artifactId>winsw</artifactId>
             <version>${winsw.version}</version>
@@ -744,16 +754,6 @@
             <artifactId>lombok</artifactId>
             <version>${lombok.version}</version>
             <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>org.thingsboard</groupId>
-            <artifactId>tools</artifactId>
-            <version>${thingsboard.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.thingsboard</groupId>
-            <artifactId>netty-mqtt</artifactId>
-            <version>${thingsboard.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>

@@ -103,4 +103,5 @@ public abstract class BaseLwm2mAPITest extends AbstractAPITest {
             return null;
         }
     }
+
 }

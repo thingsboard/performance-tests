@@ -39,7 +39,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -85,13 +88,8 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
 
     @Override
     public void connectDevices() throws InterruptedException {
-        int nextPortNumber = 0;
-        if (this.lwm2mNoSecEnabled)
-            nextPortNumber = this.connectEntitiesLwm2m(LwM2MSecurityMode.NO_SEC, nextPortNumber);
-        if (this.lwm2mPSKEnabled) nextPortNumber = this.connectEntitiesLwm2m(LwM2MSecurityMode.PSK, nextPortNumber);
-        if (this.lwm2mRPKEnabled) nextPortNumber = this.connectEntitiesLwm2m(LwM2MSecurityMode.RPK, nextPortNumber);
-        if (this.lwm2mX509Enabled) nextPortNumber = this.connectEntitiesLwm2m(LwM2MSecurityMode.X509, nextPortNumber);
-        log.info("Created [{}] lwm2m clients...", nextPortNumber);
+        Set<String> clients = this.connectEntities();
+        clientTryingToConnect = Collections.synchronizedSet(clients);
     }
 
     @Override
@@ -108,6 +106,21 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
         if (this.lwm2mPSKEnabled) this.createEntitiesLwm2m(result, LwM2MSecurityMode.PSK);
         if (this.lwm2mRPKEnabled) this.createEntitiesLwm2m(result, LwM2MSecurityMode.RPK);
         if (this.lwm2mX509Enabled) this.createEntitiesLwm2m(result, LwM2MSecurityMode.X509);
+        return result;
+    }
+
+    protected Set<String> connectEntities() throws InterruptedException {
+        Set<String> result = ConcurrentHashMap.newKeySet(1024 * 1024);
+        int nextPortNumber = 0;
+        if (this.lwm2mNoSecEnabled)
+            nextPortNumber = this.connectEntitiesLwm2m(result, LwM2MSecurityMode.NO_SEC, nextPortNumber);
+        if (this.lwm2mPSKEnabled)
+            nextPortNumber = this.connectEntitiesLwm2m(result, LwM2MSecurityMode.PSK, nextPortNumber);
+        if (this.lwm2mRPKEnabled)
+            nextPortNumber = this.connectEntitiesLwm2m(result, LwM2MSecurityMode.RPK, nextPortNumber);
+        if (this.lwm2mX509Enabled)
+            nextPortNumber = this.connectEntitiesLwm2m(result, LwM2MSecurityMode.X509, nextPortNumber);
+        log.info("Trying to  connected [{}] lwm2m clients... nextPortNumber [{}]", result.size(), nextPortNumber);
         return result;
     }
 
@@ -204,12 +217,12 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
         return mapper.writeValueAsString(nodeConfigClient);
     }
 
-    private int connectEntitiesLwm2m(LwM2MSecurityMode mode, int nextPortNumber) {
+    private int connectEntitiesLwm2m(Set<String> result, LwM2MSecurityMode mode, int nextPortNumber)  throws InterruptedException {
         try {
             int entityCount = deviceEndIdx - deviceStartIdx;
             CountDownLatch latch = new CountDownLatch(entityCount);
             AtomicInteger count = new AtomicInteger();
-            int ff = 500;
+            int countFor = 2500;
             for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
 //            int finalTokenNumber = tokenNumber;
                 int finalI = i;
@@ -219,9 +232,9 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
 
                         String endPoint = this.getToken(finalI, mode);
                         LwM2MClientConfiguration clientConfiguration = new LwM2MClientConfiguration(context, locationParams, endPoint, finalNextPortNumber, mode, restClientService.getSchedulerCoapConfig());
-                        clientConfiguration.init();
+                        clientConfiguration.init(clientAccessConnect);
 
-//                    result.add(entity);
+                        result.add(endPoint);
                         count.incrementAndGet();
                     } catch (Throwable e) {
                         log.error("[{}][{}] Throwable [{}]", count, finalNextPortNumber, e.toString());
@@ -232,11 +245,19 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
                     }
                 });
                 nextPortNumber++;
-                if (finalI > 0 && finalI == finalI / 2500 * 2500) {
+                if (finalI > 0 && finalI == finalI / countFor * countFor) {
                     Thread.sleep(180000); // wait for registration sent to server
                 }
             }
+
+            ScheduledFuture<?> logScheduleFuture = restClientService.getLogScheduler().scheduleAtFixedRate(() -> {
+                try {
+                    log.info("[{}] [{}] have been connected so far...", count.get(), "lwm2m_" + mode.modeName);
+                } catch (Exception ignored) {
+                }
+            }, 0, DefaultRestClientService.LOG_PAUSE, TimeUnit.SECONDS);
             latch.await();
+            logScheduleFuture.cancel(true);
             log.info("Trying to register to coap [{}] lwm2m clients... nextPortNumber [{}]", count, nextPortNumber);
             return nextPortNumber;
         } catch (Throwable t) {
