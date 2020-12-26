@@ -15,7 +15,6 @@
  */
 package org.thingsboard.tools.service.shared;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -24,13 +23,9 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
-import org.thingsboard.server.common.data.Dashboard;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.CustomerId;
-import org.thingsboard.server.common.data.id.DeviceCredentialsId;
 import org.thingsboard.server.common.data.id.DeviceId;
-import org.thingsboard.server.common.data.security.DeviceCredentials;
-import org.thingsboard.server.common.data.security.DeviceCredentialsType;
 import org.thingsboard.tools.service.customer.CustomerManager;
 import org.thingsboard.tools.service.msg.MessageGenerator;
 import org.thingsboard.tools.service.msg.Msg;
@@ -41,8 +36,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -104,6 +101,9 @@ public abstract class AbstractAPITest {
     protected CustomerManager customerManager;
 
     protected List<Device> devices = Collections.synchronizedList(new ArrayList<>(1024 * 1024));
+    public Set<String> clientTryingToConnect = Collections.synchronizedSet(ConcurrentHashMap.newKeySet(1024 * 1024));
+    public Map<String, String> clientAccessConnect = Collections.synchronizedMap(new ConcurrentHashMap<String, String>(1024 * 1024));
+
 
     protected final Random random = new Random();
     private volatile CountDownLatch testDurationLatch;
@@ -304,5 +304,9 @@ public abstract class AbstractAPITest {
 //            throw new RuntimeException(e);
 //        }
     }
+
+//    public Map<String, String> getLwm2mDeviceAPITest1() {
+//        return lwm2mDeviceAPITest1;
+//    }
 
 }

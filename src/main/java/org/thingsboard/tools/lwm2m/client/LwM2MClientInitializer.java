@@ -32,6 +32,7 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import java.util.Map;
 
 @Slf4j
 //@Service("LwM2MClientInitializer")
@@ -40,13 +41,16 @@ public class LwM2MClientInitializer {
 
 //    @Autowired
     private LeshanClient client;
+    protected Map<String, String> clientAccessConnect;
 
-    public LwM2MClientInitializer (LeshanClient client) {
+    public LwM2MClientInitializer (LeshanClient client, Map<String, String> clientAccessConnect) {
         this.client = client;
+        this.clientAccessConnect = clientAccessConnect;
     }
 
 //    @PostConstruct
     public LeshanClient init() {
+
 //        log.info("init client");
         this.client.getObjectTree().addListener(new ObjectsListenerAdapter() {
             @Override
@@ -87,8 +91,8 @@ public class LwM2MClientInitializer {
 
             @Override
             public void onRegistrationSuccess(ServerIdentity server, RegisterRequest request, String registrationID) {
-//                log.info("ClientObserver -> onRegistrationSuccess... ServerIdentity [{}] client.coapServer [{}]", server, client.triggerRegistrationUpdate());
-                log.info("ClientObserver -> onRegistrationSuccess...  EndpointName [{}]", request.getEndpointName());
+                clientAccessConnect.put(request.getEndpointName(), registrationID);
+                log.info("ClientObserver -> onRegistrationSuccess...  EndpointName [{}] [{}]", request.getEndpointName(), registrationID);
             }
 
             @Override
@@ -123,22 +127,23 @@ public class LwM2MClientInitializer {
 
             @Override
             public void onDeregistrationStarted(ServerIdentity server, DeregisterRequest request) {
+                log.info("ClientObserver ->onDeregistrationStarted...  DeregisterRequest [{}] [{}]", request.getRegistrationId(), request.getRegistrationId());
 
             }
 
             @Override
             public void onDeregistrationSuccess(ServerIdentity server, DeregisterRequest request) {
-//                log.info("ClientObserver ->onDeregistrationSuccess...  DeregisterRequest [{}]", request.getRegistrationId());
+                log.info("ClientObserver ->onDeregistrationSuccess...  DeregisterRequest [{}] [{}]", request.getRegistrationId(), request.getRegistrationId());
             }
 
             @Override
             public void onDeregistrationFailure(ServerIdentity server, DeregisterRequest request, ResponseCode responseCode, String errorMessage, Exception cause) {
-
+                log.info("ClientObserver ->onDeregistrationFailure...  DeregisterRequest [{}] [{}]", request.getRegistrationId(), request.getRegistrationId());
             }
 
             @Override
             public void onDeregistrationTimeout(ServerIdentity server, DeregisterRequest request) {
-
+                log.info("ClientObserver ->onDeregistrationTimeout...  DeregisterRequest [{}] [{}]", request.getRegistrationId(), request.getRegistrationId());
             }
         };
         this.client.addObserver(observer);
