@@ -35,7 +35,7 @@ endpoints:
 rest:
   connect_server: "${REST_CONNECT_SERVER:false}"
 #  url: "${REST_URL:http://localhost:8080}"
-  url: "${REST_URL:http://192.168.8.197:8080}"
+  url: "${REST_URL:http://192.168.1.110:8080}"
   username: "${REST_USERNAME:tenant@thingsboard.org}"
   password: "${REST_PASSWORD:tenant}"
 mqtt:
@@ -49,7 +49,7 @@ lwm2m:
   noSec:
     enabled: "${NO_SEC_ENABLED:true}"
     server:
-      host: "${NO_SEC_HOST:192.168.8.197}"
+      host: "${NO_SEC_HOST:192.168.1.110}"
       port: "${NO_SEC_PORT:5685}"
     bootStrap:
       enabled: "${NO_SEC_BS_ENABLED:false}"
@@ -95,7 +95,7 @@ device:
   # Device API to use - MQTT, HTTP or LWM2M
   api: "${DEVICE_API:LWM2M}"
   startIdx: "${DEVICE_START_IDX:0}"
-  endIdx: "${DEVICE_END_IDX:8}"
+  endIdx: "${DEVICE_END_IDX:4}"
   count: "${DEVICE_COUNT:30}" # count of devices to be used by clients in k8s deployment run
   createOnStart: "${DEVICE_CREATE_ON_START:false}"
   deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
