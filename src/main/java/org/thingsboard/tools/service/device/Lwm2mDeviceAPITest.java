@@ -17,7 +17,6 @@ package org.thingsboard.tools.service.device;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -39,8 +38,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -111,7 +108,7 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
 
     protected Set<String> connectEntities() throws InterruptedException {
         Set<String> result = ConcurrentHashMap.newKeySet(1024 * 1024);
-        int nextPortNumber = 0;
+        int nextPortNumber = deviceStartIdx;
         if (this.lwm2mNoSecEnabled)
             nextPortNumber = this.connectEntitiesLwm2m(result, LwM2MSecurityMode.NO_SEC, nextPortNumber);
         if (this.lwm2mPSKEnabled)
@@ -141,6 +138,8 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
         CountDownLatch latch = new CountDownLatch(entityCount);
         AtomicInteger count = new AtomicInteger();
         Lwm2mProfile profileName = Lwm2mProfile.valueOf(mode.name());
+        AtomicInteger numberPoint = new AtomicInteger();
+        numberPoint.addAndGet(deviceStartIdx);
 //        int tokenNumber = 0;
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
 //            int finalTokenNumber = tokenNumber;
@@ -155,6 +154,7 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
                     entity = restClientService.getRestClient().saveDeviceWithCredentials(entity, credentials).get();
                     result.add(entity);
                     count.getAndIncrement();
+                    numberPoint.getAndIncrement();
                 } catch (Exception e) {
                     log.error("Error while creating entity [{}] [{}]", entity.getName(), getHttpErrorException(e));
                     if (entity != null && entity.getId() != null) {
@@ -167,9 +167,10 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
 //            tokenNumber++;
         }
 
+
         ScheduledFuture<?> logScheduleFuture = restClientService.getLogScheduler().scheduleAtFixedRate(() -> {
             try {
-                log.info("[{}] [{}] have been created so far...", count.get(), "lwm2m_" + profileName.profileName);
+                log.info("[{}] [{}] [{}] have been created so far...", count.get(), numberPoint.get(), "lwm2m_" + profileName.profileName);
             } catch (Exception ignored) {
             }
         }, 0, DefaultRestClientService.LOG_PAUSE, TimeUnit.SECONDS);
