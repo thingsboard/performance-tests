@@ -51,7 +51,7 @@ public class LwM2mDevice extends BaseInstanceEnabler {
         try {
             executorService.scheduleWithFixedDelay(() ->
 //                    fireResourcesChange(9, 13, 14, 15), 10000, 10000, TimeUnit.MILLISECONDS);
-                    fireResourcesChange(9), 500, 500, TimeUnit.MILLISECONDS);
+                    fireResourcesChange(9, 13), 2000, 2000, TimeUnit.MILLISECONDS);
         } catch (Throwable e) {
             log.error("[{}]Throwable", e.toString());
             e.printStackTrace();

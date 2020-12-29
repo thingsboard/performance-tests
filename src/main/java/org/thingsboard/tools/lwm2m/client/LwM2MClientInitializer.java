@@ -91,7 +91,7 @@ public class LwM2MClientInitializer {
 
             @Override
             public void onRegistrationSuccess(ServerIdentity server, RegisterRequest request, String registrationID) {
-                clientAccessConnect.put(request.getEndpointName(), registrationID);
+                clientAccessConnect.put(registrationID, request.getEndpointName());
                 log.info("ClientObserver -> onRegistrationSuccess...  EndpointName [{}] [{}]", request.getEndpointName(), registrationID);
             }
 
@@ -127,13 +127,16 @@ public class LwM2MClientInitializer {
 
             @Override
             public void onDeregistrationStarted(ServerIdentity server, DeregisterRequest request) {
-                log.info("ClientObserver ->onDeregistrationStarted...  DeregisterRequest [{}] [{}]", request.getRegistrationId(), request.getRegistrationId());
+                log.info("ClientObserver ->onDeregistrationStarted...  DeregisterRequest [{}] [{}]", request.getRegistrationId(), clientAccessConnect.get(request.getRegistrationId()));
 
             }
 
             @Override
             public void onDeregistrationSuccess(ServerIdentity server, DeregisterRequest request) {
-                log.info("ClientObserver ->onDeregistrationSuccess...  DeregisterRequest [{}] [{}]", request.getRegistrationId(), request.getRegistrationId());
+                log.info("ClientObserver ->onDeregistrationSuccess...  DeregisterRequest [{}] [{}]", request.getRegistrationId(), clientAccessConnect.get(request.getRegistrationId()));
+                clientAccessConnect.remove(request.getRegistrationId());
+                log.info("ClientObserver ->onDeregistrationSuccess...  clientAccessConnect.size [{}]", clientAccessConnect.size());
+
             }
 
             @Override

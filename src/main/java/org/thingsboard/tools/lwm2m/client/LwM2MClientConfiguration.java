@@ -116,9 +116,8 @@ public class LwM2MClientConfiguration {
 ////        initializer.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
 //        initializer.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
 //
-//        LwM2mInstanceEnabler [] instances = {new LwM2mTemperatureSensor(executorService), new LwM2mTemperatureSensor(executorService)};
-//        initializer.setInstancesForObject(TEMPERATURE_SENSOR, instances);
-//        initializer.setInstancesForObject(OBJECT_ID_TEMPERATURE_SENSOR, new LwM2mTemperatureSensor());
+        LwM2mInstanceEnabler [] instances = {new LwM2mTemperatureSensor(executorService), new LwM2mTemperatureSensor(executorService)};
+        initializer.setInstancesForObject(TEMPERATURE_SENSOR, instances);
 
 
         List<LwM2mObjectEnabler> enablers = initializer.createAll();
@@ -233,7 +232,6 @@ public class LwM2MClientConfiguration {
 
 //    @PostConstruct
     public void init(Map<String, String> clientAccessConnect){
-//        log.info("initilizer client");
         LwM2MClientInitializer clientInitializer= new LwM2MClientInitializer(getLeshanClient(), clientAccessConnect);
         LeshanClient client = clientInitializer.init();
         client.start();
