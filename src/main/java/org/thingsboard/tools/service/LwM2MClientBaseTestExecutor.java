@@ -66,10 +66,16 @@ public class LwM2MClientBaseTestExecutor extends BaseTestExecutor {
         if (testEnabled) {
             while (true) {
                 try {
-                    log.info("Test completed. Waiting for other clients to complete!");
-                    log.info("If all clients done, please execute next command: 'kubectl delete statefulset tb-performance-run'");
+                    if (lwm2mDeviceAPITest.clientAccessConnect.size() > 0) {
+                        log.info("Test completed. Waiting for other clients to complete!");
+                        log.info("If all clients done, please execute next command: 'kubectl delete statefulset tb-performance-run'");
+                    }
                     if (lwm2mDeviceAPITest.clientTryingToConnect.size() != lwm2mDeviceAPITest.clientAccessConnect.size()) {
                         log.info("Not clients connected access... [{}] ", lwm2mDeviceAPITest.clientTryingToConnect.size() - lwm2mDeviceAPITest.clientAccessConnect.size());
+                    }
+                    else if (lwm2mDeviceAPITest.clientAccessConnect.size() == 0) {
+                        log.info("Cancel the test lwm2m!");
+                        break;
                     }
                     TimeUnit.SECONDS.sleep(10);
                 } catch (InterruptedException e) {

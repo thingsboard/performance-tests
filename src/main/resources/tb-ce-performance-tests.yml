@@ -34,8 +34,8 @@ endpoints:
 
 rest:
   connect_server: "${REST_CONNECT_SERVER:false}"
-#  url: "${REST_URL:http://localhost:8080}"
-  url: "${REST_URL:http://192.168.1.110:8080}"
+  url: "${REST_URL:http://localhost:8080}"
+#  url: "${REST_URL:http://192.168.1.110:8080}"
   username: "${REST_USERNAME:tenant@thingsboard.org}"
   password: "${REST_PASSWORD:tenant}"
 mqtt:
@@ -50,6 +50,7 @@ lwm2m:
     enabled: "${NO_SEC_ENABLED:true}"
     server:
       host: "${NO_SEC_HOST:192.168.1.110}"
+#      host: "${NO_SEC_HOST:localhost}"
       port: "${NO_SEC_PORT:5685}"
     bootStrap:
       enabled: "${NO_SEC_BS_ENABLED:false}"

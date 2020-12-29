@@ -55,14 +55,6 @@ public class LwM2mTemperatureSensor extends BaseInstanceEnabler {
 
     public LwM2mTemperatureSensor(ScheduledExecutorService executorService) {
         executorService.scheduleWithFixedDelay(this::adjustTemperature, 2000, 2000, TimeUnit.MILLISECONDS);
-//        this.scheduler = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Temperature Sensor"));
-//        scheduler.scheduleAtFixedRate(new Runnable() {
-//
-//            @Override
-//            public void run() {
-//                adjustTemperature();
-//            }
-//        }, 2, 2, TimeUnit.SECONDS);
     }
 
     @Override
