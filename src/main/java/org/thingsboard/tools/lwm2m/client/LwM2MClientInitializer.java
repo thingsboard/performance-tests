@@ -35,11 +35,9 @@ import javax.annotation.PreDestroy;
 import java.util.Map;
 
 @Slf4j
-//@Service("LwM2MClientInitializer")
-//@ConditionalOnProperty(prefix = "device", value = "api", havingValue = "LWM2M")
+
 public class LwM2MClientInitializer {
 
-//    @Autowired
     private LeshanClient client;
     protected Map<String, String> clientAccessConnect;
 
@@ -48,10 +46,7 @@ public class LwM2MClientInitializer {
         this.clientAccessConnect = clientAccessConnect;
     }
 
-//    @PostConstruct
     public LeshanClient init() {
-
-//        log.info("init client");
         this.client.getObjectTree().addListener(new ObjectsListenerAdapter() {
             @Override
             public void objectRemoved(LwM2mObjectEnabler object) {
@@ -165,7 +160,7 @@ public class LwM2MClientInitializer {
 
     @PreDestroy
     public void shutdown()  {
-        log.info("Stopping LwM2M thingsboard client!");
+        log.info("LwM2M thingsboard client stopping!");
         try {
             client.destroy(true);
         } finally {

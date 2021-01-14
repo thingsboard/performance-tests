@@ -57,9 +57,13 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.eclipse.californium.scandium.dtls.cipher.CipherSuite.TLS_PSK_WITH_AES_128_CBC_SHA256;
 import static org.eclipse.leshan.core.LwM2mId.CONNECTIVITY_MONITORING;
 import static org.eclipse.leshan.core.LwM2mId.DEVICE;
 import static org.eclipse.leshan.core.LwM2mId.LOCATION;
+import static org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode.PSK;
+import static org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode.RPK;
+import static org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode.X509;
 
 
 @Slf4j
@@ -71,24 +75,41 @@ public class LwM2MClientConfiguration {
     private static final int BINARY_APP_DATA_CONTAINER = 19;
     private String endPoint;
     private int clientPort;
+    private int numberClient;
     private LwM2MSecurityMode mode;
-    private final ScheduledExecutorService executorService;
+    private ScheduledExecutorService executorService;
 
 
     private LwM2MClientContext context;
     private LwM2MLocationParams locationParams;
 
-    public LwM2MClientConfiguration (LwM2MClientContext context, LwM2MLocationParams locationParams, String endPoint,
-                                     int portNumber, LwM2MSecurityMode mode, ScheduledExecutorService executorService) {
+//    private static final LwM2MClientConfiguration INSTANCE = new LwM2MClientConfiguration();
+//
+//    public static LwM2MClientConfiguration getInstance() {
+//        return INSTANCE;
+//    }
+
+    public void init (LwM2MClientContext context, LwM2MLocationParams locationParams, String endPoint,
+                                     int portNumber, LwM2MSecurityMode mode, ScheduledExecutorService executorService, int numberClient) {
         this.mode = mode;
         this.context = context;
         this.locationParams = locationParams;
         this.endPoint = endPoint;
         this.clientPort = context.getClientStartPort() + portNumber;
         this.executorService = executorService;
+        this.numberClient = numberClient;
     }
 
-//    @Bean
+//    public LwM2MClientConfiguration (LwM2MClientContext context, LwM2MLocationParams locationParams, String endPoint,
+//                                     int portNumber, LwM2MSecurityMode mode, ScheduledExecutorService executorService) {
+//        this.mode = mode;
+//        this.context = context;
+//        this.locationParams = locationParams;
+//        this.endPoint = endPoint;
+//        this.clientPort = context.getClientStartPort() + portNumber;
+//        this.executorService = executorService;
+//    }
+
     public LeshanClient getLeshanClient() {
         /** Create client */
 //        log.info("Starting LwM2M client... PostConstruct. BootstrapEnable: ???");
@@ -106,7 +127,7 @@ public class LwM2MClientConfiguration {
 //        log.info("Start LwM2M client... PostConstruct [{}]", endpoint);
 
         /** Initialize security object */
-        new LwM2MSecurityStore(context, initializer, this.endPoint, this.mode);
+        new LwM2MSecurityStore(context, initializer, this.endPoint, this.mode, this.numberClient);
 
         /** Initialize other objects */
         initializer.setInstancesForObject(DEVICE, new LwM2mDevice(executorService));
@@ -116,8 +137,8 @@ public class LwM2MClientConfiguration {
 ////        initializer.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
 //        initializer.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
 //
-        LwM2mInstanceEnabler [] instances = {new LwM2mTemperatureSensor(executorService), new LwM2mTemperatureSensor(executorService)};
-        initializer.setInstancesForObject(TEMPERATURE_SENSOR, instances);
+//        LwM2mInstanceEnabler [] instances = {new LwM2mTemperatureSensor(executorService), new LwM2mTemperatureSensor(executorService)};
+//        initializer.setInstancesForObject(TEMPERATURE_SENSOR, instances);
 
 
         List<LwM2mObjectEnabler> enablers = initializer.createAll();
@@ -128,6 +149,20 @@ public class LwM2MClientConfiguration {
         if (configFile.isFile()) {
             coapConfig = new NetworkConfig();
             coapConfig.load(configFile);
+
+            switch (this.mode) {
+                case PSK:
+                case NO_SEC:
+                    coapConfig.setString("COAP_PORT", Integer.toString(context.getLwm2mPortNoSec()));
+                    coapConfig.setString("COAP_SECURE_PORT", Integer.toString(context.getLwm2mPortPSK()));
+                    break;
+                case X509:
+                    coapConfig.setString("COAP_SECURE_PORT", Integer.toString(context.getLwm2mPortX509()));
+                    break;
+                case RPK:
+                default:
+                    coapConfig.setString("COAP_SECURE_PORT", Integer.toString(context.getLwm2mPortRPK()));
+            }
         } else {
             coapConfig = LeshanClientBuilder.createDefaultNetworkConfig();
             coapConfig.store(configFile);
@@ -135,7 +170,11 @@ public class LwM2MClientConfiguration {
 
         /** Create DTLS Config */
         DtlsConnectorConfig.Builder dtlsConfig = new DtlsConnectorConfig.Builder();
-        dtlsConfig.setRecommendedCipherSuitesOnly(!context.getOldCiphers());
+        if (this.mode==PSK) {
+            dtlsConfig.setRecommendedCipherSuitesOnly(context.isRecommendedCiphers());
+            dtlsConfig.setRecommendedSupportedGroupsOnly(context.isRecommendedSupportedGroups());
+            dtlsConfig.setSupportedCipherSuites(TLS_PSK_WITH_AES_128_CBC_SHA256);
+        }
 
         /** Configure Registration Engine */
         DefaultRegistrationEngineFactory engineFactory = new DefaultRegistrationEngineFactory();
@@ -225,40 +264,14 @@ public class LwM2MClientConfiguration {
             builder.setDecoder(new DefaultLwM2mNodeDecoder(true));
             builder.setEncoder(new DefaultLwM2mNodeEncoder(true));
         }
-        builder.setAdditionalAttributes(context.getAddAttributes().isEmpty() ? null : getAddAttrs(context.getAddAttributes()));
+        builder.setAdditionalAttributes(context.getAddAttributes().isEmpty() ? null : context.getAddAttrs(context.getAddAttributes()));
         return builder.build();
     }
 
-
-//    @PostConstruct
-    public void init(Map<String, String> clientAccessConnect){
-        LwM2MClientInitializer clientInitializer= new LwM2MClientInitializer(getLeshanClient(), clientAccessConnect);
+    public void start(Map<String, String> clientAccessConnect){
+        LwM2MClientInitializer clientInitializer= new LwM2MClientInitializer(this.getLeshanClient(), clientAccessConnect);
         LeshanClient client = clientInitializer.init();
         client.start();
     }
 
-   private Map<String, String> getAddAttrs(String addAttrs) {
-        Map<String, String> additionalAttributes = new HashMap<>();
-        Pattern p1 = Pattern.compile("(.*):\"(.*)\"");
-        Pattern p2 = Pattern.compile("(.*):(.*)");
-        String[] values = addAttrs.split(";");
-        for (String v : values) {
-            Matcher m = p1.matcher(v);
-            if (m.matches()) {
-                String attrName = m.group(1);
-                String attrValue = m.group(2);
-                additionalAttributes.put(attrName, attrValue);
-            } else {
-                m = p2.matcher(v);
-                if (m.matches()) {
-                    String attrName = m.group(1);
-                    String attrValue = m.group(2);
-                    additionalAttributes.put(attrName, attrValue);
-                } else {
-                    log.error("Invalid syntax for additional attributes : [{}]", v);
-                    return null;
-                }
-            }
-        }
-        return additionalAttributes;    }
 }

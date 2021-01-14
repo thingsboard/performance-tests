@@ -15,6 +15,7 @@
  */
 package org.thingsboard.tools.service.shared;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -59,6 +60,10 @@ public abstract class BaseTestExecutor {
     @Value("${device.api}")
     private String deviceAPIType;
 
+    @Value("${lwm2m.x509.create_new_key_store:}")
+    protected boolean createNewKeyStore;
+
+
     @Autowired
     private RuleChainManager ruleChainManager;
 
@@ -100,6 +105,9 @@ public abstract class BaseTestExecutor {
         }
         if (dashboardDeleteOnComplete) {
             dashboardManager.removeDashboards();
+        }
+        if (createNewKeyStore){
+
         }
 
         waitOtherClients();
