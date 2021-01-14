@@ -116,6 +116,11 @@ public class MqttDeviceAPITest extends BaseMqttAPITest implements DeviceAPITest 
         mapDevicesToDeviceClientConnections();
     }
 
+    @Override
+    public void generationX509() {
+
+    }
+
     private void mapDevicesToDeviceClientConnections() {
         for (MqttClient mqttClient : mqttClients) {
             DeviceClient client = new DeviceClient();

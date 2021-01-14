@@ -18,6 +18,7 @@ package org.thingsboard.tools.service.device;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
+import org.eclipse.leshan.core.util.Hex;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,12 @@ import org.thingsboard.tools.service.shared.Lwm2mProfile;
 
 import javax.annotation.PreDestroy;
 import java.io.IOException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.CertificateEncodingException;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -90,6 +97,11 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
     }
 
     @Override
+    public void generationX509() {
+        context.generationX509Client(deviceStartIdx, deviceEndIdx);
+    }
+
+    @Override
     protected void runApiTestIteration(int iteration, AtomicInteger totalSuccessPublishedCount, AtomicInteger totalFailedPublishedCount, CountDownLatch testDurationLatch) {
 
     }
@@ -99,23 +111,23 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
         List<Device> result = Collections.synchronizedList(new ArrayList<>(1024 * 1024));
         int entityCount = deviceEndIdx - deviceStartIdx;
         log.info("Creating on one SecurityMode [{}] lwm2m devices...", entityCount);
-        if (this.lwm2mNoSecEnabled) this.createEntitiesLwm2m(result, LwM2MSecurityMode.NO_SEC);
-        if (this.lwm2mPSKEnabled) this.createEntitiesLwm2m(result, LwM2MSecurityMode.PSK);
-        if (this.lwm2mRPKEnabled) this.createEntitiesLwm2m(result, LwM2MSecurityMode.RPK);
-        if (this.lwm2mX509Enabled) this.createEntitiesLwm2m(result, LwM2MSecurityMode.X509);
+        if (context.isLwm2mNoSecEnabled()) this.createEntitiesLwm2m(result, LwM2MSecurityMode.NO_SEC);
+        if (context.isLwm2mPSKEnabled()) this.createEntitiesLwm2m(result, LwM2MSecurityMode.PSK);
+        if (context.isLwm2mRPKEnabled()) this.createEntitiesLwm2m(result, LwM2MSecurityMode.RPK);
+        if (context.isLwm2mX509Enabled()) this.createEntitiesLwm2m(result, LwM2MSecurityMode.X509);
         return result;
     }
 
     protected Set<String> connectEntities() throws InterruptedException {
         Set<String> result = ConcurrentHashMap.newKeySet(1024 * 1024);
         int nextPortNumber = deviceStartIdx;
-        if (this.lwm2mNoSecEnabled)
+        if (context.isLwm2mNoSecEnabled())
             nextPortNumber = this.connectEntitiesLwm2m(result, LwM2MSecurityMode.NO_SEC, nextPortNumber);
-        if (this.lwm2mPSKEnabled)
+        if (context.isLwm2mPSKEnabled())
             nextPortNumber = this.connectEntitiesLwm2m(result, LwM2MSecurityMode.PSK, nextPortNumber);
-        if (this.lwm2mRPKEnabled)
+        if (context.isLwm2mRPKEnabled())
             nextPortNumber = this.connectEntitiesLwm2m(result, LwM2MSecurityMode.RPK, nextPortNumber);
-        if (this.lwm2mX509Enabled)
+        if (context.isLwm2mX509Enabled())
             nextPortNumber = this.connectEntitiesLwm2m(result, LwM2MSecurityMode.X509, nextPortNumber);
         log.info("Trying to  connected [{}] lwm2m clients... nextPortNumber [{}]", result.size(), nextPortNumber);
         return result;
@@ -140,17 +152,15 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
         Lwm2mProfile profileName = Lwm2mProfile.valueOf(mode.name());
         AtomicInteger numberPoint = new AtomicInteger();
         numberPoint.addAndGet(deviceStartIdx);
-//        int tokenNumber = 0;
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
-//            int finalTokenNumber = tokenNumber;
             int finalI = i;
             restClientService.getLwm2mExecutor().submit(() -> {
                 Device entity = new Device();
                 try {
-                    String token = this.getToken(finalI, mode);
-                    entity.setName(token);
+                    String endPoint = context.getEndPoint(finalI, mode);
+                    entity.setName(endPoint);
                     entity.setType(profileName.profileName);
-                    DeviceCredentials credentials = this.getDeviceCredentials(mode, entity.getName());
+                    DeviceCredentials credentials = this.getDeviceCredentials(mode, entity.getName(), finalI);
                     entity = restClientService.getRestClient().saveDeviceWithCredentials(entity, credentials).get();
                     result.add(entity);
                     count.getAndIncrement();
@@ -164,10 +174,7 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
                     latch.countDown();
                 }
             });
-//            tokenNumber++;
         }
-
-
         ScheduledFuture<?> logScheduleFuture = restClientService.getLogScheduler().scheduleAtFixedRate(() -> {
             try {
                 log.info("[{}] [{}] [{}] have been created so far...", count.get(), numberPoint.get(), "lwm2m_" + profileName.profileName);
@@ -180,37 +187,57 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
         log.info("[{}] [{}] have been created successfully!", result.size(), "lwm2m");
     }
 
-    private DeviceCredentials getDeviceCredentials(LwM2MSecurityMode mode, String credentialsId) throws IOException {
+    private DeviceCredentials getDeviceCredentials(LwM2MSecurityMode mode, String endPoint, int numberClient) throws IOException {
         DeviceCredentials deviceCredentials = new DeviceCredentials();
         deviceCredentials.setCredentialsType(DeviceCredentialsType.LWM2M_CREDENTIALS);
-        String credentialsEndpoint = mode == LwM2MSecurityMode.PSK ? credentialsId + this.getLwm2mPSKIdentitySub() : credentialsId;
+        String credentialsEndpoint = mode == LwM2MSecurityMode.PSK ? endPoint + context.getLwm2mPSKIdentitySub() : endPoint;
         deviceCredentials.setCredentialsId(credentialsEndpoint);
-        deviceCredentials.setCredentialsValue(getDeviceCredentialsConfig(mode, credentialsId));
+        deviceCredentials.setCredentialsValue(getDeviceCredentialsConfig(mode, endPoint, numberClient));
         return deviceCredentials;
     }
 
-    private String getDeviceCredentialsConfig(LwM2MSecurityMode mode, String credentialsId) throws IOException {
-        String publicKey = nodeConfigKeys.get(mode.name()).get("clientPublicKeyOrId").asText();
-        String privateKey = nodeConfigKeys.get(mode.name()).get("clientSecretKey").asText();
-//        JsonNode nodeConfigClient = mapper.createObjectNode();
-        JsonNode nodeConfigClient = mapper.valueToTree(nodeConfig);
+    private String getDeviceCredentialsConfig(LwM2MSecurityMode mode, String endPoint, int numberClient) throws IOException {
+        String publicKeyClient = null;
+        String privateKeyClient = null;
+        if (mode == LwM2MSecurityMode.PSK || mode == LwM2MSecurityMode.NO_SEC) {
+            publicKeyClient = endPoint + context.getLwm2mPSKIdentitySub();
+            privateKeyClient = context.getNodeConfigKeys().get(mode.name()).get("clientSecretKey").asText();
+        } else if (mode == LwM2MSecurityMode.RPK) {
+            publicKeyClient = context.getNodeConfigKeys().get(mode.name()).get("clientPublicKeyOrId").asText();
+            privateKeyClient = context.getNodeConfigKeys().get(mode.name()).get("clientSecretKey").asText();
+        } else if (mode == LwM2MSecurityMode.X509) {
+            try {
+                X509Certificate serverCertificate = (X509Certificate) context.getClientKeyStoreValue().getCertificate(context.getClientAlias(numberClient));
+                publicKeyClient = Hex.encodeHexString(serverCertificate.getEncoded());
+                PrivateKey privateKey = (PrivateKey) context.getClientKeyStoreValue().getKey(context.getClientAlias(numberClient), context.getClientKeyStorePwd().toCharArray());
+                privateKeyClient = Hex.encodeHexString(privateKey.getEncoded());
+                log.info("Client  [{}] uses X509 : \n X509 Certificate (Hex): [{}] \n Private Key (Hex): [{}]", endPoint, publicKeyClient, privateKeyClient);
+            } catch (KeyStoreException | CertificateEncodingException e) {
+                e.printStackTrace();
+            } catch (UnrecoverableKeyException e) {
+                e.printStackTrace();
+            } catch (NoSuchAlgorithmException e) {
+                e.printStackTrace();
+            }
+        }
+        JsonNode nodeConfigClient = mapper.valueToTree(context.getNodeConfig());
         ((ObjectNode) nodeConfigClient.get("client")).put("securityConfigClientMode", mode.name());
-        ((ObjectNode) nodeConfigClient.get("bootstrap").get("bootstrapServer")).put("securityMode", mode.name());
-        ((ObjectNode) nodeConfigClient.get("bootstrap").get("bootstrapServer")).put("clientPublicKeyOrId", publicKey);
-        ((ObjectNode) nodeConfigClient.get("bootstrap").get("bootstrapServer")).put("clientSecretKey", privateKey);
+        ((ObjectNode) nodeConfigClient.get("bootstrap").get("bootstrapServer")).put("LwM2MClientConfiguration clientConfiguration = new LwM2MClientConfiguration(securityMode", mode.name());
+        ((ObjectNode) nodeConfigClient.get("bootstrap").get("bootstrapServer")).put("clientPublicKeyOrId", publicKeyClient);
+        ((ObjectNode) nodeConfigClient.get("bootstrap").get("bootstrapServer")).put("clientSecretKey", privateKeyClient);
         ((ObjectNode) nodeConfigClient.get("bootstrap").get("lwm2mServer")).put("securityMode", mode.name());
-        ((ObjectNode) nodeConfigClient.get("bootstrap").get("lwm2mServer")).put("clientPublicKeyOrId", publicKey);
-        ((ObjectNode) nodeConfigClient.get("bootstrap").get("lwm2mServer")).put("clientSecretKey", privateKey);
+        ((ObjectNode) nodeConfigClient.get("bootstrap").get("lwm2mServer")).put("clientPublicKeyOrId", publicKeyClient);
+        ((ObjectNode) nodeConfigClient.get("bootstrap").get("lwm2mServer")).put("clientSecretKey", privateKeyClient);
         switch (mode) {
             case NO_SEC:
                 break;
             case PSK:
-                ((ObjectNode) nodeConfigClient.get("client")).put("endpoint", credentialsId);
-                ((ObjectNode) nodeConfigClient.get("client")).put("identity", credentialsId + this.getLwm2mPSKIdentitySub());
-                ((ObjectNode) nodeConfigClient.get("client")).put("key", privateKey);
+                ((ObjectNode) nodeConfigClient.get("client")).put("endpoint", endPoint);
+                ((ObjectNode) nodeConfigClient.get("client")).put("identity", endPoint + context.getLwm2mPSKIdentitySub());
+                ((ObjectNode) nodeConfigClient.get("client")).put("key", privateKeyClient);
                 break;
             case RPK:
-                ((ObjectNode) nodeConfigClient.get("client")).put("key", publicKey);
+                ((ObjectNode) nodeConfigClient.get("client")).put("key", publicKeyClient);
                 break;
             case X509:
                 ((ObjectNode) nodeConfigClient.get("client")).put("x509", true);
@@ -218,29 +245,28 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
         return mapper.writeValueAsString(nodeConfigClient);
     }
 
-    private int connectEntitiesLwm2m(Set<String> result, LwM2MSecurityMode mode, int nextPortNumber)  throws InterruptedException {
+    private int connectEntitiesLwm2m(Set<String> result, LwM2MSecurityMode mode, int nextPortNumber) throws InterruptedException {
         try {
             int entityCount = deviceEndIdx - deviceStartIdx;
             CountDownLatch latch = new CountDownLatch(entityCount);
             AtomicInteger count = new AtomicInteger();
             int countFor = 2500;
             for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
-//            int finalTokenNumber = tokenNumber;
                 int finalI = i;
                 int finalNextPortNumber = nextPortNumber;
                 restClientService.getLwm2mExecutor().submit(() -> {
                     try {
-
-                        String endPoint = this.getToken(finalI, mode);
-                        LwM2MClientConfiguration clientConfiguration = new LwM2MClientConfiguration(context, locationParams, endPoint, finalNextPortNumber, mode, restClientService.getSchedulerCoapConfig());
-                        clientConfiguration.init(clientAccessConnect);
+                        String endPoint = endPoint = context.getEndPoint(finalI, mode);
+//                        LwM2MClientConfiguration clientConfiguration = new LwM2MClientConfiguration(context, locationParams, endPoint, finalNextPortNumber, mode, restClientService.getSchedulerCoapConfig(), finalI);
+//                        LwM2MClientConfiguration clientConfiguration = LwM2MClientConfiguration.getInstance();
+                        LwM2MClientConfiguration clientConfiguration = new LwM2MClientConfiguration();
+                        clientConfiguration.init(context, locationParams, endPoint, finalNextPortNumber, mode, restClientService.getSchedulerCoapConfig(), finalI);
+                        clientConfiguration.start(clientAccessConnect);
 
                         result.add(endPoint);
                         count.incrementAndGet();
                     } catch (Throwable e) {
                         log.error("[{}][{}] Throwable [{}]", count, finalNextPortNumber, e.toString());
-                        e.printStackTrace();
-
                     } finally {
                         latch.countDown();
                     }
@@ -262,13 +288,9 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
             log.info("Trying to register to coap [{}] lwm2m clients... nextPortNumber [{}]", count, nextPortNumber);
             return nextPortNumber;
         } catch (Throwable t) {
-            t.printStackTrace();
+            log.error("", t);
             throw new RuntimeException();
         }
-    }
-
-    protected String getToken(int token, LwM2MSecurityMode mode) {
-        return "Lw" + LwM2MSecurityMode.fromNameCamelCase(mode.code) + String.format("%8d", token).replace(" ", "0");
     }
 
 }

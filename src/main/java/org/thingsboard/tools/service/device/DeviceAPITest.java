@@ -26,5 +26,7 @@ public interface DeviceAPITest {
     void runApiTests() throws InterruptedException;
 
     void connectDevices() throws InterruptedException;
+
+    void generationX509 ();
 }
 

@@ -174,4 +174,9 @@ public class HttpDeviceAPITest extends AbstractAPITest implements DeviceAPITest 
     @Override
     public void connectDevices() {
     }
+
+    @Override
+    public void generationX509() {
+
+    }
 }

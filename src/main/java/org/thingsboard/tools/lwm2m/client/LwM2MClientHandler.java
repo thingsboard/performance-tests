@@ -20,11 +20,11 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class LwM2MClientHandler {
 
-    /**
-     * link InetSocketAddress used for <code>coaps://</code>
-     */
-    public final static String coapLink = "coap://";
-    public final static String coapLinkSec = "coaps://";
+//    /**
+//     * link InetSocketAddress used for <code>coaps://</code>
+//     */
+//    public final static String coapLink = "coap://";
+//    public final static String coapLinkSec = "coaps://";
 
     /**
      * The default modelFolderPath for reading ObjectModel from resource

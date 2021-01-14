@@ -17,13 +17,13 @@ package org.thingsboard.tools.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.thingsboard.tools.service.device.DeviceAPITest;
 import org.thingsboard.tools.service.device.Lwm2mDeviceAPITest;
 import org.thingsboard.tools.service.shared.BaseTestExecutor;
 
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -34,6 +34,7 @@ public class LwM2MClientBaseTestExecutor extends BaseTestExecutor {
     @Autowired
     private Lwm2mDeviceAPITest lwm2mDeviceAPITest;
 
+    @Qualifier("lwm2mDeviceAPITest")
     @Autowired
     private DeviceAPITest deviceAPITest;
 
@@ -46,6 +47,10 @@ public class LwM2MClientBaseTestExecutor extends BaseTestExecutor {
 
         if (warmupEnabled) {
             deviceAPITest.warmUpDevices();
+        }
+
+        if (createNewKeyStore) {
+            deviceAPITest.generationX509();
         }
     }
 
@@ -71,7 +76,7 @@ public class LwM2MClientBaseTestExecutor extends BaseTestExecutor {
                         log.info("If all clients done, please execute next command: 'kubectl delete statefulset tb-performance-run'");
                     }
                     if (lwm2mDeviceAPITest.clientTryingToConnect.size() != lwm2mDeviceAPITest.clientAccessConnect.size()) {
-                        log.info("Not clients connected access... [{}] ", lwm2mDeviceAPITest.clientTryingToConnect.size() - lwm2mDeviceAPITest.clientAccessConnect.size());
+                        log.info("Not clients connected access... [{}] [{}] [{}] ", lwm2mDeviceAPITest.clientTryingToConnect.size() - lwm2mDeviceAPITest.clientAccessConnect.size(), lwm2mDeviceAPITest.clientTryingToConnect.size(), lwm2mDeviceAPITest.clientAccessConnect.size());
                     }
                     else if (lwm2mDeviceAPITest.clientAccessConnect.size() == 0) {
                         log.info("Cancel the test lwm2m!");
