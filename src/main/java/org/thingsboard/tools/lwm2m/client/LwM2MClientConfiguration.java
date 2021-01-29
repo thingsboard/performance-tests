@@ -83,12 +83,6 @@ public class LwM2MClientConfiguration {
     private LwM2MClientContext context;
     private LwM2MLocationParams locationParams;
 
-//    private static final LwM2MClientConfiguration INSTANCE = new LwM2MClientConfiguration();
-//
-//    public static LwM2MClientConfiguration getInstance() {
-//        return INSTANCE;
-//    }
-
     public void init (LwM2MClientContext context, LwM2MLocationParams locationParams, String endPoint,
                                      int portNumber, LwM2MSecurityMode mode, ScheduledExecutorService executorService, int numberClient) {
         this.mode = mode;
@@ -99,16 +93,6 @@ public class LwM2MClientConfiguration {
         this.executorService = executorService;
         this.numberClient = numberClient;
     }
-
-//    public LwM2MClientConfiguration (LwM2MClientContext context, LwM2MLocationParams locationParams, String endPoint,
-//                                     int portNumber, LwM2MSecurityMode mode, ScheduledExecutorService executorService) {
-//        this.mode = mode;
-//        this.context = context;
-//        this.locationParams = locationParams;
-//        this.endPoint = endPoint;
-//        this.clientPort = context.getClientStartPort() + portNumber;
-//        this.executorService = executorService;
-//    }
 
     public LeshanClient getLeshanClient() {
         /** Create client */

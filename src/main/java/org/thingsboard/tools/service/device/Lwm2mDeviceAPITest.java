@@ -26,6 +26,7 @@ import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.IdBased;
 import org.thingsboard.server.common.data.security.DeviceCredentials;
 import org.thingsboard.server.common.data.security.DeviceCredentialsType;
+import org.thingsboard.tools.lwm2m.client.CertificateGenerator;
 import org.thingsboard.tools.lwm2m.client.LwM2MClientConfiguration;
 import org.thingsboard.tools.lwm2m.client.LwM2MClientContext;
 import org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode;
@@ -64,6 +65,9 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
     @Autowired
     private LwM2MLocationParams locationParams;
 
+    @Autowired
+    private CertificateGenerator certificateGenerator;
+
     @Override
     public void createDevices() throws Exception {
         List<Device> entities = this.createEntities();
@@ -98,7 +102,16 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
 
     @Override
     public void generationX509() {
-        context.generationX509Client(deviceStartIdx, deviceEndIdx);
+        if (context.isCreateNewKeyStoreSh()) {
+            context.generationX509ClientSh(deviceStartIdx, deviceEndIdx);
+        }
+        if (context.isCreateNewKeyStoreJava()) {
+            try {
+                certificateGenerator.generationX509WithRootAndJks(deviceStartIdx, deviceEndIdx);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     @Override
@@ -222,7 +235,7 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
         }
         JsonNode nodeConfigClient = mapper.valueToTree(context.getNodeConfig());
         ((ObjectNode) nodeConfigClient.get("client")).put("securityConfigClientMode", mode.name());
-        ((ObjectNode) nodeConfigClient.get("bootstrap").get("bootstrapServer")).put("LwM2MClientConfiguration clientConfiguration = new LwM2MClientConfiguration(securityMode", mode.name());
+        ((ObjectNode) nodeConfigClient.get("bootstrap").get("bootstrapServer")).put("securityMode", mode.name());
         ((ObjectNode) nodeConfigClient.get("bootstrap").get("bootstrapServer")).put("clientPublicKeyOrId", publicKeyClient);
         ((ObjectNode) nodeConfigClient.get("bootstrap").get("bootstrapServer")).put("clientSecretKey", privateKeyClient);
         ((ObjectNode) nodeConfigClient.get("bootstrap").get("lwm2mServer")).put("securityMode", mode.name());
@@ -256,7 +269,7 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
                 int finalNextPortNumber = nextPortNumber;
                 restClientService.getLwm2mExecutor().submit(() -> {
                     try {
-                        String endPoint = endPoint = context.getEndPoint(finalI, mode);
+                        String endPoint = context.getEndPoint(finalI, mode);
 //                        LwM2MClientConfiguration clientConfiguration = new LwM2MClientConfiguration(context, locationParams, endPoint, finalNextPortNumber, mode, restClientService.getSchedulerCoapConfig(), finalI);
 //                        LwM2MClientConfiguration clientConfiguration = LwM2MClientConfiguration.getInstance();
                         LwM2MClientConfiguration clientConfiguration = new LwM2MClientConfiguration();
