@@ -19,10 +19,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.LineIterator;
 import org.eclipse.californium.elements.util.ExecutorsUtil;
 import org.eclipse.californium.elements.util.NamedThreadFactory;
 import org.eclipse.leshan.core.model.ObjectLoader;
 import org.eclipse.leshan.core.model.ObjectModel;
+import org.eclipse.leshan.core.util.Hex;
 import org.springframework.beans.factory.annotation.Value;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -30,26 +33,22 @@ import org.springframework.stereotype.Component;
 import org.thingsboard.tools.service.shared.BaseLwm2mAPITest;
 
 import javax.annotation.PostConstruct;
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -69,7 +68,7 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
     protected static final String deviceConfigNoSec = "credentials/deviceConfigNoSec.json";
     protected static final String deviceConfigKeys = "credentials/deviceConfigKeys.json";
 
-    private static final ScheduledExecutorService schedulerLwm2mTest = ExecutorsUtil.newScheduledThreadPool(100,
+    private static final ScheduledExecutorService schedulerLwm2mTest = ExecutorsUtil.newScheduledThreadPool(2000,
             new NamedThreadFactory("CreatedKeyStoreX509"));
 
     @Getter
@@ -238,6 +237,10 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
     private List<ObjectModel> modelsValue;
 
     @Getter
+    @Setter
+    private Path pathForCreatedNewX509;
+
+    @Getter
     private final String BASE_DIR_PATH = System.getProperty("user.dir");
 
     @Getter
@@ -276,10 +279,20 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
     @Getter
     private final String serverKeyStorePwd = "server_ks_password";
 
-
     @Getter
     @Value("${lwm2m.x509.prefix_client_alias:}")
     private String prefixClientAlias;
+
+    @Getter
+    @Value("${lwm2m.x509.prefix_client:}")
+    private String prefixClient;
+
+    @Getter
+    @Value("${lwm2m.x509.prefix_client_self_alias:}")
+    private String prefixClientSelfAlias;
+
+    @Getter
+    private final String rootAlias = "rootCA";
 
     @Getter
     private final String bootstrapAlias = "bootstrap";
@@ -304,7 +317,16 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
     private KeyStore clientKeyStoreValue;
 
     @Getter
-    private final String keyStoreType = "PKCS12";
+//    private final String keyStoreType = "PKCS12";
+    private final String keyStoreType = "JKS";
+
+    @Getter
+    @Value("${lwm2m.x509.create_new_key_store_sh:}")
+    private boolean createNewKeyStoreSh;
+
+    @Getter
+    @Value("${lwm2m.x509.create_new_key_store_java:}")
+    private boolean createNewKeyStoreJava;
 
     @PostConstruct
     public void init() {
@@ -375,13 +397,19 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
         }
     }
 
-    public File getCreatedNewX509() {
-        Path pathModels = (new File(Paths.get(getBaseDirPath(), PATH_DATA, CREATED_KEY_STORE_DEFAULT_PATH, SH_CREATED_KEY_STORE_DEFAULT).toUri()).isDirectory()) ?
-                Paths.get(getBaseDirPath(), PATH_DATA, CREATED_KEY_STORE_DEFAULT_PATH, SH_CREATED_KEY_STORE_DEFAULT) :
-                Paths.get(getBaseDirPath(), SRC_DIR, MAIN_DIR, RESOURCES_DIR, CREDENTIALS_DIR, CREATED_KEY_STORE_DEFAULT_PATH, SH_CREATED_KEY_STORE_DEFAULT);
-        return (pathModels != null) ? new File(pathModels.toUri()) : null;
+    public Path getPathForCreatedNewX509() {
+        return (this.pathForCreatedNewX509 != null) ? this.pathForCreatedNewX509 :
+                new File(Paths.get(getBaseDirPath(), PATH_DATA, CREATED_KEY_STORE_DEFAULT_PATH).toUri()).isDirectory() ?
+                        Paths.get(getBaseDirPath(), PATH_DATA, CREATED_KEY_STORE_DEFAULT_PATH) :
+                        new File(Paths.get(getBaseDirPath(), SRC_DIR, MAIN_DIR, RESOURCES_DIR, CREDENTIALS_DIR, CREATED_KEY_STORE_DEFAULT_PATH).toUri()).isDirectory() ?
+                                Paths.get(getBaseDirPath(), SRC_DIR, MAIN_DIR, RESOURCES_DIR, CREDENTIALS_DIR, CREATED_KEY_STORE_DEFAULT_PATH) :
+                                Paths.get(getBaseDirPath());
     }
 
+    public File getPathForCreatedNewX509Sh() {
+        return (new File(Paths.get(this.getPathForCreatedNewX509().toUri().getPath(), SH_CREATED_KEY_STORE_DEFAULT).toUri()).isFile()) ?
+                new File(Paths.get(this.getPathForCreatedNewX509().toUri().getPath(), SH_CREATED_KEY_STORE_DEFAULT).toUri()) : null;
+    }
 
     private String getBaseDirPath() {
         Path FULL_FILE_PATH;
@@ -465,6 +493,7 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
      * -s: start = deviceStartIdx;
      * -f: finish = deviceEndIdx;
      * -a: prefixClientAlias = "client_alias_";
+     * -e: prefixClientSelfAlias = "client_self_alias_";
      * -b: bootstrapAlias = "bootstrap";
      * -d: serverAlias = "server";
      * getCreatedNewX509() => SH_CREATED_KEY_STORE_DEFAULT = "lwM2M_credentials.sh";
@@ -472,49 +501,56 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
      * -k: keyStoreClientFile = "clientKeyStore.jks";
      * -c: clientKeyStorePwd = "client_ks_password";
      * -w: serverKeyStorePwd = "server_ks_password";
-     * @param start - deviceStartIdx
+     *
+     * @param start  - deviceStartIdx
      * @param finish - deviceEndIdx
-     * outPut: keyStoreType = "PKCS12";
+     *               outPut: keyStoreType = "PKCS12";
      */
-    public void generationX509Client(int start, int finish) {
-        File path = this.getCreatedNewX509();
-        if (path.isFile()) {
+    public void generationX509ClientSh(int start, int finish) {
+        File fileSh = this.getPathForCreatedNewX509Sh();
+        if (fileSh != null) {
             try {
 
-                String command = String.format(path.getAbsolutePath() + " -p %s -s %s -f %s -a %s -b %s -d %s -j %s -k %s -c %s -w %s",
+                String command = String.format(fileSh.getAbsolutePath() + " -p %s -s %s -f %s -a %s -e %s -b %s -d %s -j %s -k %s -c %s -w %s",
                         this.getPrefEndPoint(X509), start, finish,
-                        this.prefixClientAlias, this.bootstrapAlias, this.serverAlias, this.keyStoreServerFile, this.keyStoreClientFile,
+                        this.prefixClientAlias, this.prefixClientSelfAlias, this.bootstrapAlias, this.serverAlias, this.keyStoreServerFile, this.keyStoreClientFile,
                         this.clientKeyStorePwd, this.serverKeyStorePwd, this.keyStoreType);
                 String[] cmdAndArgs = command.split(" ");
                 ProcessBuilder processBuilder = new ProcessBuilder(cmdAndArgs);
                 Process process = launchProcessX509Client(processBuilder);
-            } catch (InterruptedException e) {
+            } catch (IOException | InterruptedException e) {
                 log.error("Could not parse the resource definition file", e);
             }
         } else {
-            log.error("[{}]Read SH for created new X509", path.getAbsoluteFile());
+            log.error("[{}]Read SH for created new X509", fileSh.getAbsoluteFile());
         }
         log.info("{} - [{}] have been created certificate x509 successfully!", "lwm2m", finish - start);
     }
 
-    private static Process launchProcessX509Client(ProcessBuilder builder) throws InterruptedException {
-        final CountDownLatch latch = new CountDownLatch(1);
-        AtomicReference<Process> process = new AtomicReference<>();
-        StringBuilder output = new StringBuilder();
-        final int[] last_ind = new int[1];
-        final int[] prev_ind = new int[1];
-        new Thread(() -> {
+    private static Process launchProcessX509Client(ProcessBuilder builder) throws InterruptedException, IOException {
+        Process process = builder.start();
+        LineIterator lines = IOUtils.lineIterator(process.getInputStream(), "UTF-8");
+        while (lines.hasNext()) {
+            String line = lines.next();
+            log.info("line: {}", line + "\n");
+        }
+        int exitVal = process.waitFor();
+        if (exitVal == 0) {
+            log.info("Success creating x509 new KeyStore!");
+        } else {
+            log.error("Error x509! count last process: [{}]", exitVal);
+        }
+
+       /* new Thread(() -> {
             try {
                 process.set(builder.start());
                 BufferedReader reader = new BufferedReader(
                         new InputStreamReader(process.get().getInputStream()));
                 String line;
-                last_ind[0] = 0;
-                prev_ind[0] = 0;
                 while ((line = reader.readLine()) != null) {
-                    prev_ind[0] = last_ind[0];
-                    output.append(line + "\n");
-                    last_ind[0] = output.lastIndexOf("\n");
+                    lineInfo.set(line);
+//                    output.append(line + "\n");
+                    log.info("line: {}", line + "\n");
                 }
                 int exitVal = process.get().waitFor();
                 if (exitVal == 0) {
@@ -528,16 +564,66 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
             } finally {
                 latch.countDown();
             }
-        }).start();
-        ScheduledFuture<?> logScheduleFuture = schedulerLwm2mTest.scheduleAtFixedRate(() -> {
+        }).start();*/
+      /*  ScheduledFuture<?> logScheduleFuture = schedulerLwm2mTest.scheduleAtFixedRate(() -> {
             try {
-                log.info("[{} {}] have been created x509 so far...", "readLined: ", output.substring(prev_ind[0], last_ind[0]));
+                log.info("[{} {}] have been created x509 so far...", "readLined: ", lineInfo.get());
             } catch (Exception ignored) {
             }
-        }, 0, 2, TimeUnit.SECONDS);
-        latch.await();
-        logScheduleFuture.cancel(true);
-        return process.get();
+        }, 0, 2, TimeUnit.SECONDS); */
+        //  latch.await();
+        //  logScheduleFuture.cancel(true);
+        return process;
+    }
+
+    /**
+     * 2:47:47.119 [pool-3-thread-2] INFO  o.t.t.l.secure.LwM2MSecurityStore - Client uses X509 :
+     * X509 Certificate (Hex): [3082021b308201bfa003020102020442399826300c06082a8648ce3d04030205003075310b3009060355040613025553310b3009060355040813024341310b300906035504071302534631143012060355040a130b5468696e6773626f61726431143012060355040b130b5468696e6773626f6172643120301e060355040313176e69636b2d5468696e6773626f61726420726f6f7443413020170d3231303131363138313235355a180f32313230313232333138313235355a306c310b3009060355040613025553310b3009060355040813024341310b300906035504071302534631143012060355040a130b5468696e6773626f61726431143012060355040b130b5468696e6773626f617264311730150603550403130e4c775835303930303030303030303059301306072a8648ce3d020106082a8648ce3d03010703420004e6f349e1275cebeabb417afe7452a975f81d240e21e8f6763d887486ab6431a1c4afa90ca1de887a179a89c92a98c50e420c5813177e4a98137f74e31dff37e1a3423040301d0603551d0e0416041473cad8ff526a7511d52e950dff661c48be517ada301f0603551d2304183016801442d6b0539a6adad92783f43c8928b65e0f2a7eed300c06082a8648ce3d04030205000348003045022100fc48e91c391b6282d18b3cac9903072294f040cf71b68a4e6b48dfb3fc29eff20220167baefebee8b84e91e94942e9475ddfe880e04afc2be1a311c6e77e4ad99b08]
+     * getSigAlgName: [SHA256withECDSA]
+     * getSigAlgOID: [1.2.840.10045.4.3.2]
+     * type: [X.509]
+     * IssuerDN().getName: [CN=nick-Thingsboard rootCA, OU=Thingsboard, O=Thingsboard, L=SF, ST=CA, C=US]
+     * SubjectDN().getName: [CN=LwX50900000000, OU=Thingsboard, O=Thingsboard, L=SF, ST=CA, C=US]
+     *
+     * 12:47:53.386 [pool-3-thread-2] INFO  o.t.t.l.secure.LwM2MSecurityStore - Server uses X509 :
+     * X509 Certificate (Hex): [3082023d308201e1a00302010202041ca6324e300c06082a8648ce3d04030205003075310b3009060355040613025553310b3009060355040813024341310b300906035504071302534631143012060355040a130b5468696e6773626f61726431143012060355040b130b5468696e6773626f6172643120301e060355040313176e69636b2d5468696e6773626f61726420726f6f7443413020170d3231303131363138313235325a180f32313230313232333138313235325a30818d310b3009060355040613025553310b3009060355040813024341310b300906035504071302534631143012060355040a130b5468696e6773626f61726431143012060355040b130b5468696e6773626f617264313830360603550403132f6e69636b2d5468696e6773626f61726420736572766572204c774d324d207369676e656420627920726f6f742043413059301306072a8648ce3d020106082a8648ce3d0301070342000426d5de0a6becabdb9caba4375649245e7a27a0013f1f30432376e83cea16ea52af7c4255571ee1de644495c506953b30773d4172f8deb745022decf08a9a4427a3423040301d0603551d0e04160414f3156f006dfe60781704c20b00620c68d2451952301f0603551d2304183016801442d6b0539a6adad92783f43c8928b65e0f2a7eed300c06082a8648ce3d04030205000348003045022100aa939522badaba8825539de7539d4ec1d61b4e04f0e49c2bcdf9d0dc7e2a282f022008e7a9a6da8ca2d698a2af3b45fb0694d72f1c0b5b24448131f2d92490fe5aa8]
+     * getSigAlgName: [SHA256withECDSA]
+     * getSigAlgOID: [1.2.840.10045.4.3.2]
+     * type: [X.509]
+     * IssuerDN().getName: [CN=nick-Thingsboard rootCA, OU=Thingsboard, O=Thingsboard, L=SF, ST=CA, C=US]
+     * SubjectDN().getName: [CN=nick-Thingsboard server LwM2M signed by root CA, OU=Thingsboard, O=Thingsboard, L=SF, ST=CA, C=US]
+     *
+     * 12:47:53.386 [pool-3-thread-2] INFO  o.t.t.l.secure.LwM2MSecurityStore - Bootstrap uses X509 :
+     * X509 Certificate (Hex): [30820248308201eba00302010202046fdab804300c06082a8648ce3d04030205003075310b3009060355040613025553310b3009060355040813024341310b300906035504071302534631143012060355040a130b5468696e6773626f61726431143012060355040b130b5468696e6773626f6172643120301e060355040313176e69636b2d5468696e6773626f61726420726f6f7443413020170d3231303131363138313235335a180f32313230313232333138313235335a308197310b3009060355040613025553310b3009060355040813024341310b300906035504071302534631143012060355040a130b5468696e6773626f61726431143012060355040b130b5468696e6773626f61726431423040060355040313396e69636b2d5468696e6773626f61726420626f6f74737472617020736572766572204c774d324d207369676e656420627920726f6f742043413059301306072a8648ce3d020106082a8648ce3d03010703420004404400979de1ee59d382f2aba83beebf41399909db67c6b1ea3c0dd231262a27b0b5b4df0572a2d389a8c4b3f66ae302db98759f5d9bb02ded0cc9be779b756ca3423040301d0603551d0e0416041466e2cb1be2a7528469afcb2fbcfa1bf4080743f9301f0603551d2304183016801442d6b0539a6adad92783f43c8928b65e0f2a7eed300c06082a8648ce3d040302050003490030460221009d2746c1b49bc388eebd5a06fde13dcfcc6723b4438429463382a70285d1f007022100a54bf8f18b18282a7e7a1488f849734ab4395d2671d204f14801cd3022986744]
+     * getSigAlgName: [SHA256withECDSA]
+     * getSigAlgOID: [1.2.840.10045.4.3.2]
+     * type: [X.509]
+     * IssuerDN().getName: [CN=nick-Thingsboard rootCA, OU=Thingsboard, O=Thingsboard, L=SF, ST=CA, C=US]
+     * SubjectDN().getName: [CN=nick-Thingsboard bootstrap server LwM2M signed by root CA, OU=Thingsboard, O=Thingsboard, L=SF, ST=CA, C=US]
+     */
+
+    static void getParamsX509(X509Certificate certificate, String whose) {
+        try {
+            log.info("{} uses X509 : " +
+                            "\n X509 Certificate (Hex): [{}] " +
+                            "\n getSigAlgName: [{}] " +
+                            "\n getSigAlgOID: [{}] " +
+                            "\n type: [{}] " +
+                            "\n IssuerDN().getName: [{}] " +
+                            "\n SubjectDN().getName: [{}]",
+                    whose,
+                    Hex.encodeHexString(certificate.getEncoded()),
+                    certificate.getSigAlgName(),
+                    certificate.getSigAlgOID(),
+                    certificate.getType(),
+                    certificate.getIssuerDN().getName(),
+                    certificate.getSubjectDN().getName()
+//                    new String(((X509CertImpl) certificate).signedCert, StandardCharsets.UTF_8)
+            );
+
+        } catch (CertificateEncodingException e) {
+            log.error(" [{}]", e.getMessage());
+        }
     }
 
 }

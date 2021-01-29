@@ -80,8 +80,11 @@ lwm2m:
       port: "${RPK_BS_PORT:5694}"
   x509:
     enabled: "${X509_ENABLED:true}"
+    prefix_client: "${CLIENT_ALIAS:client}"
     prefix_client_alias: "${CLIENT_ALIAS:client_alias_}"
-    create_new_key_store: "${CREATE_NEW_KET_STORE:true}"
+    prefix_client_self_alias: "${CLIENT_SELF_ALIAS:client_self_signed_}"
+    create_new_key_store_sh: "${CREATE_NEW_KET_STORE_SH:false}"
+    create_new_key_store_java: "${CREATE_NEW_KET_STORE_JAVA:false}"
     server:
       host: "${X509_HOST:localhost}"
       port: "${X509_PORT:5690}"
@@ -135,7 +138,7 @@ test:
   useInstanceIdxRegex: "${USE_INSTANCE_IDX_REGEX:false}"
   instanceIdxRegexSource: "${INSTANCE_IDX_REGEX_SOURCE:}"
   instanceIdxRegex: "${INSTANCE_IDX_REGEX:([0-9]+)$}"
-  enabled: "${TEST_ENABLED:false}"
+  enabled: "${TEST_ENABLED:true}"
   updateRootRuleChain: "${UPDATE_ROOT_RULE_CHAIN:false}"
   revertRootRuleChain: "${REVERT_ROOT_RULE_CHAIN:false}"
   # Test API to use - device or gateway

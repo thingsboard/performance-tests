@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # Copyright © 2016-2018 The Thingsboard Authors
 #
@@ -15,10 +15,13 @@
 # limitations under the License.
 #
 
-#p) CLIENT_CN=LwX50900000000
+#/home/nick/Igor_project/Thingsboard_Perfrmance_test/performance-tests/src/main/resources/credentials/shell/lwM2M_credentials.sh -p LwX509 -s 0 -f 2000 -a client_alias_ -e client_self_signed_ -b bootstrap -d server -j serverKeyStore.jks -k clientKeyStore.jks -c client_ks_password -w server_ks_password
+
+#p) CLIENT_CN=$CLIENT_PREFIX00000000
 #s) client_start=0
 #f) client_finish=1
-#a) CLIENT_ALIAS=client_alias_00000000
+#a) CLIENT_ALIAS=CLIENT_ALIAS_PREFIX_00000000
+#e) CLIENT_SELF_ALIAS=CLIENT_SELF_ALIAS_PREFIX_00000000
 #b) BOOTSTRAP_ALIAS=bootstrap
 #d) SERVER_ALIAS=server
 #j) SERVER_STORE=serverKeyStore.jks
@@ -26,60 +29,13 @@
 #c) CLIENT_STORE_PWD=client_ks_password
 #w) SERVER_STORE_PWD=server_ks_password
 
-#while test $# -gt 0; do
-#  case "$1" in
-#    -h|--help)
-#      echo "$package - attempt to capture frames"
-#      echo " "
-#      echo "$package [options] application [arguments]"
-#      echo " "
-#      echo "options:"
-#      echo "-h, --help                show brief help"
-#      echo "-a, --action=ACTION       specify an action to use"
-#      echo "-o, --output-dir=DIR      specify a directory to store output in"
-#      exit 0
-#      ;;
-#    -a)
-#      shift
-#      if test $# -gt 0; then
-#        export PROCESS=$1
-#      else
-#        echo "no process specified"
-#        exit 1
-#      fi
-#      shift
-#      ;;
-#    --action*)
-#      export PROCESS=`echo $1 | sed -e 's/^[^=]*=//g'`
-#      shift
-#      ;;
-#    -o)
-#      shift
-#      if test $# -gt 0; then
-#        export OUTPUT=$1
-#      else
-#        echo "no output dir specified"
-#        exit 1
-#      fi
-#      shift
-#      ;;
-#    --output-dir*)
-#      export OUTPUT=`echo $1 | sed -e 's/^[^=]*=//g'`
-#      shift
-#      ;;
-#    *)
-#      break
-#      ;;
-#  esac
-#done
-
-
-while getopts p:s:f:a:b:d:j:k:c:w: flag; do
+while getopts p:s:f:a:e:b:d:j:k:c:w: flag; do
   case "${flag}" in
-  p) client_prefix=${OPTARG} ;;
+  p) client_pref=${OPTARG} ;;
   s) client_start=${OPTARG} ;;
   f) client_finish=${OPTARG} ;;
-  a) client_alias=${OPTARG} ;;
+  a) client_alias_pref=${OPTARG} ;;
+  e) client_self_alias_pref=${OPTARG} ;;
   b) bootstrap_alias=${OPTARG} ;;
   d) server_alias=${OPTARG} ;;
   j) key_store_server_file=${OPTARG} ;;
@@ -96,9 +52,8 @@ cd $script_dir
 # source the properties:
 . ./lwM2M_keygen.properties
 
-
-if [ -n "$client_prefix" ]; then
-  CLIENT_PREFIX=$client_prefix
+if [ -n "$client_pref" ]; then
+  CLIENT_PREFIX=$client_pref
 fi
 
 if [ -z "$client_start" ]; then
@@ -109,8 +64,12 @@ if [ -z "$client_finish" ]; then
   client_finish=1
 fi
 
-if [ -n "$client_alias" ]; then
-  CLIENT_ALIAS=$client_alias
+if [ -n "$client_alias_pref" ]; then
+  CLIENT_ALIAS_PREFIX=$client_alias_pref
+fi
+
+if [ -n "$client_self_alias_pref" ]; then
+  CLIENT_SELF_ALIAS_PREFIX=$client_self_alias_pref
 fi
 
 if [ -n "$bootstrap_alias" ]; then
@@ -137,23 +96,32 @@ if [ -n "$server_key_store_pwd" ]; then
   SERVER_STORE_PWD=$server_key_store_pwd
 fi
 
+CLIENT_NUMBER=$client_start
+
 echo "==Start=="
 echo "CLIENT_PREFIX: $CLIENT_PREFIX"
 echo "client_start: $client_start"
 echo "client_finish: $client_finish"
-echo "CLIENT_ALIAS: $CLIENT_ALIAS"
+echo "CLIENT_ALIAS_PREFIX: $CLIENT_ALIAS_PREFIX"
+echo "CLIENT_SELF_ALIAS_PREFIX: $CLIENT_SELF_ALIAS_PREFIX"
 echo "BOOTSTRAP_ALIAS: $BOOTSTRAP_ALIAS"
 echo "SERVER_ALIAS: $SERVER_ALIAS"
 echo "SERVER_STORE: $SERVER_STORE"
 echo "CLIENT_STORE: $CLIENT_STORE"
 echo "CLIENT_STORE_PWD: $CLIENT_STORE_PWD"
 echo "SERVER_STORE_PWD: $SERVER_STORE_PWD"
+echo "CLIENT_NUMBER: $CLIENT_NUMBER"
 
 end_point() {
   echo "$CLIENT_PREFIX$(printf "%08d" $CLIENT_NUMBER)"
 }
+
 client_alias_point() {
-  echo "$CLIENT_ALIAS$(printf "%08d" $CLIENT_NUMBER)"
+  echo "$CLIENT_ALIAS_PREFIX$(printf "%08d" $CLIENT_NUMBER)"
+}
+
+client_self_alias_point() {
+  echo "$CLIENT_SELF_ALIAS_PREFIX$(printf "%08d" $CLIENT_NUMBER)"
 }
 
 # Generation of the keystore.
@@ -264,34 +232,9 @@ keytool \
     -keystore $SERVER_STORE \
     -storepass $SERVER_STORE_PWD
 
-echo
-echo "${H1}Client Keystore : ${RESET}"
-echo "${H1}==================${RESET}"
-#echo "${H2}Creating client key and self-signed certificate with expected CN...${RESET}"
-#keytool \
-#  -genkeypair \
-#  -alias $CLIENT_ALIAS \
-#  -keyalg EC \
-#  -dname "CN=$CLIENT_SELF_CN, OU=$ORGANIZATIONAL_UNIT, O=$ORGANIZATION, L=$CITY, ST=$STATE_OR_PROVINCE, C=$TWO_LETTER_COUNTRY_CODE" \
-#  -validity $VALIDITY \
-#  -storetype $STORETYPE \
-#  -keypass $CLIENT_STORE_PWD \
-#  -keystore $CLIENT_STORE \
-#  -storepass $CLIENT_STORE_PWD
-#keytool \
-#  -exportcert \
-#  -alias $CLIENT_ALIAS \
-#  -keystore $CLIENT_STORE \
-#  -storepass $CLIENT_STORE_PWD | \
-#  keytool \
-#    -importcert \
-#    -alias $CLIENT_SELF_ALIAS \
-#    -keystore $CLIENT_STORE \
-#    -storepass $CLIENT_STORE_PWD \
-#    -noprompt
 
 echo
-echo "${H2}Import root certificate just to be able to import  need by root CA with expected CN...${RESET}"
+echo "${H2}Import root certificate just to be able to import  ned by root CA with expected CN to $CLIENT_STORE${RESET}"
 keytool \
   -exportcert \
   -alias $ROOT_KEY_ALIAS \
@@ -304,33 +247,14 @@ keytool \
     -storepass $CLIENT_STORE_PWD \
     -noprompt
 
-#echo
-#echo "${H2}Creating client certificate signed by root CA with expected CN...${RESET}"
-#keytool \
-#  -certreq \
-#  -alias $CLIENT_ALIAS \
-#  -dname "CN=$CLIENT_CN, OU=$ORGANIZATIONAL_UNIT, O=$ORGANIZATION, L=$CITY, ST=$STATE_OR_PROVINCE, C=$TWO_LETTER_COUNTRY_CODE" \
-#  -keystore $CLIENT_STORE \
-#  -storepass $CLIENT_STORE_PWD | \
-#  keytool \
-#    -gencert \
-#    -alias $ROOT_KEY_ALIAS \
-#    -keystore $SERVER_STORE \
-#    -storepass $SERVER_STORE_PWD \
-#    -storetype $STORETYPE \
-#    -validity $VALIDITY  | \
-#    keytool \
-#      -importcert \
-#      -alias $CLIENT_ALIAS \
-#      -keystore $CLIENT_STORE \
-#      -storepass $CLIENT_STORE_PWD \
-#      -noprompt
-
 cert_end_point() {
-  echo "${H2}Creating client key and self-signed certificate with expected CN $CLIENT_SELF_CN ${RESET}"
+  echo
+  echo "${H1}Client Keystore : ${RESET}"
+  echo "${H1}==================${RESET}"
+  echo "${H2}Creating client key and self-signed certificate with expected CN CLIENT_ALIAS: $CLIENT_ALIAS${RESET}"
   keytool \
     -genkeypair \
-    -alias $CLIENT_CN_ALIAS \
+    -alias $CLIENT_ALIAS \
     -keyalg EC \
     -dname "CN=$CLIENT_SELF_CN, OU=$ORGANIZATIONAL_UNIT, O=$ORGANIZATION, L=$CITY, ST=$STATE_OR_PROVINCE, C=$TWO_LETTER_COUNTRY_CODE" \
     -validity $VALIDITY \
@@ -340,7 +264,7 @@ cert_end_point() {
     -storepass $CLIENT_STORE_PWD
   keytool \
     -exportcert \
-    -alias $CLIENT_CN_ALIAS \
+    -alias $CLIENT_ALIAS \
     -keystore $CLIENT_STORE \
     -storepass $CLIENT_STORE_PWD |
     keytool \
@@ -349,13 +273,27 @@ cert_end_point() {
       -keystore $CLIENT_STORE \
       -storepass $CLIENT_STORE_PWD \
       -noprompt
-
+#
+#  echo
+#  echo "${H2}Import root certificate just to be able to import  ned by root CA with expected CN...${RESET}"
+#  keytool \
+#    -exportcert \
+#    -alias $ROOT_KEY_ALIAS \
+#    -keystore $SERVER_STORE \
+#    -storepass $SERVER_STORE_PWD |
+#    keytool \
+#      -importcert \
+#      -alias $ROOT_KEY_ALIAS \
+#      -keystore $CLIENT_STORE \
+#      -storepass $CLIENT_STORE_PWD \
+#      -noprompt
+#
   echo
-  echo "${H2}Creating client certificate signed by root CA with expected $CLIENT_CN_NAME ${RESET}"
+  echo "${H2}Creating client certificate signed by root CA with expected CN CLIENT_ALIAS: $CLIENT_ALIAS CLIENT_CN: $CLIENT_CN${RESET}"
   keytool \
     -certreq \
-    -alias $CLIENT_CN_ALIAS \
-    -dname "CN=$CLIENT_CN_NAME, OU=$ORGANIZATIONAL_UNIT, O=$ORGANIZATION, L=$CITY, ST=$STATE_OR_PROVINCE, C=$TWO_LETTER_COUNTRY_CODE" \
+    -alias $CLIENT_ALIAS \
+    -dname "CN=$CLIENT_CN, OU=$ORGANIZATIONAL_UNIT, O=$ORGANIZATION, L=$CITY, ST=$STATE_OR_PROVINCE, C=$TWO_LETTER_COUNTRY_CODE" \
     -keystore $CLIENT_STORE \
     -storepass $CLIENT_STORE_PWD |
     keytool \
@@ -367,21 +305,26 @@ cert_end_point() {
       -validity $VALIDITY |
     keytool \
       -importcert \
-      -alias $CLIENT_CN_ALIAS \
+      -alias $CLIENT_ALIAS \
       -keystore $CLIENT_STORE \
       -storepass $CLIENT_STORE_PWD \
       -noprompt
 }
 
-while [ "$CLIENT_NUMBER" != "$client_finish" ]; do
-  CLIENT_CN_NAME=$(end_point)
-  CLIENT_CN_ALIAS=$(client_alias_point)
-  echo "$CLIENT_CN_NAME"
-  echo "$CLIENT_CN_ALIAS"
-  cert_end_point
-  CLIENT_NUMBER=$(($CLIENT_NUMBER + 1))
+  echo
+  echo "==Start Client=="
+while [ "$CLIENT_NUMBER" -lt "$client_finish" ]; do
   echo "number $CLIENT_NUMBER"
   echo "finish $client_finish"
+  CLIENT_CN=$(end_point)
+  CLIENT_ALIAS=$(client_alias_point)
+  CLIENT_SELF_ALIAS=$(client_self_alias_point)
+  echo "CLIENT_CN $CLIENT_CN"
+  echo "CLIENT_ALIAS $CLIENT_ALIAS"
+  echo "CLIENT_SELF_ALIAS $CLIENT_SELF_ALIAS"
+  cert_end_point
+  CLIENT_NUMBER=$(($CLIENT_NUMBER + 1))
+  echo
 done
 
 echo

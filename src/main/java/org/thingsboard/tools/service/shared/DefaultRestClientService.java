@@ -47,6 +47,7 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
+@ConditionalOnProperty(prefix = "device", value = "api", havingValue = "LWM2M")
 public class DefaultRestClientService implements RestClientService {
 
     public static final int LOG_PAUSE = 1;

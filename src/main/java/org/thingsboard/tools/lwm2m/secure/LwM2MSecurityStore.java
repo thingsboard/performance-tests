@@ -17,12 +17,14 @@ package org.thingsboard.tools.lwm2m.secure;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.eclipse.californium.elements.util.StandardCharsets;
 import org.eclipse.leshan.client.object.Server;
 import org.eclipse.leshan.client.resource.ObjectsInitializer;
 import org.eclipse.leshan.core.request.BindingMode;
 import org.eclipse.leshan.core.util.Hex;
 import org.thingsboard.tools.lwm2m.client.LwM2MClientContext;
 import org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode;
+import sun.security.x509.X509CertImpl;
 
 import java.io.File;
 import java.io.IOException;
@@ -160,10 +162,38 @@ public class LwM2MSecurityStore {
             Certificate bootStrapCertificate = (X509Certificate) context.getServerKeyStoreValue().getCertificate(context.getBootstrapAlias());
             this.clientPublicKey = Hex.encodeHexString(clientCertificate.getEncoded());
             this.clientPrivateKey = Hex.encodeHexString(clientPrivKey.getEncoded());
+            getParamsX509((X509Certificate)clientCertificate, "Client");
             this.serverPublicKey = Hex.encodeHexString(serverCertificate.getEncoded());
+            getParamsX509((X509Certificate)serverCertificate, "Server");
             this.bootstrapPublicKey = Hex.encodeHexString(bootStrapCertificate.getEncoded());
+            getParamsX509((X509Certificate)bootStrapCertificate, "Bootstrap");
         } catch (KeyStoreException | UnrecoverableKeyException | NoSuchAlgorithmException | CertificateEncodingException e) {
             log.error("Unable to load key and certificates for X509: [{}]", e.getMessage());
         }
     }
+
+    private static void getParamsX509(X509Certificate certificate, String whose) {
+        try {
+            log.info("{} uses X509 : " +
+                            "\n X509 Certificate (Hex): [{}] " +
+                            "\n getSigAlgName: [{}] " +
+                            "\n getSigAlgOID: [{}] " +
+                            "\n type: [{}] " +
+                            "\n IssuerDN().getName: [{}] " +
+                            "\n SubjectDN().getName: [{}]",
+                    whose,
+                    Hex.encodeHexString(certificate.getEncoded()),
+                    certificate.getSigAlgName(),
+                    certificate.getSigAlgOID(),
+                    certificate.getType(),
+                    certificate.getIssuerDN().getName(),
+                    certificate.getSubjectDN().getName()
+//                    new String(((X509CertImpl) certificate).signedCert, StandardCharsets.UTF_8)
+            );
+
+        } catch (CertificateEncodingException e) {
+            log.error(" [{}]", e.getMessage());
+        }
+    }
+
 }
