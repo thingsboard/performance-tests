@@ -116,7 +116,7 @@ public class LwM2MClientConfiguration {
         /** Initialize other objects */
         initializer.setInstancesForObject(DEVICE, new LwM2mDevice(executorService));
 //        initializer.setInstancesForObject(DEVICE, new LwM2mDevice());
-        initializer.setInstancesForObject(CONNECTIVITY_MONITORING, new LwM2mConnectivityMonitoring(executorService));
+//        initializer.setInstancesForObject(CONNECTIVITY_MONITORING, new LwM2mConnectivityMonitoring(executorService));
 //        initializer.setInstancesForObject(BINARY_APP_DATA_CONTAINER, new LwM2mBinaryAppDataContainer(executorService));
 ////        initializer.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
 //        initializer.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
