@@ -17,17 +17,12 @@ package org.thingsboard.tools.lwm2m.secure;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.californium.elements.util.StandardCharsets;
 import org.eclipse.leshan.client.object.Server;
 import org.eclipse.leshan.client.resource.ObjectsInitializer;
 import org.eclipse.leshan.core.request.BindingMode;
 import org.eclipse.leshan.core.util.Hex;
 import org.thingsboard.tools.lwm2m.client.LwM2MClientContext;
 import org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode;
-import sun.security.x509.X509CertImpl;
-
-import java.io.File;
-import java.io.IOException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
@@ -77,9 +72,9 @@ public class LwM2MSecurityStore {
     }
 
     private void setInstancesNoSec() {
-        String serverURI = null;
+        String serverURI;
         if (context.isLwm2mNoSecBootStrapEnabled()) {
-            serverURI = context.coapLink + context.getLwm2mHostNoSecBootStrap() + ":" + context.getLwm2mPortNoSecBootStrap();
+            serverURI = LwM2MClientContext.coapLink + context.getLwm2mHostNoSecBootStrap() + ":" + context.getLwm2mPortNoSecBootStrap();
             initializer.setInstancesForObject(SECURITY, noSecBootstap(serverURI));
             initializer.setClassForObject(SERVER, Server.class);
         } else {
