@@ -71,6 +71,8 @@ public class LwM2mDevice extends BaseInstanceEnabler {
                 return ReadResponse.success(resourceid, getSerialNumber());
             case 3:
                 return ReadResponse.success(resourceid, getFirmwareVersion());
+            case 7:
+                return ReadResponse.success(resourceid, getPowerSourceVoltage());
             case 9:
                 return ReadResponse.success(resourceid, getBatteryLevel());
             case 10:
@@ -170,6 +172,10 @@ public class LwM2mDevice extends BaseInstanceEnabler {
     }
 
     private int getBatteryLevel() {
+        return RANDOM.nextInt(101);
+    }
+
+    private int getPowerSourceVoltage() {
         return RANDOM.nextInt(101);
     }
 

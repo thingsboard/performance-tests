@@ -16,7 +16,6 @@
 package org.thingsboard.tools.lwm2m.client;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.tuple.Pair;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.BasicConstraints;
 import org.bouncycastle.asn1.x509.Extension;
@@ -41,15 +40,11 @@ import org.springframework.stereotype.Component;
 import javax.annotation.PostConstruct;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
 import java.nio.file.FileSystemException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.*;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
@@ -90,7 +85,6 @@ public class CertificateGenerator {
     private KeyStore sslKeyStoreServer;
     private KeyStore sslKeyStoreClient;
     private static final String fileNameKeyStore = "KeyStore";
-    private static final String keyStorePrefixPfx = ".pfx";
     private static final String keyStorePrefixJks= ".jks";
 
 
@@ -141,8 +135,8 @@ public class CertificateGenerator {
                 context.getLwm2mHostX509() + " " + this.context.getBootstrapAlias(),
                 context.getServerKeyStorePwd());
 
-        String fileNameJks = this.context.getServerAlias() + this.fileNameKeyStore + this.keyStorePrefixJks;
-        this.exportKeyPairToKeystoreFile(this.sslKeyStoreServer, context.getPathForCreatedNewX509().toUri().getPath() +  fileNameJks, context.getServerKeyStorePwd());
+        String fileNameJks = this.context.getServerAlias() + fileNameKeyStore + keyStorePrefixJks;
+        this.exportKeyPairToKeystoreFile(this.sslKeyStoreServer, context.returnPathForCreatedNewX509().toUri().getPath() +  fileNameJks, context.getServerKeyStorePwd());
 //        this.verifyKeyStore (fileNameJks, context.getServerKeyStorePwd());
 
         for (int i = start; i < finish; i++) {
@@ -150,9 +144,9 @@ public class CertificateGenerator {
                     this.context.getClientAlias(i), this.context.getEndPoint(i, LwM2MSecurityMode.X509),
                     context.getClientKeyStorePwd());
         }
-        fileNameJks = this.context.getPrefixClient() + this.fileNameKeyStore + this.keyStorePrefixJks;
-        this.exportKeyPairToKeystoreFile(this.sslKeyStoreClient, context.getPathForCreatedNewX509().toUri().getPath() +  fileNameJks, context.getClientKeyStorePwd());
-        this.verifyKeyStore (context.getPathForCreatedNewX509().toUri().getPath() +  fileNameJks, context.getClientKeyStorePwd());
+        fileNameJks = this.context.getPrefixClient() + fileNameKeyStore + keyStorePrefixJks;
+        this.exportKeyPairToKeystoreFile(this.sslKeyStoreClient, context.returnPathForCreatedNewX509().toUri().getPath() +  fileNameJks, context.getClientKeyStorePwd());
+        this.verifyKeyStore (context.returnPathForCreatedNewX509().toUri().getPath() +  fileNameJks, context.getClientKeyStorePwd());
     }
 
     private void generationX509RootJava() throws NoSuchAlgorithmException, CertIOException, CertificateException, OperatorCreationException {
@@ -173,7 +167,6 @@ public class CertificateGenerator {
         JcaX509ExtensionUtils rootCertExtUtils = new JcaX509ExtensionUtils();
         rootCertBuilder.addExtension(Extension.basicConstraints, true, new BasicConstraints(true));
         rootCertBuilder.addExtension(Extension.subjectKeyIdentifier, false, rootCertExtUtils.createSubjectKeyIdentifier(this.rootKeyPair.getPublic()));
-
         // Create a cert holder
         X509CertificateHolder rootCertHolder = rootCertBuilder.build(rootCertContentSigner);
         this.rootCert = new JcaX509CertificateConverter().setProvider(BC_PROVIDER).getCertificate(rootCertHolder);
@@ -360,27 +353,14 @@ public class CertificateGenerator {
         InputStream inKeyStore = new FileInputStream(keyStoreFile);
         KeyStore keyStoreValue = KeyStore.getInstance(KeyStore.getDefaultType());
         keyStoreValue.load(inKeyStore, keyStorePwd.toCharArray());
-        int size = keyStoreValue.size();
         for (Enumeration<String> aliases = keyStoreValue.aliases();
              aliases.hasMoreElements(); ) {
             String alias = aliases.nextElement();
             Certificate cert = keyStoreValue.getCertificate(alias);
-            PrivateKey privKey = (PrivateKey) keyStoreValue.getKey(alias, keyStorePwd.toCharArray());
             if (cert != null) {
-
-                context.getParamsX509((X509Certificate) cert, alias);
-//                try {
-//                    cert.verify(trustedCert.getPublicKey());
-//                    return new Pair<>(name, trustedCert);
-//                } catch (Exception e) {
-//                    // Not verified, skip to the next one
-//                }
+                LwM2MClientContext.getParamsX509((X509Certificate) cert, alias);
             }
         }
         keyStoreValue.aliases();
-
-//        Certificate clientCertificate = (X509Certificate) context.getClientKeyStoreValue().getCertificate(context.getClientAlias(numberClient));
-//        PrivateKey clientPrivKey = (PrivateKey) context.getClientKeyStoreValue().getKey(context.getClientAlias(numberClient), context.getClientKeyStorePwd().toCharArray());
-
     }
 }

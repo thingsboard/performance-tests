@@ -16,6 +16,8 @@
 package org.thingsboard.tools.lwm2m.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -54,7 +56,9 @@ import java.util.regex.Pattern;
 
 import static org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode.X509;
 
+@EqualsAndHashCode(callSuper = true)
 @Slf4j
+@Data
 @Component("LwM2MClientContext")
 @ConditionalOnProperty(prefix = "device", value = "api", havingValue = "LWM2M")
 public class LwM2MClientContext extends BaseLwm2mAPITest {
@@ -352,7 +356,8 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
         Path pathModels = (new File(Paths.get(getBaseDirPath(), PATH_DATA, MODEL_PATH_DEFAULT).toUri()).isDirectory()) ?
                 Paths.get(getBaseDirPath(), PATH_DATA, MODEL_PATH_DEFAULT) :
                 Paths.get(getBaseDirPath(), SRC_DIR, MAIN_DIR, RESOURCES_DIR, MODEL_PATH_DEFAULT);
-        return (pathModels != null) ? new File(pathModels.toUri()) : null;
+//        return (pathModels != null) ? new File(pathModels.toUri()) : null;
+        return  new File(pathModels.toUri());
     }
 
     private void setClientKeyStore() {
@@ -397,7 +402,7 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
         }
     }
 
-    public Path getPathForCreatedNewX509() {
+    public Path returnPathForCreatedNewX509() {
         return (this.pathForCreatedNewX509 != null) ? this.pathForCreatedNewX509 :
                 new File(Paths.get(getBaseDirPath(), PATH_DATA, CREATED_KEY_STORE_DEFAULT_PATH).toUri()).isDirectory() ?
                         Paths.get(getBaseDirPath(), PATH_DATA, CREATED_KEY_STORE_DEFAULT_PATH) :
@@ -406,9 +411,9 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
                                 Paths.get(getBaseDirPath());
     }
 
-    public File getPathForCreatedNewX509Sh() {
-        return (new File(Paths.get(this.getPathForCreatedNewX509().toUri().getPath(), SH_CREATED_KEY_STORE_DEFAULT).toUri()).isFile()) ?
-                new File(Paths.get(this.getPathForCreatedNewX509().toUri().getPath(), SH_CREATED_KEY_STORE_DEFAULT).toUri()) : null;
+    public File returnPathForCreatedNewX509Sh() {
+        return (new File(Paths.get(this.returnPathForCreatedNewX509().toUri().getPath(), SH_CREATED_KEY_STORE_DEFAULT).toUri()).isFile()) ?
+                new File(Paths.get(this.returnPathForCreatedNewX509().toUri().getPath(), SH_CREATED_KEY_STORE_DEFAULT).toUri()) : null;
     }
 
     private String getBaseDirPath() {
@@ -454,8 +459,8 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
      * PrefixClientAlias = client_alias_
      * ClientAlias = client_alias_00000000
      *
-     * @param numberClient
-     * @return
+     * @param numberClient -
+     * @return ClientAlias
      */
     public String getClientAlias(int numberClient) {
         return this.prefixClientAlias + String.format("%8d", numberClient).replace(" ", "0");
@@ -507,7 +512,7 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
      *               outPut: keyStoreType = "PKCS12";
      */
     public void generationX509ClientSh(int start, int finish) {
-        File fileSh = this.getPathForCreatedNewX509Sh();
+        File fileSh = this.returnPathForCreatedNewX509Sh();
         if (fileSh != null) {
             try {
 
@@ -517,17 +522,17 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
                         this.clientKeyStorePwd, this.serverKeyStorePwd, this.keyStoreType);
                 String[] cmdAndArgs = command.split(" ");
                 ProcessBuilder processBuilder = new ProcessBuilder(cmdAndArgs);
-                Process process = launchProcessX509Client(processBuilder);
+                launchProcessX509Client(processBuilder);
             } catch (IOException | InterruptedException e) {
                 log.error("Could not parse the resource definition file", e);
             }
         } else {
-            log.error("[{}]Read SH for created new X509", fileSh.getAbsoluteFile());
+            log.error("Read SH for created new X509");
         }
         log.info("{} - [{}] have been created certificate x509 successfully!", "lwm2m", finish - start);
     }
 
-    private static Process launchProcessX509Client(ProcessBuilder builder) throws InterruptedException, IOException {
+    private static void launchProcessX509Client(ProcessBuilder builder) throws InterruptedException, IOException {
         Process process = builder.start();
         LineIterator lines = IOUtils.lineIterator(process.getInputStream(), "UTF-8");
         while (lines.hasNext()) {
@@ -573,7 +578,7 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
         }, 0, 2, TimeUnit.SECONDS); */
         //  latch.await();
         //  logScheduleFuture.cancel(true);
-        return process;
+//        return process;
     }
 
     /**

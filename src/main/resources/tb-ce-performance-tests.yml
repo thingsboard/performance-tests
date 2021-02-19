@@ -56,11 +56,11 @@ lwm2m:
       host: "${NO_SEC_HOST:localhost}"
       port: "${NO_SEC_PORT:5685}"
     bootStrap:
-      enabled: "${NO_SEC_BS_ENABLED:true}"
+      enabled: "${NO_SEC_BS_ENABLED:false}"
       host: "${NO_SEC_BS_HOST:localhost}"
       port: "${NO_SEC_BS_PORT:5691}"
   psk:
-    enabled: "${PSK_ENABLED:false}"
+    enabled: "${PSK_ENABLED:true}"
     identity_sub: "${PSK_IDENTITY_SUB:_identity}"
     server:
       host: "${PSK_HOST:localhost}"
@@ -79,7 +79,7 @@ lwm2m:
       host: "${RPK_BS_HOST:localhost}"
       port: "${RPK_BS_PORT:5694}"
   x509:
-    enabled: "${X509_ENABLED:true}"
+    enabled: "${X509_ENABLED:false}"
     prefix_client: "${CLIENT_ALIAS:client}"
     prefix_client_alias: "${CLIENT_ALIAS:client_alias_}"
     prefix_client_self_alias: "${CLIENT_SELF_ALIAS:client_self_signed_}"
