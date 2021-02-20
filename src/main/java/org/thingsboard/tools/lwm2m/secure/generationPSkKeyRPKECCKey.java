@@ -21,11 +21,15 @@ import org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode;
 
 import java.security.*;
 import java.security.interfaces.ECPublicKey;
-import java.security.spec.*;
+import java.security.spec.ECGenParameterSpec;
 import java.util.Arrays;
 
 @Slf4j
 public class generationPSkKeyRPKECCKey {
+
+    private static final String ALGORITM = "EC";
+    private static final String  PROVIDER = "SunEC";
+    private static final String  NAME_PARAMETER_SPEC = "secp256r1";
 
     public generationPSkKeyRPKECCKey(Integer dtlsMode) {
         switch (LwM2MSecurityMode.fromSecurityMode(dtlsMode)) {
@@ -51,23 +55,19 @@ public class generationPSkKeyRPKECCKey {
     }
 
     private void generationRPKECCKey() {
-        /** RPK */
-        String algorithm = "EC";
-        String provider = "SunEC";
-        String nameParameterSpec = "secp256r1";
 
         /** Start RPK
          * Elliptic Curve parameters  : [secp256r1 [NIST P-256, X9.62 prime256v1] (1.2.840.10045.3.1.7)]
          * */
         KeyPairGenerator kpg = null;
         try {
-            kpg = KeyPairGenerator.getInstance(algorithm, provider);
+            kpg = KeyPairGenerator.getInstance(ALGORITM, PROVIDER);
         } catch (NoSuchAlgorithmException e) {
             e.printStackTrace();
         } catch (NoSuchProviderException e) {
             e.printStackTrace();
         }
-        ECGenParameterSpec ecsp = new ECGenParameterSpec(nameParameterSpec);
+        ECGenParameterSpec ecsp = new ECGenParameterSpec(NAME_PARAMETER_SPEC);
         try {
             kpg.initialize(ecsp);
         } catch (InvalidAlgorithmParameterException e) {

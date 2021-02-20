@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,46 +24,28 @@ import org.eclipse.californium.scandium.dtls.*;
 import org.eclipse.leshan.client.californium.LeshanClient;
 import org.eclipse.leshan.client.californium.LeshanClientBuilder;
 import org.eclipse.leshan.client.engine.DefaultRegistrationEngineFactory;
-import org.eclipse.leshan.client.resource.LwM2mInstanceEnabler;
 import org.eclipse.leshan.client.resource.LwM2mObjectEnabler;
 import org.eclipse.leshan.client.resource.ObjectsInitializer;
 import org.eclipse.leshan.core.californium.DefaultEndpointFactory;
 import org.eclipse.leshan.core.model.LwM2mModel;
-import org.eclipse.leshan.core.model.ObjectLoader;
 import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.model.StaticModel;
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeDecoder;
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeEncoder;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.Configuration;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2MLocationParams;
-import org.thingsboard.tools.lwm2m.client.objects.LwM2mBinaryAppDataContainer;
-import org.thingsboard.tools.lwm2m.client.objects.LwM2mConnectivityMonitoring;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2mDevice;
-import org.thingsboard.tools.lwm2m.client.objects.LwM2mLocation;
-import org.thingsboard.tools.lwm2m.client.objects.LwM2mTemperatureSensor;
 import org.thingsboard.tools.lwm2m.secure.LwM2MSecurityStore;
 
-
-import javax.annotation.PostConstruct;
 import java.io.File;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
+import static org.eclipse.californium.scandium.dtls.cipher.CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;
 import static org.eclipse.californium.scandium.dtls.cipher.CipherSuite.TLS_PSK_WITH_AES_128_CBC_SHA256;
-import static org.eclipse.leshan.core.LwM2mId.CONNECTIVITY_MONITORING;
 import static org.eclipse.leshan.core.LwM2mId.DEVICE;
-import static org.eclipse.leshan.core.LwM2mId.LOCATION;
+import static org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode.NO_SEC;
 import static org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode.PSK;
-import static org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode.RPK;
-import static org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode.X509;
 
 
 @Slf4j
@@ -83,8 +65,8 @@ public class LwM2MClientConfiguration {
     private LwM2MClientContext context;
     private LwM2MLocationParams locationParams;
 
-    public void init (LwM2MClientContext context, LwM2MLocationParams locationParams, String endPoint,
-                                     int portNumber, LwM2MSecurityMode mode, ScheduledExecutorService executorService, int numberClient) {
+    public void init(LwM2MClientContext context, LwM2MLocationParams locationParams, String endPoint,
+                     int portNumber, LwM2MSecurityMode mode, ScheduledExecutorService executorService, int numberClient) {
         this.mode = mode;
         this.context = context;
         this.locationParams = locationParams;
@@ -154,11 +136,24 @@ public class LwM2MClientConfiguration {
 
         /** Create DTLS Config */
         DtlsConnectorConfig.Builder dtlsConfig = new DtlsConnectorConfig.Builder();
-        if (this.mode==PSK) {
-            dtlsConfig.setRecommendedCipherSuitesOnly(context.isRecommendedCiphers());
-            dtlsConfig.setRecommendedSupportedGroupsOnly(context.isRecommendedSupportedGroups());
+        dtlsConfig.setRecommendedSupportedGroupsOnly(this.context.isRecommendedSupportedGroups());
+        dtlsConfig.setRecommendedCipherSuitesOnly(this.context.isRecommendedCiphers());
+        if (this.mode == PSK || this.mode == NO_SEC) {
             dtlsConfig.setSupportedCipherSuites(TLS_PSK_WITH_AES_128_CBC_SHA256);
+        } else {
+            dtlsConfig.setSupportedCipherSuites(TLS_PSK_WITH_AES_128_CBC_SHA256,
+                    TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256);
         }
+//        dtlsConfig.setSupportedCipherSuites(TLS_PSK_WITH_AES_128_CBC_SHA256, TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256);
+//        if (this.mode==PSK) {
+//            dtlsConfig.setRecommendedCipherSuitesOnly(context.isRecommendedCiphers());
+//            dtlsConfig.setRecommendedSupportedGroupsOnly(context.isRecommendedSupportedGroups());
+//            dtlsConfig.setSupportedCipherSuites(TLS_PSK_WITH_AES_128_CBC_SHA256);
+//        }
+//        else  {
+//            dtlsConfig.setRecommendedSupportedGroupsOnly(!this.context.isRecommendedSupportedGroups());
+//            dtlsConfig.setRecommendedCipherSuitesOnly(!this.context.isRecommendedCiphers());
+//        }
 
         /** Configure Registration Engine */
         DefaultRegistrationEngineFactory engineFactory = new DefaultRegistrationEngineFactory();
@@ -252,8 +247,8 @@ public class LwM2MClientConfiguration {
         return builder.build();
     }
 
-    public void start(Map<String, String> clientAccessConnect){
-        LwM2MClientInitializer clientInitializer= new LwM2MClientInitializer(this.getLeshanClient(), clientAccessConnect);
+    public void start(Map<String, String> clientAccessConnect) {
+        LwM2MClientInitializer clientInitializer = new LwM2MClientInitializer(this.getLeshanClient(), clientAccessConnect);
         LeshanClient client = clientInitializer.init();
         client.start();
     }

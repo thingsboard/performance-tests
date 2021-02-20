@@ -23,6 +23,7 @@ import org.eclipse.leshan.core.request.BindingMode;
 import org.eclipse.leshan.core.util.Hex;
 import org.thingsboard.tools.lwm2m.client.LwM2MClientContext;
 import org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode;
+
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
@@ -30,8 +31,8 @@ import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
+
 import static org.eclipse.leshan.client.object.Security.*;
-import static org.eclipse.leshan.client.object.Security.noSec;
 import static org.eclipse.leshan.core.LwM2mId.SECURITY;
 import static org.eclipse.leshan.core.LwM2mId.SERVER;
 
@@ -157,11 +158,12 @@ public class LwM2MSecurityStore {
             Certificate bootStrapCertificate = (X509Certificate) context.getServerKeyStoreValue().getCertificate(context.getBootstrapAlias());
             this.clientPublicKey = Hex.encodeHexString(clientCertificate.getEncoded());
             this.clientPrivateKey = Hex.encodeHexString(clientPrivKey.getEncoded());
-            getParamsX509((X509Certificate)clientCertificate, "Client");
+            this.getParamsX509((X509Certificate)clientCertificate, "Client");
+            log.info("Client privateKey [{}] : ", Hex.encodeHexString(clientPrivKey.getEncoded()));
             this.serverPublicKey = Hex.encodeHexString(serverCertificate.getEncoded());
-            getParamsX509((X509Certificate)serverCertificate, "Server");
+            this.getParamsX509((X509Certificate)serverCertificate, "Server");
             this.bootstrapPublicKey = Hex.encodeHexString(bootStrapCertificate.getEncoded());
-            getParamsX509((X509Certificate)bootStrapCertificate, "Bootstrap");
+            this.getParamsX509((X509Certificate)bootStrapCertificate, "Bootstrap");
         } catch (KeyStoreException | UnrecoverableKeyException | NoSuchAlgorithmException | CertificateEncodingException e) {
             log.error("Unable to load key and certificates for X509: [{}]", e.getMessage());
         }

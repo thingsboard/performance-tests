@@ -29,7 +29,6 @@ import org.eclipse.leshan.core.model.ObjectLoader;
 import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.util.Hex;
 import org.springframework.beans.factory.annotation.Value;
-
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.thingsboard.tools.service.shared.BaseLwm2mAPITest;
@@ -44,6 +43,7 @@ import java.nio.file.Paths;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -516,10 +516,10 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
         if (fileSh != null) {
             try {
 
-                String command = String.format(fileSh.getAbsolutePath() + " -p %s -s %s -f %s -a %s -e %s -b %s -d %s -j %s -k %s -c %s -w %s",
+                String command = String.format(fileSh.getAbsolutePath() + " -p %s -s %s -f %s -a %s -e %s -b %s -d %s -j %s -k %s -c %s -w %s -l %s",
                         this.getPrefEndPoint(X509), start, finish,
                         this.prefixClientAlias, this.prefixClientSelfAlias, this.bootstrapAlias, this.serverAlias, this.keyStoreServerFile, this.keyStoreClientFile,
-                        this.clientKeyStorePwd, this.serverKeyStorePwd, this.keyStoreType);
+                        this.clientKeyStorePwd, this.serverKeyStorePwd, this.keyStoreType, this.rootAlias);
                 String[] cmdAndArgs = command.split(" ");
                 ProcessBuilder processBuilder = new ProcessBuilder(cmdAndArgs);
                 launchProcessX509Client(processBuilder);
@@ -607,10 +607,11 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
      * SubjectDN().getName: [CN=nick-Thingsboard bootstrap server LwM2M signed by root CA, OU=Thingsboard, O=Thingsboard, L=SF, ST=CA, C=US]
      */
 
-    static void getParamsX509(X509Certificate certificate, String whose) {
+    static void getParamsX509(X509Certificate certificate, String whose, PrivateKey privateKey) {
         try {
             log.info("{} uses X509 : " +
                             "\n X509 Certificate (Hex): [{}] " +
+                            "\n PrivateKey (Hex): [{}] " +
                             "\n getSigAlgName: [{}] " +
                             "\n getSigAlgOID: [{}] " +
                             "\n type: [{}] " +
@@ -618,6 +619,7 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
                             "\n SubjectDN().getName: [{}]",
                     whose,
                     Hex.encodeHexString(certificate.getEncoded()),
+                    Hex.encodeHexString(privateKey.getEncoded()),
                     certificate.getSigAlgName(),
                     certificate.getSigAlgOID(),
                     certificate.getType(),

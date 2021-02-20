@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -210,9 +210,9 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
     }
 
     private String getDeviceCredentialsConfig(LwM2MSecurityMode mode, String endPoint, int numberClient) throws IOException {
-        String publicKeyClient = null;
-        String privateKeyClient = null;
-        if (mode == LwM2MSecurityMode.PSK || mode == LwM2MSecurityMode.NO_SEC) {
+        String publicKeyClient = "";
+        String privateKeyClient = "";
+        if (mode == LwM2MSecurityMode.PSK) {
             publicKeyClient = endPoint + context.getLwm2mPSKIdentitySub();
             privateKeyClient = context.getNodeConfigKeys().get(mode.name()).get("clientSecretKey").asText();
         } else if (mode == LwM2MSecurityMode.RPK) {

@@ -26,7 +26,9 @@
 
     <logger name="org.thingsboard" level="INFO"/>
 
-<!--    <logger name="org.eclipse.californium.elements.UDPConnector" level="OFF" />-->
+<!--    <logger name="org.eclipse.californium.scandium.DTLSConnector" level="TRACE" />-->
+<!--    <logger name="org.eclipse.californium.scandium.dtls.Handshaker" level="DEBUG" />-->
+<!--    <logger name="org.eclipse.californium.elements.UDPConnector" level="TRACE" />-->
 <!--    <logger name="org.eclipse.leshan.client.californium.LeshanClient" level="OFF" />-->
 <!--    <logger name="org.eclipse.leshan.client.engine.DefaultRegistrationEngine" level="OFF" />-->
 <!--    <logger name="org.eclipse.leshan.client.californium.CaliforniumEndpointsManager" level="OFF" />-->

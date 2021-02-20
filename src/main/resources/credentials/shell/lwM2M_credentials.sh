@@ -28,8 +28,9 @@
 #k) CLIENT_STORE=clientKeyStore.jks
 #c) CLIENT_STORE_PWD=client_ks_password
 #w) SERVER_STORE_PWD=server_ks_password
+#l) ROOT_KEY_ALIAS=root_key_alias
 
-while getopts p:s:f:a:e:b:d:j:k:c:w: flag; do
+while getopts p:s:f:a:e:b:d:j:k:c:w:l: flag; do
   case "${flag}" in
   p) client_pref=${OPTARG} ;;
   s) client_start=${OPTARG} ;;
@@ -42,6 +43,7 @@ while getopts p:s:f:a:e:b:d:j:k:c:w: flag; do
   k) key_store_client_file=${OPTARG} ;;
   c) client_key_store_pwd=${OPTARG} ;;
   w) server_key_store_pwd=${OPTARG} ;;
+  w) root_key_alias=${OPTARG} ;;
   esac
 done
 
@@ -96,6 +98,10 @@ if [ -n "$server_key_store_pwd" ]; then
   SERVER_STORE_PWD=$server_key_store_pwd
 fi
 
+if [ -n "$root_key_alias" ]; then
+  ROOT_KEY_ALIAS=$root_key_alias
+fi
+
 CLIENT_NUMBER=$client_start
 
 echo "==Start=="
@@ -111,6 +117,7 @@ echo "CLIENT_STORE: $CLIENT_STORE"
 echo "CLIENT_STORE_PWD: $CLIENT_STORE_PWD"
 echo "SERVER_STORE_PWD: $SERVER_STORE_PWD"
 echo "CLIENT_NUMBER: $CLIENT_NUMBER"
+echo "ROOT_KEY_ALIAS: $ROOT_KEY_ALIAS"
 
 end_point() {
   echo "$CLIENT_PREFIX$(printf "%08d" $CLIENT_NUMBER)"
@@ -232,20 +239,21 @@ keytool \
     -keystore $SERVER_STORE \
     -storepass $SERVER_STORE_PWD
 
-
-echo
-echo "${H2}Import root certificate just to be able to import  ned by root CA with expected CN to $CLIENT_STORE${RESET}"
-keytool \
-  -exportcert \
-  -alias $ROOT_KEY_ALIAS \
-  -keystore $SERVER_STORE \
-  -storepass $SERVER_STORE_PWD |
+if [ "$client_start" -lt "$client_finish" ]; then
+  echo
+  echo "${H2}Import root certificate just to be able to import  need by root CA with expected CN to $CLIENT_STORE${RESET}"
   keytool \
-    -importcert \
+    -exportcert \
     -alias $ROOT_KEY_ALIAS \
-    -keystore $CLIENT_STORE \
-    -storepass $CLIENT_STORE_PWD \
-    -noprompt
+    -keystore $SERVER_STORE \
+    -storepass $SERVER_STORE_PWD |
+    keytool \
+      -importcert \
+      -alias $ROOT_KEY_ALIAS \
+      -keystore $CLIENT_STORE \
+      -storepass $CLIENT_STORE_PWD \
+      -noprompt
+fi
 
 cert_end_point() {
   echo
@@ -288,6 +296,7 @@ cert_end_point() {
 #      -storepass $CLIENT_STORE_PWD \
 #      -noprompt
 #
+
   echo
   echo "${H2}Creating client certificate signed by root CA with expected CN CLIENT_ALIAS: $CLIENT_ALIAS CLIENT_CN: $CLIENT_CN${RESET}"
   keytool \
@@ -311,21 +320,22 @@ cert_end_point() {
       -noprompt
 }
 
-  echo
+if [ "$client_start" -lt "$client_finish" ]; then
   echo "==Start Client=="
-while [ "$CLIENT_NUMBER" -lt "$client_finish" ]; do
-  echo "number $CLIENT_NUMBER"
-  echo "finish $client_finish"
-  CLIENT_CN=$(end_point)
-  CLIENT_ALIAS=$(client_alias_point)
-  CLIENT_SELF_ALIAS=$(client_self_alias_point)
-  echo "CLIENT_CN $CLIENT_CN"
-  echo "CLIENT_ALIAS $CLIENT_ALIAS"
-  echo "CLIENT_SELF_ALIAS $CLIENT_SELF_ALIAS"
-  cert_end_point
-  CLIENT_NUMBER=$(($CLIENT_NUMBER + 1))
-  echo
-done
+  while [ "$CLIENT_NUMBER" -lt "$client_finish" ]; do
+    echo "number $CLIENT_NUMBER"
+    echo "finish $client_finish"
+    CLIENT_CN=$(end_point)
+    CLIENT_ALIAS=$(client_alias_point)
+    CLIENT_SELF_ALIAS=$(client_self_alias_point)
+    echo "CLIENT_CN $CLIENT_CN"
+    echo "CLIENT_ALIAS $CLIENT_ALIAS"
+    echo "CLIENT_SELF_ALIAS $CLIENT_SELF_ALIAS"
+    cert_end_point
+    CLIENT_NUMBER=$(($CLIENT_NUMBER + 1))
+    echo
+  done
+fi
 
 echo
 echo "${H0}!!! Warning ${H2}Migrate ${H1}${SERVER_STORE} ${H2}to ${H1}PKCS12 ${H2}which is an industry standard format..${RESET}"
@@ -336,11 +346,17 @@ keytool \
   -deststoretype pkcs12 \
   -srcstorepass $SERVER_STORE_PWD
 
-echo
-echo "${H0}!!! Warning ${H2}Migrate ${H1}${CLIENT_STORE} ${H2}to ${H1}PKCS12 ${H2}which is an industry standard format..${RESET}"
-keytool \
-  -importkeystore \
-  -srckeystore $CLIENT_STORE \
-  -destkeystore $CLIENT_STORE \
-  -deststoretype pkcs12 \
-  -srcstorepass $CLIENT_STORE_PWD
+if [ "$client_start" -lt "$client_finish" ]; then
+  echo
+  echo "${H0}!!! Warning ${H2}Migrate ${H1}${CLIENT_STORE} ${H2}to ${H1}PKCS12 ${H2}which is an industry standard format..${RESET}"
+  keytool \
+    -importkeystore \
+    -srckeystore $CLIENT_STORE \
+    -destkeystore $CLIENT_STORE \
+    -deststoretype pkcs12 \
+    -srcstorepass $CLIENT_STORE_PWD
+
+    echo "END_Client"
+fi
+
+echo "END_Bash..."
