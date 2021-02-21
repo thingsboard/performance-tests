@@ -44,6 +44,7 @@ import java.nio.file.Paths;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -607,10 +608,11 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
      * SubjectDN().getName: [CN=nick-Thingsboard bootstrap server LwM2M signed by root CA, OU=Thingsboard, O=Thingsboard, L=SF, ST=CA, C=US]
      */
 
-    static void getParamsX509(X509Certificate certificate, String whose) {
+    static void getParamsX509(X509Certificate certificate, String whose, PrivateKey privateKey) {
         try {
             log.info("{} uses X509 : " +
                             "\n X509 Certificate (Hex): [{}] " +
+                            "\n PrivateKey (Hex): [{}] " +
                             "\n getSigAlgName: [{}] " +
                             "\n getSigAlgOID: [{}] " +
                             "\n type: [{}] " +
@@ -618,6 +620,7 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
                             "\n SubjectDN().getName: [{}]",
                     whose,
                     Hex.encodeHexString(certificate.getEncoded()),
+                    Hex.encodeHexString(privateKey.getEncoded()),
                     certificate.getSigAlgName(),
                     certificate.getSigAlgOID(),
                     certificate.getType(),
