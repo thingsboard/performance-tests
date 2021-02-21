@@ -24,46 +24,24 @@ import org.eclipse.californium.scandium.dtls.*;
 import org.eclipse.leshan.client.californium.LeshanClient;
 import org.eclipse.leshan.client.californium.LeshanClientBuilder;
 import org.eclipse.leshan.client.engine.DefaultRegistrationEngineFactory;
-import org.eclipse.leshan.client.resource.LwM2mInstanceEnabler;
 import org.eclipse.leshan.client.resource.LwM2mObjectEnabler;
 import org.eclipse.leshan.client.resource.ObjectsInitializer;
 import org.eclipse.leshan.core.californium.DefaultEndpointFactory;
 import org.eclipse.leshan.core.model.LwM2mModel;
-import org.eclipse.leshan.core.model.ObjectLoader;
 import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.model.StaticModel;
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeDecoder;
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeEncoder;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.Configuration;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2MLocationParams;
-import org.thingsboard.tools.lwm2m.client.objects.LwM2mBinaryAppDataContainer;
-import org.thingsboard.tools.lwm2m.client.objects.LwM2mConnectivityMonitoring;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2mDevice;
-import org.thingsboard.tools.lwm2m.client.objects.LwM2mLocation;
-import org.thingsboard.tools.lwm2m.client.objects.LwM2mTemperatureSensor;
 import org.thingsboard.tools.lwm2m.secure.LwM2MSecurityStore;
 
-
-import javax.annotation.PostConstruct;
 import java.io.File;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
-import static org.eclipse.californium.scandium.dtls.cipher.CipherSuite.TLS_PSK_WITH_AES_128_CBC_SHA256;
-import static org.eclipse.leshan.core.LwM2mId.CONNECTIVITY_MONITORING;
 import static org.eclipse.leshan.core.LwM2mId.DEVICE;
-import static org.eclipse.leshan.core.LwM2mId.LOCATION;
-import static org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode.PSK;
-import static org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode.RPK;
-import static org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode.X509;
 
 
 @Slf4j
@@ -154,11 +132,6 @@ public class LwM2MClientConfiguration {
 
         /** Create DTLS Config */
         DtlsConnectorConfig.Builder dtlsConfig = new DtlsConnectorConfig.Builder();
-        if (this.mode==PSK) {
-            dtlsConfig.setRecommendedCipherSuitesOnly(context.isRecommendedCiphers());
-            dtlsConfig.setRecommendedSupportedGroupsOnly(context.isRecommendedSupportedGroups());
-            dtlsConfig.setSupportedCipherSuites(TLS_PSK_WITH_AES_128_CBC_SHA256);
-        }
 
         /** Configure Registration Engine */
         DefaultRegistrationEngineFactory engineFactory = new DefaultRegistrationEngineFactory();
