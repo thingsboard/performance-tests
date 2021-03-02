@@ -808,14 +808,14 @@
         <dependency>
             <groupId>org.eclipse.californium</groupId>
             <artifactId>californium-core</artifactId>
-            <version>2.6.0</version>
+            <version>2.6.1</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.eclipse.californium</groupId>
             <artifactId>californium-core</artifactId>
-            <version>2.6.0</version>
+            <version>2.6.1</version>
         </dependency>
 
         <dependency>
