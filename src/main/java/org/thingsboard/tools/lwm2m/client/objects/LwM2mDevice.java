@@ -38,7 +38,7 @@ public class LwM2mDevice extends BaseInstanceEnabler {
 
     public LwM2mDevice() {
 //                 notify new date each 5 second
-        Timer timer = new Timer("Device-Current Time, Value betery, utcOffse, timeZone");
+        Timer timer = new Timer("Device-Current Time, Value bet[/1/0/3]ery, utcOffse, timeZone");
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
@@ -51,7 +51,7 @@ public class LwM2mDevice extends BaseInstanceEnabler {
         try {
             executorService.scheduleWithFixedDelay(() ->
 //                    fireResourcesChange(9, 13, 14, 15), 10000, 10000, TimeUnit.MILLISECONDS);
-                    fireResourcesChange(9, 13), 2000, 2000, TimeUnit.MILLISECONDS);
+                    fireResourcesChange(9, 13), 20000, 20000, TimeUnit.MILLISECONDS);
         } catch (Throwable e) {
             log.error("[{}]Throwable", e.toString());
             e.printStackTrace();

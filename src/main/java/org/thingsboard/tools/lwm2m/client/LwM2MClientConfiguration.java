@@ -101,7 +101,7 @@ public class LwM2MClientConfiguration {
 //
 //        LwM2mInstanceEnabler [] instances = {new LwM2mTemperatureSensor(executorService), new LwM2mTemperatureSensor(executorService)};
 //        initializer.setInstancesForObject(TEMPERATURE_SENSOR, instances);
-
+//        initializer.setInstancesForObject(CONNECTIVITY_STATISTICS, new ConnectivityStatistics());
 
         List<LwM2mObjectEnabler> enablers = initializer.createAll();
 
