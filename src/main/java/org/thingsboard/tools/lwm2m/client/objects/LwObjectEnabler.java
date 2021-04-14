@@ -20,7 +20,6 @@ import org.eclipse.leshan.client.LwM2mClient;
 import org.eclipse.leshan.client.resource.LwM2mInstanceEnabler;
 import org.eclipse.leshan.client.resource.LwM2mInstanceEnablerFactory;
 import org.eclipse.leshan.client.resource.ObjectEnabler;
-import org.eclipse.leshan.client.resource.ResourceChangedListener;
 import org.eclipse.leshan.client.servers.ServerIdentity;
 import org.eclipse.leshan.client.servers.ServersInfoExtractor;
 import org.eclipse.leshan.client.util.LinkFormatHelper;
@@ -387,10 +386,56 @@ public class LwObjectEnabler extends ObjectEnabler {
         if (identity.isLwm2mBootstrapServer()) {
             return WriteAttributesResponse.methodNotAllowed();
         }
-        // TODO should be implemented here to be available for all object enabler
+
+
+        if (id == LwM2mId.SECURITY) {
+            return WriteAttributesResponse.notFound();
+        }
+        return doWriteAttributes(identity, request);
 //        discover(identity, new DiscoverRequest (request.getPath().toString()));
 //        return WriteAttributesResponse.internalServerError(discover(identity, new DiscoverRequest (request.getPath().toString())).getObjectLinks().toString());
-        return WriteAttributesResponse.success();
+//        return WriteAttributesResponse.success();
+    }
+
+    protected WriteAttributesResponse doWriteAttributes (ServerIdentity identity, WriteAttributesRequest request) {
+
+        LwM2mPath path = request.getPath();
+        if (path.isObject()) {
+            // Manage discover on object
+            Link[] ObjectLinks = LinkFormatHelper.getObjectDescription(this, null);
+            log.warn("WriteAttributes: [{}] [{}]", request.getPath(), request.getAttributes());
+            log.warn("WriteAttributesResponse: [{}]", ObjectLinks);
+            return WriteAttributesResponse.success();
+
+        } else if (path.isObjectInstance()) {
+            // Manage WriteAttribute on instance
+            if (!getAvailableInstanceIds().contains(path.getObjectInstanceId()))
+                return WriteAttributesResponse.notFound();
+
+            Link[] instanceLink = LinkFormatHelper.getInstanceDescription(this, path.getObjectInstanceId(), null);
+            log.warn("WriteAttributes: [{}] [{}]", request.getPath(), request.getAttributes());
+            log.warn("WriteAttributesResponse: [{}]", instanceLink);
+            return WriteAttributesResponse.success();
+
+        } else if (path.isResource()) {
+            // Manage writeAttribute on resource
+            if (!getAvailableInstanceIds().contains(path.getObjectInstanceId()))
+                return WriteAttributesResponse.notFound();
+
+            ResourceModel resourceModel = getObjectModel().resources.get(path.getResourceId());
+            if (resourceModel == null)
+                return WriteAttributesResponse.notFound();
+
+            if (!getAvailableResourceIds(path.getObjectInstanceId()).contains(path.getResourceId()))
+                return WriteAttributesResponse.notFound();
+
+            Link resourceLink = LinkFormatHelper.getResourceDescription(this, path.getObjectInstanceId(),
+                    path.getResourceId(), null);
+            log.warn("WriteAttributes: [{}] [{}]", request.getPath(), request.getAttributes());
+            log.warn("WriteAttributesResponse: [{}]", new Link[] { resourceLink });
+            return WriteAttributesResponse.success();
+        }
+        return WriteAttributesResponse.badRequest(null);
     }
 
     @Override
@@ -465,15 +510,15 @@ public class LwObjectEnabler extends ObjectEnabler {
     }
 
 
-    protected void listenInstance(LwM2mInstanceEnabler instance, final int instanceId) {
-        instance.addResourceChangedListener(new ResourceChangedListener() {
-            @Override
-            public void resourcesChanged(int... resourceIds) {
-                log.info("[{}]", instance);
-                fireResourcesChanged(instanceId, resourceIds);
-            }
-        });
-    }
+//    protected void listenInstance(LwM2mInstanceEnabler instance, final int instanceId) {
+//        instance.addResourceChangedListener(new ResourceChangedListener() {
+//            @Override
+//            public void resourcesChanged(int... resourceIds) {
+//                fireResourcesChanged(instanceId, resourceIds);
+//            }
+//        });
+//    }
+
 
     @Override
     public ContentFormat getDefaultEncodingFormat(DownlinkRequest<?> request) {
