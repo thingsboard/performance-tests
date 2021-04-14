@@ -20,10 +20,20 @@ import org.eclipse.californium.core.network.config.NetworkConfig;
 import org.eclipse.californium.elements.Connector;
 import org.eclipse.californium.scandium.DTLSConnector;
 import org.eclipse.californium.scandium.config.DtlsConnectorConfig;
-import org.eclipse.californium.scandium.dtls.*;
+import org.eclipse.californium.scandium.dtls.ClientHandshaker;
+import org.eclipse.californium.scandium.dtls.DTLSSession;
+import org.eclipse.californium.scandium.dtls.HandshakeException;
+import org.eclipse.californium.scandium.dtls.Handshaker;
+import org.eclipse.californium.scandium.dtls.ResumingClientHandshaker;
+import org.eclipse.californium.scandium.dtls.ResumingServerHandshaker;
+import org.eclipse.californium.scandium.dtls.ServerHandshaker;
+import org.eclipse.californium.scandium.dtls.SessionAdapter;
 import org.eclipse.leshan.client.californium.LeshanClient;
 import org.eclipse.leshan.client.californium.LeshanClientBuilder;
 import org.eclipse.leshan.client.engine.DefaultRegistrationEngineFactory;
+import org.eclipse.leshan.client.resource.BaseInstanceEnablerFactory;
+import org.eclipse.leshan.client.resource.LwM2mInstanceEnabler;
+import org.eclipse.leshan.client.resource.LwM2mInstanceEnablerFactory;
 import org.eclipse.leshan.client.resource.LwM2mObjectEnabler;
 import org.eclipse.leshan.client.resource.ObjectsInitializer;
 import org.eclipse.leshan.core.californium.DefaultEndpointFactory;
@@ -33,15 +43,23 @@ import org.eclipse.leshan.core.model.StaticModel;
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeDecoder;
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeEncoder;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2MLocationParams;
+import org.thingsboard.tools.lwm2m.client.objects.LwM2mBinaryAppDataContainer;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2mDevice;
+import org.thingsboard.tools.lwm2m.client.objects.LwObjectEnabler;
 import org.thingsboard.tools.lwm2m.secure.LwM2MSecurityStore;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.stream.Collectors;
 
 import static org.eclipse.leshan.core.LwM2mId.DEVICE;
+import static org.eclipse.leshan.core.LwM2mId.SECURITY;
+import static org.eclipse.leshan.core.LwM2mId.SERVER;
+import static org.eclipse.leshan.core.request.ContentFormat.TLV;
 
 
 @Slf4j
@@ -86,24 +104,62 @@ public class LwM2MClientConfiguration {
         /** Endpoint */
 //        String subEndpoint = !context.getSubEndpoint().isEmpty() ? context.getSubEndpoint() : LwM2MSecurityMode.fromSecurityMode(context.getDtlsMode()).subEndpoint;
 //        String endpoint = !context.getEndpoint().isEmpty() ? context.getEndpoint() + "_" + subEndpoint : "client_default";
-//        log.info("Start LwM2M client... PostConstruct [{}]", endpoint);
+        log.info("Start LwM2M client... PostConstruct [{}] [{}] [{}]", this.endPoint, this.mode, this.numberClient);
 
         /** Initialize security object */
         new LwM2MSecurityStore(context, initializer, this.endPoint, this.mode, this.numberClient);
 
         /** Initialize other objects */
+        List<LwM2mObjectEnabler> enablers = new ArrayList<>();
+        Map<Integer, LwM2mInstanceEnabler> deviceInstances = new HashMap<>();
+        LwM2mDevice lwM2mDevice0 = new LwM2mDevice(executorService);
+        deviceInstances.put(0, lwM2mDevice0);
         initializer.setInstancesForObject(DEVICE, new LwM2mDevice(executorService));
-//        initializer.setInstancesForObject(DEVICE, new LwM2mDevice());
-//        initializer.setInstancesForObject(CONNECTIVITY_MONITORING, new LwM2mConnectivityMonitoring(executorService));
+        initializer.setClassForObject(DEVICE, LwM2mDevice.class);
+        LwM2mInstanceEnablerFactory factoryDevice = new BaseInstanceEnablerFactory() {
+            @Override
+            public LwM2mInstanceEnabler create() {
+                return new LwM2mDevice();
+            }
+        };
+        LwM2mObjectEnabler device = new LwObjectEnabler(DEVICE, models.stream().filter(mod -> mod.id==DEVICE)
+                .collect(Collectors.toUnmodifiableList()).get(0), deviceInstances, factoryDevice, TLV);
+
+        Map<Integer, LwM2mInstanceEnabler> lwM2mBinaryAppDataContainerInstances = new HashMap<>();
+        LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer0 = new LwM2mBinaryAppDataContainer(executorService);
+        LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer1 = new LwM2mBinaryAppDataContainer(executorService);
+        lwM2mBinaryAppDataContainerInstances.put(0, lwM2mBinaryAppDataContainer0);
+        lwM2mBinaryAppDataContainerInstances.put(1, lwM2mBinaryAppDataContainer1);
+        initializer.setInstancesForObject(BINARY_APP_DATA_CONTAINER, new LwM2mBinaryAppDataContainer(executorService));
+        initializer.setClassForObject(BINARY_APP_DATA_CONTAINER, LwM2mBinaryAppDataContainer.class);
+        LwM2mInstanceEnablerFactory factoryLwM2mBinaryAppDataContainer = new BaseInstanceEnablerFactory() {
+            @Override
+            public LwM2mInstanceEnabler create() {
+                return new LwM2mBinaryAppDataContainer();
+            }
+        };
+        LwM2mObjectEnabler LwM2mBinaryAppDataContainer = new LwObjectEnabler(BINARY_APP_DATA_CONTAINER,
+                models.stream().filter(mod -> mod.id==BINARY_APP_DATA_CONTAINER).collect(Collectors.toUnmodifiableList()).get(0),
+                lwM2mBinaryAppDataContainerInstances, factoryLwM2mBinaryAppDataContainer, TLV);
+
+        LwM2mObjectEnabler security =  initializer.create(SECURITY);
+        LwM2mObjectEnabler server =  initializer.create(SERVER);
+        enablers.add(security);
+        enablers.add(server);
+        enablers.add(device);
+        enablers.add(LwM2mBinaryAppDataContainer);
+
 //        initializer.setInstancesForObject(BINARY_APP_DATA_CONTAINER, new LwM2mBinaryAppDataContainer(executorService));
-////        initializer.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
+//        initializer.setInstancesForObject(CONNECTIVITY_MONITORING, new LwM2mConnectivityMonitoring(executorService));
+//        initializer.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
 //        initializer.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
 //
-//        LwM2mInstanceEnabler [] instances = {new LwM2mTemperatureSensor(executorService), new LwM2mTemperatureSensor(executorService)};
+//        LwM2mInstanceEnabler[] instances = {new LwM2mTemperatureSensor(executorService), new LwM2mTemperatureSensor(executorService)};
 //        initializer.setInstancesForObject(TEMPERATURE_SENSOR, instances);
 //        initializer.setInstancesForObject(CONNECTIVITY_STATISTICS, new ConnectivityStatistics());
 
-        List<LwM2mObjectEnabler> enablers = initializer.createAll();
+//        List<LwM2mObjectEnabler> enablers = initializer.createAll();
+
 
         /** Create CoAP Config */
         NetworkConfig coapConfig;

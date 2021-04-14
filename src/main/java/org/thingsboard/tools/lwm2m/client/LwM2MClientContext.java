@@ -29,7 +29,6 @@ import org.eclipse.leshan.core.model.ObjectLoader;
 import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.util.Hex;
 import org.springframework.beans.factory.annotation.Value;
-
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.thingsboard.tools.service.shared.BaseLwm2mAPITest;
@@ -48,6 +47,7 @@ import java.security.PrivateKey;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -335,11 +335,13 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
 
     @PostConstruct
     public void init() {
-        modelsValue = ObjectLoader.loadDefault();
+//        modelsValue = ObjectLoader.loadDefault();
         File path = getPathModels();
         if (path.isDirectory()) {
             try {
-                modelsValue.addAll(ObjectLoader.loadObjectsFromDir(path));
+//                modelsValue.addAll(ObjectLoader.loadObjectsFromDir(path));
+                this.modelsValue = modelsValue == null ? new ArrayList<>() : this.modelsValue;
+                this.modelsValue.addAll(ObjectLoader.loadObjectsFromDir(path, true));
                 log.info(" [{}] Models directory is a directory", path.getAbsoluteFile());
             } catch (Exception e) {
                 log.error(" [{}] Could not parse the resource definition file", e.toString());
@@ -633,6 +635,5 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
             log.error(" [{}]", e.getMessage());
         }
     }
-
 }
 
