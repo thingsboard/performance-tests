@@ -469,6 +469,7 @@ public class LwObjectEnabler extends ObjectEnabler {
         instance.addResourceChangedListener(new ResourceChangedListener() {
             @Override
             public void resourcesChanged(int... resourceIds) {
+                log.info("[{}]", instance);
                 fireResourcesChanged(instanceId, resourceIds);
             }
         });
