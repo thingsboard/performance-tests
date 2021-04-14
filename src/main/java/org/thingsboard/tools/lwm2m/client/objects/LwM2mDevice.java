@@ -21,12 +21,23 @@ import org.eclipse.leshan.client.servers.ServerIdentity;
 import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.model.ResourceModel.Type;
 import org.eclipse.leshan.core.node.LwM2mResource;
+import org.eclipse.leshan.core.request.WriteAttributesRequest;
 import org.eclipse.leshan.core.response.ExecuteResponse;
 import org.eclipse.leshan.core.response.ReadResponse;
+import org.eclipse.leshan.core.response.WriteAttributesResponse;
 import org.eclipse.leshan.core.response.WriteResponse;
 
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.TimeZone;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -51,7 +62,7 @@ public class LwM2mDevice extends BaseInstanceEnabler {
         try {
             executorService.scheduleWithFixedDelay(() ->
 //                    fireResourcesChange(9, 13, 14, 15), 10000, 10000, TimeUnit.MILLISECONDS);
-                    fireResourcesChange(9, 13), 20000, 20000, TimeUnit.MILLISECONDS);
+                    fireResourcesChange(9, 13), 5000, 5000, TimeUnit.MILLISECONDS);
         } catch (Throwable e) {
             log.error("[{}]Throwable", e.toString());
             e.printStackTrace();
@@ -149,6 +160,17 @@ public class LwM2mDevice extends BaseInstanceEnabler {
             default:
                 return super.write(identity, resourceid, value);
         }
+    }
+
+    public synchronized WriteAttributesResponse writeAttributes(ServerIdentity identity,
+                                                                WriteAttributesRequest request) {
+        // execute is not supported for bootstrap
+        if (identity.isLwm2mBootstrapServer()) {
+            return WriteAttributesResponse.methodNotAllowed();
+        }
+        // TODO should be implemented here to be available for all object enabler
+        // This should be a not implemented error, but this is not defined in the spec.
+        return WriteAttributesResponse.internalServerError("not implemented");
     }
 
     private String getManufacturer() {
