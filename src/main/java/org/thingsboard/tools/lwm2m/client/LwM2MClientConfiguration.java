@@ -125,6 +125,10 @@ public class LwM2MClientConfiguration {
         LwM2mObjectEnabler device = new LwObjectEnabler(DEVICE, models.stream().filter(mod -> mod.id==DEVICE)
                 .collect(Collectors.toUnmodifiableList()).get(0), deviceInstances, factoryDevice, TLV);
 
+        /**
+         * initializeMultipleResource
+         */
+
         Map<Integer, LwM2mInstanceEnabler> lwM2mBinaryAppDataContainerInstances = new HashMap<>();
         LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer0 = new LwM2mBinaryAppDataContainer(executorService);
         LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer1 = new LwM2mBinaryAppDataContainer(executorService);
@@ -286,5 +290,49 @@ public class LwM2MClientConfiguration {
         LeshanClient client = clientInitializer.init();
         client.start();
     }
+//
+//    protected LwM2mMultipleResource initializeMultipleResource(int ObjId, int resId) {
+//        ObjectModel objectModel = null;
+//        ResourceModel resourceModel = null;
+//        DummyInstanceEnabler dummyInstanceEnabler = new DummyInstanceEnabler(resId);
+//        return initializeMultipleResource(objectModel, resourceModel);
+//    }
+//
+//    protected LwM2mMultipleResource initializeMultipleResource(ObjectModel objectModel, ResourceModel resourceModel) {
+//        Map<Integer, Object> values = new HashMap<>();
+//        switch (resourceModel.type) {
+//            case STRING:
+//                values.put(0, createDefaultStringValueFor(objectModel, resourceModel));
+//                break;
+//            case BOOLEAN:
+//                values.put(0, createDefaultBooleanValueFor(objectModel, resourceModel));
+//                values.put(1, createDefaultBooleanValueFor(objectModel, resourceModel));
+//                break;
+//            case INTEGER:
+//                values.put(0, createDefaultIntegerValueFor(objectModel, resourceModel));
+//                values.put(1, createDefaultIntegerValueFor(objectModel, resourceModel));
+//                break;
+//            case FLOAT:
+//                values.put(0, createDefaultFloatValueFor(objectModel, resourceModel));
+//                values.put(1, createDefaultFloatValueFor(objectModel, resourceModel));
+//                break;
+//            case TIME:
+//                values.put(0, createDefaultDateValueFor(objectModel, resourceModel));
+//                break;
+//            case OPAQUE:
+//                values.put(0, createDefaultOpaqueValueFor(objectModel, resourceModel));
+//                break;
+//            default:
+//                // this should not happened
+//                values = null;
+//                break;
+//        }
+//        if (values != null)
+//            return LwM2mMultipleResource.newResource(resourceModel.id, values, resourceModel.type);
+//        else
+//            return null;
+//    }
+
+
 
 }

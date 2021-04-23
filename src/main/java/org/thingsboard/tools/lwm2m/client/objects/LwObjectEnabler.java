@@ -319,7 +319,9 @@ public class LwObjectEnabler extends ObjectEnabler {
         LwM2mInstanceEnabler deletedInstance = instances.remove(request.getPath().getObjectInstanceId());
         if (deletedInstance != null) {
             deletedInstance.onDelete(identity);
-            fireInstancesRemoved(deletedInstance.getId());
+            if (deletedInstance.getId() != null) {
+                fireInstancesRemoved(deletedInstance.getId());
+            }
             return DeleteResponse.success();
         }
         return DeleteResponse.notFound();
