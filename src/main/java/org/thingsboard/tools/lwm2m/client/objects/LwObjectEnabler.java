@@ -71,6 +71,10 @@ public class LwObjectEnabler extends ObjectEnabler {
     public LwObjectEnabler(int id, ObjectModel objectModel, Map<Integer, LwM2mInstanceEnabler> instances, LwM2mInstanceEnablerFactory instanceFactory, ContentFormat defaultContentFormat) {
         super(id, objectModel, instances, instanceFactory, defaultContentFormat);
         this.instances = new HashMap<>(instances);
+//        this.instances.entrySet().forEach(instance -> {((LwM2mInstanceEnabler)instance).setModel(objectModel);});
+        this.instances.keySet().forEach(key -> {
+            this.instances.get(key).setModel(objectModel);
+        });
         this.instanceFactory = instanceFactory;
         this.defaultContentFormat = defaultContentFormat;
         for (Map.Entry<Integer, LwM2mInstanceEnabler> entry : this.instances.entrySet()) {

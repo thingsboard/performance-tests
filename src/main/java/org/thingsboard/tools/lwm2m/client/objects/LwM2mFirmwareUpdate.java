@@ -1,12 +1,12 @@
 /**
  * Copyright © 2016-2018 The Thingsboard Authors
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,6 +18,7 @@ package org.thingsboard.tools.lwm2m.client.objects;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.leshan.client.resource.BaseInstanceEnabler;
+import org.eclipse.leshan.client.resource.ResourceChangedListener;
 import org.eclipse.leshan.client.servers.ServerIdentity;
 import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.node.LwM2mResource;
@@ -40,20 +41,24 @@ import static org.eclipse.leshan.core.model.ResourceModel.Type.INTEGER;
 @Data
 public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
     private static final Random RANDOM = new Random();
-    private static final List<Integer> supportedResources = Arrays.asList(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+    private static final List<Integer> supportedResources = Arrays.asList(0, 1, 2, 3, 5, 6, 7, 8, 9);
 
     private byte[] packageData;
     private String packageURI = "coaps://example.org/firmware";
     Map<Integer, String> states = new ConcurrentHashMap<>();
-    private int state = 0;
+    private volatile int state;
     Map<Integer, String> updateResults = new ConcurrentHashMap<>();
-    private int updateResult = 0;
-    private String pkgName;         // Name of the Firmware Package
-    private String pkgVersion;      // Version of the Firmware package
+    private volatile int updateResult;
+    private String pkgName = "";         // Name of the Firmware Package
+    private volatile String pkgVersion = "";      // Version of the Firmware package
     Map<Integer, String> firmwareUpdateProtocolSupports = new ConcurrentHashMap<>();
-    Map<Integer, String>  firmwareUpdateProtocolSupport = new ConcurrentHashMap<>();
-    Map<Integer, String>  firmwareUpdateDeliveryMethods = new ConcurrentHashMap<>();
-    private int firmwareUpdateDeliveryMethod = 0;
+    Map<Integer, Long> firmwareUpdateProtocolSupport = new ConcurrentHashMap<>();
+    Map<Integer, String> firmwareUpdateDeliveryMethods = new ConcurrentHashMap<>();
+    private int firmwareUpdateDeliveryMethod;
+    private ServerIdentity identity;
+    private Long timeDelay = 10000L;
+    public ScheduledExecutorService executorService;
+
 
     public LwM2mFirmwareUpdate() {
 
@@ -61,25 +66,72 @@ public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
 
     public LwM2mFirmwareUpdate(ScheduledExecutorService executorService) {
         try {
+            this.executorService = executorService;
             this.init();
-            executorService.scheduleWithFixedDelay(() ->
-                    fireResourcesChange(3, 7), 5000, 5000, TimeUnit.MILLISECONDS);
+            ResourceChangedListener resourceChangedListener = new ResourceChangedListener() {
+                @Override
+                public void resourcesChanged(int... resourceIds) {
+                    log.warn("Listener resourceIds: {}", resourceIds);
+                    Arrays.stream(resourceIds).forEach(i -> {
+                        read(identity, i);
+                    });
+                    if (getState() == 1) {
+                        execute(identity, 2, null);
+//                        executorService.schedule(() -> {
+//                            setState(2);
+//                            setUpdateResult(1);
+//                        },timeDelay,  TimeUnit.MILLISECONDS);
+                    }
+                    else if (getState() == 2) {
+                        executorService.schedule(() -> {
+                            setPkgVersion("2.07");
+                            setState(3);
+                        },timeDelay,  TimeUnit.MILLISECONDS);
+                    }
+                    else if (getState() == 3) {
+                        executorService.schedule(() -> {
+                            setUpdateResult(1); // "Firmware updated successfully"
+                            setState(0);        // "Idle
+                        },timeDelay,  TimeUnit.MILLISECONDS);
+                    }
+                }
+            };
+            this.addResourceChangedListener(resourceChangedListener);
         } catch (Throwable e) {
             log.error("[{}]Throwable", e.toString());
             e.printStackTrace();
         }
     }
 
-    private void init () {
+    private void init() {
         this.setStates();
         this.setUpdateResults();
-        this.setFirmwareUpdateProtocolSupport(0);
-        this.setFirmwareUpdateProtocolSupport(1);
+        this.setFirmwareUpdateProtocolSupports();
+        this.setFirmwareUpdateProtocolSupport(0L);
+        this.setFirmwareUpdateProtocolSupport(1L);
+        this.setFirmwareUpdateDeliveryMethods();
+
     }
+
+//    @Override
+//    public ReadResponse read(ServerIdentity identity) {
+//        List<LwM2mResource> resources = new ArrayList<>();
+//        for (ResourceModel resourceModel : model.resources.values()) {
+//            // check, if internal request (SYSTEM) or readable
+//            if (identity.isSystem() || resourceModel.operations.isReadable()) {
+//                ReadResponse response = read(identity, resourceModel.id);
+//                if (response.isSuccess() && response.getContent() instanceof LwM2mResource)
+//                    resources.add((LwM2mResource) response.getContent());
+//            }
+//        }
+//        return ReadResponse.success(new LwM2mObjectInstance(id, resources));
+//    }
 
     @Override
     public ReadResponse read(ServerIdentity identity, int resourceid) {
 //        log.info("Read on Location resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceid);
+        identity = identity != null ? identity : this.identity;
+        this.identity = identity;
         switch (resourceid) {
             case 0:
 //                log.info("Read on Location resource /[{}]/[{}]/[{}], {}", getModel().id, getId(), resourceid, Hex.encodeHexString(this.data).toLowerCase());
@@ -87,14 +139,14 @@ public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
             case 1:
                 return ReadResponse.success(resourceid, getPackageURI());
             case 3:
-                return ReadResponse.success(resourceid, getState());
+                return ReadResponse.success(resourceid, this.getState());
             case 5:
                 return ReadResponse.success(resourceid, getUpdateResult());
-                case 6:
+            case 6:
                 return ReadResponse.success(resourceid, getPkgName());
-                case 7:
+            case 7:
                 return ReadResponse.success(resourceid, getPkgVersion());
-                case 8:
+            case 8:
                 return ReadResponse.success(resourceid, getFirmwareUpdateProtocolSupport(), INTEGER);
             case 9:
                 return ReadResponse.success(resourceid, getFirmwareUpdateDeliveryMethod());
@@ -109,8 +161,8 @@ public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
 
         switch (resourceid) {
             case 0:
+                this.identity = identity;
                 setPackageData((byte[]) value.getValue());
-                fireResourcesChange(resourceid);
                 return WriteResponse.success();
             case 1:
                 setPackageURI((String) value.getValue());
@@ -126,47 +178,59 @@ public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
         switch (resourceid) {
             // Update
             case 2:
-//                if (data->state == 1)
-//                {
-//                    fprintf(stdout, "\n\t FIRMWARE UPDATE\r\n\n");
-//                    // trigger your firmware download and update logic
-//                    data->state = 2;
-//                    return COAP_204_CHANGED;
-//                }
-//                else
-//                {
-//                    // firmware update already running
-//                    return COAP_400_BAD_REQUEST;
-//                }
-                getLwM2mClient().triggerRegistrationUpdate(identity);
-                return ExecuteResponse.success();
+                if (state == 1) {
+                    this.executorService.schedule(() -> {
+                        setState(2);        // "Downloaded"
+                    },timeDelay,  TimeUnit.MILLISECONDS);
+//                    getLwM2mClient().triggerRegistrationUpdate(identity);
+                    return ExecuteResponse.success();
+                } else {
+                    return ExecuteResponse.badRequest("firmware update already running");
+                }
         }
         return super.execute(identity, resourceid, params);
     }
 
-    private void setPackageData(byte[] value) {
+    private boolean setPackageData(byte[] value) {
         this.packageData = value;
+        fireResourcesChange(0);
+        this.setState(1); // "Downloading"
+        this.setUpdateResult(0); // "Initial value"
+        return true;
     }
 
-//    private byte[] getPackageData() {
-//        int value = RANDOM.nextInt(100000001);
-//        this.packageData = new byte[]{
-//                (byte) (value >>> 24),
-//                (byte) (value >>> 16),
-//                (byte) (value >>> 8),
-//                (byte) value};
-//        return this.packageData;
-//    }
+    private void setState (int state) {
+        this.state = state;
+        fireResourcesChange(3);
+    }
+
+    private void setPkgVersion (String pkgVersion) {
+        this.pkgVersion = pkgVersion;
+        fireResourcesChange(7);
+    }
+
+    private int getState() {
+        return this.state;
+    }
+
+    private void setUpdateResult(int updateResult) {
+        this.updateResult = updateResult;
+        fireResourcesChange(5);
+    }
+
+    private int getUpdateResult() {
+        return this.updateResult;
+    }
 
     private String getPackageURI() {
         return this.packageURI;
     }
 
-    private void setPackageURI(String value ) {
+    private void setPackageURI(String value) {
         this.packageURI = value;
     }
 
-    private void setStates () {
+    private void setStates() {
         states.put(0, "Idle");          // (before downloading or after successful updating)
         states.put(1, "Downloading");   // The data sequence is on the way
         states.put(2, "Downloaded");    // device has downloaded the firmware packag
@@ -174,7 +238,7 @@ public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
 
     }
 
-    private void setUpdateResults () {
+    private void setUpdateResults() {
         updateResults.put(0, "Initial value");  // nce the updating process is initiated (Download /Update), this Resource MUST be reset to Initial value.
         updateResults.put(1, "Firmware updated successfully");
         updateResults.put(2, "Not enough flash memory for the new firmware package.");
@@ -194,7 +258,7 @@ public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
         updateResults.put(9, "Unsupported protocol.");
     }
 
-    private void setFirmwareUpdateProtocolSupport() {
+    private void setFirmwareUpdateProtocolSupports() {
         // CoAP is the default setting.
         // (as defined in RFC 7252) with the additional support for block-wise transfer.
         this.firmwareUpdateProtocolSupports.put(0, "CoAP");
@@ -210,15 +274,15 @@ public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
         this.firmwareUpdateProtocolSupports.put(5, "CoAP over TLS");
     }
 
-    private void setFirmwareUpdateProtocolSupport(Integer protocolSupport) {
-        this.firmwareUpdateProtocolSupport.put(protocolSupport, this.firmwareUpdateProtocolSupports.get(protocolSupport));
+    private void setFirmwareUpdateProtocolSupport(Long protocolSupport) {
+        this.firmwareUpdateProtocolSupport.put(this.firmwareUpdateProtocolSupport.size(), protocolSupport);
     }
 
     /**
      * Both. In this case the LwM2M Server MAY choose the preferred mechanism for conveying
      * the firmware image to the LwM2M Client.
      */
-    private void setFirmwareUpdateDeliveryMethods () {
+    private void setFirmwareUpdateDeliveryMethods() {
         states.put(0, "Pull only");
         states.put(1, "Push only");
         states.put(2, "Both");
