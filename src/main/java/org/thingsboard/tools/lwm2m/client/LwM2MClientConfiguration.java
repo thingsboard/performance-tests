@@ -45,6 +45,7 @@ import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeEncoder;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2MLocationParams;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2mBinaryAppDataContainer;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2mDevice;
+import org.thingsboard.tools.lwm2m.client.objects.LwM2mFirmwareUpdate;
 import org.thingsboard.tools.lwm2m.client.objects.LwObjectEnabler;
 import org.thingsboard.tools.lwm2m.secure.LwM2MSecurityStore;
 
@@ -57,6 +58,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
 
 import static org.eclipse.leshan.core.LwM2mId.DEVICE;
+import static org.eclipse.leshan.core.LwM2mId.FIRMWARE;
 import static org.eclipse.leshan.core.LwM2mId.SECURITY;
 import static org.eclipse.leshan.core.LwM2mId.SERVER;
 import static org.eclipse.leshan.core.request.ContentFormat.TLV;
@@ -99,7 +101,7 @@ public class LwM2MClientConfiguration {
 
         /** Initialize object list */
         final LwM2mModel model = new StaticModel(models);
-        final ObjectsInitializer initializer = new ObjectsInitializer(model);
+        final ObjectsInitializer initializerModel = new ObjectsInitializer(model);
 
         /** Endpoint */
 //        String subEndpoint = !context.getSubEndpoint().isEmpty() ? context.getSubEndpoint() : LwM2MSecurityMode.fromSecurityMode(context.getDtlsMode()).subEndpoint;
@@ -107,15 +109,16 @@ public class LwM2MClientConfiguration {
         log.info("Start LwM2M client... PostConstruct [{}] [{}] [{}]", this.endPoint, this.mode, this.numberClient);
 
         /** Initialize security object */
-        new LwM2MSecurityStore(context, initializer, this.endPoint, this.mode, this.numberClient);
+        new LwM2MSecurityStore(context, initializerModel, this.endPoint, this.mode, this.numberClient);
 
-        /** Initialize other objects */
+        /** Initialize SingleOne objects */
+        // Device (0)
         List<LwM2mObjectEnabler> enablers = new ArrayList<>();
         Map<Integer, LwM2mInstanceEnabler> deviceInstances = new HashMap<>();
         LwM2mDevice lwM2mDevice0 = new LwM2mDevice(executorService);
         deviceInstances.put(0, lwM2mDevice0);
-        initializer.setInstancesForObject(DEVICE, new LwM2mDevice(executorService));
-        initializer.setClassForObject(DEVICE, LwM2mDevice.class);
+        initializerModel.setInstancesForObject(DEVICE, new LwM2mDevice(executorService));
+        initializerModel.setClassForObject(DEVICE, LwM2mDevice.class);
         LwM2mInstanceEnablerFactory factoryDevice = new BaseInstanceEnablerFactory() {
             @Override
             public LwM2mInstanceEnabler create() {
@@ -125,17 +128,30 @@ public class LwM2MClientConfiguration {
         LwM2mObjectEnabler device = new LwObjectEnabler(DEVICE, models.stream().filter(mod -> mod.id==DEVICE)
                 .collect(Collectors.toUnmodifiableList()).get(0), deviceInstances, factoryDevice, TLV);
 
-        /**
-         * initializeMultipleResource
-         */
+        // FormwareUpdate (0)
+        Map<Integer, LwM2mInstanceEnabler> firmwareUpdateInstances = new HashMap<>();
+        LwM2mFirmwareUpdate firmwareUpdate0 = new LwM2mFirmwareUpdate(executorService);
+        firmwareUpdateInstances.put(0, firmwareUpdate0);
+        initializerModel.setInstancesForObject(FIRMWARE, new LwM2mFirmwareUpdate(executorService));
+        initializerModel.setClassForObject(FIRMWARE, LwM2mFirmwareUpdate.class);
+        LwM2mInstanceEnablerFactory factoryFirmware = new BaseInstanceEnablerFactory() {
+            @Override
+            public LwM2mInstanceEnabler create() {
+                return new LwM2mFirmwareUpdate();
+            }
+        };
+        LwM2mObjectEnabler firmwareUpdate = new LwObjectEnabler(FIRMWARE, models.stream().filter(mod -> mod.id==FIRMWARE)
+                .collect(Collectors.toUnmodifiableList()).get(0), firmwareUpdateInstances, factoryFirmware, TLV);
 
+        /** initializeMultiInstanceObjects */
+        // BinaryAppDataContainer (0, 1)
         Map<Integer, LwM2mInstanceEnabler> lwM2mBinaryAppDataContainerInstances = new HashMap<>();
         LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer0 = new LwM2mBinaryAppDataContainer(executorService);
         LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer1 = new LwM2mBinaryAppDataContainer(executorService);
         lwM2mBinaryAppDataContainerInstances.put(0, lwM2mBinaryAppDataContainer0);
         lwM2mBinaryAppDataContainerInstances.put(1, lwM2mBinaryAppDataContainer1);
-        initializer.setInstancesForObject(BINARY_APP_DATA_CONTAINER, new LwM2mBinaryAppDataContainer(executorService));
-        initializer.setClassForObject(BINARY_APP_DATA_CONTAINER, LwM2mBinaryAppDataContainer.class);
+        initializerModel.setInstancesForObject(BINARY_APP_DATA_CONTAINER, new LwM2mBinaryAppDataContainer(executorService));
+        initializerModel.setClassForObject(BINARY_APP_DATA_CONTAINER, LwM2mBinaryAppDataContainer.class);
         LwM2mInstanceEnablerFactory factoryLwM2mBinaryAppDataContainer = new BaseInstanceEnablerFactory() {
             @Override
             public LwM2mInstanceEnabler create() {
@@ -146,11 +162,12 @@ public class LwM2MClientConfiguration {
                 models.stream().filter(mod -> mod.id==BINARY_APP_DATA_CONTAINER).collect(Collectors.toUnmodifiableList()).get(0),
                 lwM2mBinaryAppDataContainerInstances, factoryLwM2mBinaryAppDataContainer, TLV);
 
-        LwM2mObjectEnabler security =  initializer.create(SECURITY);
-        LwM2mObjectEnabler server =  initializer.create(SERVER);
+        LwM2mObjectEnabler security =  initializerModel.create(SECURITY);
+        LwM2mObjectEnabler server =  initializerModel.create(SERVER);
         enablers.add(security);
         enablers.add(server);
         enablers.add(device);
+        enablers.add(firmwareUpdate);
         enablers.add(LwM2mBinaryAppDataContainer);
 
 //        initializer.setInstancesForObject(BINARY_APP_DATA_CONTAINER, new LwM2mBinaryAppDataContainer(executorService));

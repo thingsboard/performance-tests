@@ -18,7 +18,6 @@ package org.thingsboard.tools.lwm2m.client.objects;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.leshan.client.resource.BaseInstanceEnabler;
-import org.eclipse.leshan.client.resource.ResourceChangedListener;
 import org.eclipse.leshan.client.servers.ServerIdentity;
 import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.model.ResourceModel.Type;
@@ -89,13 +88,13 @@ public class LwM2mDevice extends BaseInstanceEnabler {
 
     public LwM2mDevice(ScheduledExecutorService executorService) {
         try {
-            ResourceChangedListener resourceChangedListener = new ResourceChangedListener() {
-                @Override
-                public void resourcesChanged(int... resourceIds) {
+//            ResourceChangedListener resourceChangedListener = new ResourceChangedListener() {
+//                @Override
+//                public void resourcesChanged(int... resourceIds) {
 //                    log.warn("Listener resourceIds: {}", resourceIds);
-                }
-            };
-            this.addResourceChangedListener(resourceChangedListener);
+//                }
+//            };
+//            this.addResourceChangedListener(resourceChangedListener);
             executorService.scheduleWithFixedDelay(() ->
                     fireResourcesChange(9, 13, 14, 15), 10000, 10000, TimeUnit.MILLISECONDS);
 //                    fireResourcesChange(9, 13), 5000, 5000, TimeUnit.MILLISECONDS);
