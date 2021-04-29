@@ -50,7 +50,7 @@ public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
     Map<Integer, String> updateResults = new ConcurrentHashMap<>();
     private volatile int updateResult;
     private String pkgName = "";         // Name of the Firmware Package
-    private volatile String pkgVersion = "";      // Version of the Firmware package
+    private volatile String pkgVersion ="";      // Version of the Firmware package
     Map<Integer, String> firmwareUpdateProtocolSupports = new ConcurrentHashMap<>();
     Map<Integer, Long> firmwareUpdateProtocolSupport = new ConcurrentHashMap<>();
     Map<Integer, String> firmwareUpdateDeliveryMethods = new ConcurrentHashMap<>();
@@ -84,7 +84,7 @@ public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
                     }
                     else if (getState() == 2) {
                         executorService.schedule(() -> {
-                            setPkgVersion("2.07");
+                            setPkgVersion("2.04");
                             setState(3);
                         },timeDelay,  TimeUnit.MILLISECONDS);
                     }
@@ -161,6 +161,7 @@ public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
 
         switch (resourceid) {
             case 0:
+                log.info(new String((byte[])value.getValue()));
                 this.identity = identity;
                 setPackageData((byte[]) value.getValue());
                 return WriteResponse.success();
