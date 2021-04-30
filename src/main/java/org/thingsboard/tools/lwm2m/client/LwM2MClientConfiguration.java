@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -42,6 +42,7 @@ import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.model.StaticModel;
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeDecoder;
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeEncoder;
+import org.eclipse.leshan.core.request.ContentFormat;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2MLocationParams;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2mBinaryAppDataContainer;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2mDevice;
@@ -81,8 +82,8 @@ public class LwM2MClientConfiguration {
     private LwM2MClientContext context;
     private LwM2MLocationParams locationParams;
 
-    public void init (LwM2MClientContext context, LwM2MLocationParams locationParams, String endPoint,
-                                     int portNumber, LwM2MSecurityMode mode, ScheduledExecutorService executorService, int numberClient) {
+    public void init(LwM2MClientContext context, LwM2MLocationParams locationParams, String endPoint,
+                     int portNumber, LwM2MSecurityMode mode, ScheduledExecutorService executorService, int numberClient) {
         this.mode = mode;
         this.context = context;
         this.locationParams = locationParams;
@@ -125,7 +126,7 @@ public class LwM2MClientConfiguration {
                 return new LwM2mDevice();
             }
         };
-        LwM2mObjectEnabler device = new LwObjectEnabler(DEVICE, models.stream().filter(mod -> mod.id==DEVICE)
+        LwM2mObjectEnabler device = new LwObjectEnabler(DEVICE, models.stream().filter(mod -> mod.id == DEVICE)
                 .collect(Collectors.toUnmodifiableList()).get(0), deviceInstances, factoryDevice, TLV);
 
         // FormwareUpdate (0)
@@ -140,7 +141,7 @@ public class LwM2MClientConfiguration {
                 return new LwM2mFirmwareUpdate();
             }
         };
-        LwM2mObjectEnabler firmwareUpdate = new LwObjectEnabler(FIRMWARE, models.stream().filter(mod -> mod.id==FIRMWARE)
+        LwM2mObjectEnabler firmwareUpdate = new LwObjectEnabler(FIRMWARE, models.stream().filter(mod -> mod.id == FIRMWARE)
                 .collect(Collectors.toUnmodifiableList()).get(0), firmwareUpdateInstances, factoryFirmware, TLV);
 
         /** initializeMultiInstanceObjects */
@@ -159,11 +160,11 @@ public class LwM2MClientConfiguration {
             }
         };
         LwM2mObjectEnabler LwM2mBinaryAppDataContainer = new LwObjectEnabler(BINARY_APP_DATA_CONTAINER,
-                models.stream().filter(mod -> mod.id==BINARY_APP_DATA_CONTAINER).collect(Collectors.toUnmodifiableList()).get(0),
+                models.stream().filter(mod -> mod.id == BINARY_APP_DATA_CONTAINER).collect(Collectors.toUnmodifiableList()).get(0),
                 lwM2mBinaryAppDataContainerInstances, factoryLwM2mBinaryAppDataContainer, TLV);
 
-        LwM2mObjectEnabler security =  initializerModel.create(SECURITY);
-        LwM2mObjectEnabler server =  initializerModel.create(SERVER);
+        LwM2mObjectEnabler security = initializerModel.create(SECURITY);
+        LwM2mObjectEnabler server = initializerModel.create(SERVER);
         enablers.add(security);
         enablers.add(server);
         enablers.add(device);
@@ -183,29 +184,21 @@ public class LwM2MClientConfiguration {
 
 
         /** Create CoAP Config */
-        NetworkConfig coapConfig;
-        File configFile = new File(NetworkConfig.DEFAULT_FILE_NAME);
-        if (configFile.isFile()) {
-            coapConfig = new NetworkConfig();
-            coapConfig.load(configFile);
-
-            switch (this.mode) {
-                case PSK:
-                case NO_SEC:
-                    coapConfig.setString("COAP_PORT", Integer.toString(context.getLwm2mPortNoSec()));
-                    coapConfig.setString("COAP_SECURE_PORT", Integer.toString(context.getLwm2mPortPSK()));
-                    break;
-                case X509:
-                    coapConfig.setString("COAP_SECURE_PORT", Integer.toString(context.getLwm2mPortX509()));
-                    break;
-                case RPK:
-                default:
-                    coapConfig.setString("COAP_SECURE_PORT", Integer.toString(context.getLwm2mPortRPK()));
-            }
-        } else {
-            coapConfig = LeshanClientBuilder.createDefaultNetworkConfig();
-            coapConfig.store(configFile);
+        NetworkConfig coapConfig = LwM2mNetworkConfig.getCoapConfig();
+        switch (this.mode) {
+            case PSK:
+            case NO_SEC:
+                coapConfig.setString("COAP_PORT", Integer.toString(context.getLwm2mPortNoSec()));
+                coapConfig.setString("COAP_SECURE_PORT", Integer.toString(context.getLwm2mPortPSK()));
+                break;
+            case X509:
+                coapConfig.setString("COAP_SECURE_PORT", Integer.toString(context.getLwm2mPortX509()));
+                break;
+            case RPK:
+            default:
+                coapConfig.setString("COAP_SECURE_PORT", Integer.toString(context.getLwm2mPortRPK()));
         }
+
 
         /** Create DTLS Config */
         DtlsConnectorConfig.Builder dtlsConfig = new DtlsConnectorConfig.Builder();
@@ -302,8 +295,8 @@ public class LwM2MClientConfiguration {
         return builder.build();
     }
 
-    public void start(Map<String, String> clientAccessConnect){
-        LwM2MClientInitializer clientInitializer= new LwM2MClientInitializer(this.getLeshanClient(), clientAccessConnect);
+    public void start(Map<String, String> clientAccessConnect) {
+        LwM2MClientInitializer clientInitializer = new LwM2MClientInitializer(this.getLeshanClient(), clientAccessConnect);
         LeshanClient client = clientInitializer.init();
         client.start();
     }
@@ -349,7 +342,6 @@ public class LwM2MClientConfiguration {
 //        else
 //            return null;
 //    }
-
 
 
 }

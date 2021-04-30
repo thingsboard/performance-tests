@@ -279,7 +279,7 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
                         result.add(endPoint);
                         count.incrementAndGet();
                     } catch (Throwable e) {
-                        log.error("[{}][{}] Throwable [{}]", count, finalNextPortNumber, e.toString());
+                        log.error("[{}][{}]", count, finalNextPortNumber, e);
                     } finally {
                         latch.countDown();
                     }

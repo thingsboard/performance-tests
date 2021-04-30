@@ -15,6 +15,9 @@
  */
 package org.thingsboard.tools.lwm2m.client.objects;
 
+import com.google.common.hash.HashFunction;
+import com.google.common.hash.Hasher;
+import com.google.common.hash.Hashing;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.leshan.client.resource.BaseInstanceEnabler;
@@ -22,6 +25,7 @@ import org.eclipse.leshan.client.resource.ResourceChangedListener;
 import org.eclipse.leshan.client.servers.ServerIdentity;
 import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.node.LwM2mResource;
+import org.eclipse.leshan.core.node.LwM2mSingleResource;
 import org.eclipse.leshan.core.response.ExecuteResponse;
 import org.eclipse.leshan.core.response.ReadResponse;
 import org.eclipse.leshan.core.response.WriteResponse;
@@ -158,7 +162,9 @@ public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
     @Override
     public WriteResponse write(ServerIdentity identity, int resourceid, LwM2mResource value) {
 //        log.info("Write on Device resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceid);
-
+        LwM2mSingleResource resource = (LwM2mSingleResource)value;
+        byte[] data = (byte[])(resource.getValue());
+        System.out.println(Hashing.sha256().newHasher().putBytes(data).hash().toString());
         switch (resourceid) {
             case 0:
                 log.info(new String((byte[])value.getValue()));
