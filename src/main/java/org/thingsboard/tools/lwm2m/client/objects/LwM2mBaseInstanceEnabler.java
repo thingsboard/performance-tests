@@ -24,7 +24,7 @@ public class LwM2mBaseInstanceEnabler extends BaseInstanceEnabler {
             this.model = this.model == null ? model : this.model;
             // By default we consider that all resources defined in the model are supported
             this.supportedResources = new ArrayList<>(model.resources.keySet());
-            this.updateSupportedResources (this.unSupportedResourcesInit, false);
+            if (this.unSupportedResourcesInit != null && this.unSupportedResourcesInit.size() > 0) this.updateSupportedResources (this.unSupportedResourcesInit, false);
             Collections.sort(this.supportedResources);
         }
         return this.supportedResources;
