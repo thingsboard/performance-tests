@@ -30,8 +30,9 @@ public class LwM2mBaseInstanceEnabler extends BaseInstanceEnabler {
         return this.supportedResources;
     }
 
-    protected int getSupportedResource (int resourceid) {
-        return this.getSupportedResources().contains(resourceid) ? resourceid : -1;
+    protected int getSupportedResource (int resourceId) {
+        List<Integer> supportedResources = this.getSupportedResources();
+        return supportedResources != null && supportedResources.contains(resourceId) ? resourceId : -1;
     }
 
     protected void updateSupportedResources (List<Integer> updateSupRes, boolean isAdd) {
