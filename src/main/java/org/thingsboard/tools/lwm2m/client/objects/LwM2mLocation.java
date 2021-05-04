@@ -1,12 +1,12 @@
 /**
  * Copyright © 2016-2018 The Thingsboard Authors
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,21 +16,16 @@
 package org.thingsboard.tools.lwm2m.client.objects;
 
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.leshan.client.resource.BaseInstanceEnabler;
 import org.eclipse.leshan.client.servers.ServerIdentity;
-import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.response.ReadResponse;
 
-import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
-import java.util.Random;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
-public class LwM2mLocation extends BaseInstanceEnabler {
-
-    private static final List<Integer> supportedResources = Arrays.asList(0, 1, 5);
-    private static final Random RANDOM = new Random();
+public class LwM2mLocation extends LwM2mBaseInstanceEnabler {
 
     private float latitude;
     private float longitude;
@@ -42,6 +37,7 @@ public class LwM2mLocation extends BaseInstanceEnabler {
     }
 
     public LwM2mLocation(Float latitude, Float longitude, float scaleFactor) {
+
         if (latitude != null) {
             this.latitude = latitude + 90f;
         } else {
@@ -56,18 +52,44 @@ public class LwM2mLocation extends BaseInstanceEnabler {
         timestamp = new Date();
     }
 
+    public LwM2mLocation(Float latitude, Float longitude, float scaleFactor, ScheduledExecutorService executorService,
+                         List<Integer> unSupportedResources, Integer id) {
+        try {
+            if (id != null) this.setId(id);
+            this.unSupportedResourcesInit = unSupportedResources;
+            if (latitude != null) {
+                this.latitude = latitude + 90f;
+            } else {
+                this.latitude = RANDOM.nextInt(180);
+            }
+            if (longitude != null) {
+                this.longitude = longitude + 180f;
+            } else {
+                this.longitude = RANDOM.nextInt(360);
+            }
+            this.scaleFactor = scaleFactor;
+            timestamp = new Date();
+            executorService.scheduleWithFixedDelay(() ->
+                    fireResourcesChange(0, 1), 10000, 10000, TimeUnit.MILLISECONDS);
+        } catch (Throwable e) {
+            log.error("[{}]Throwable", e.toString());
+            e.printStackTrace();
+        }
+    }
+
     @Override
-    public ReadResponse read(ServerIdentity identity, int resourceid) {
+    public ReadResponse read(ServerIdentity identity, int resourceId) {
 //        log.info("Read on Location resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceid);
-        switch (resourceid) {
+        resourceId = getSupportedResource (resourceId);
+        switch (resourceId) {
             case 0:
-                return ReadResponse.success(resourceid, getLatitude());
+                return ReadResponse.success(resourceId, getLatitude());
             case 1:
-                return ReadResponse.success(resourceid, getLongitude());
+                return ReadResponse.success(resourceId, getLongitude());
             case 5:
-                return ReadResponse.success(resourceid, getTimestamp());
+                return ReadResponse.success(resourceId, getTimestamp());
             default:
-                return super.read(identity, resourceid);
+                return super.read(identity, resourceId);
         }
     }
 
@@ -114,10 +136,5 @@ public class LwM2mLocation extends BaseInstanceEnabler {
 
     public Date getTimestamp() {
         return timestamp;
-    }
-
-    @Override
-    public List<Integer> getAvailableResourceIds(ObjectModel model) {
-        return supportedResources;
     }
 }

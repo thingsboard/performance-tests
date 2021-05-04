@@ -16,26 +16,20 @@
 package org.thingsboard.tools.lwm2m.client.objects;
 
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.leshan.client.resource.BaseInstanceEnabler;
 import org.eclipse.leshan.client.servers.ServerIdentity;
-import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.node.LwM2mResource;
 import org.eclipse.leshan.core.response.ReadResponse;
 import org.eclipse.leshan.core.response.WriteResponse;
 
 import java.sql.Time;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
-import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 
 @Slf4j
-public class LwM2mBinaryAppDataContainer extends BaseInstanceEnabler {
-    private static final Random RANDOM = new Random();
-    private static final List<Integer> supportedResources = Arrays.asList(0, 1, 2, 3, 4, 5);
+public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
 
     /**
      * id = 0
@@ -80,8 +74,10 @@ public class LwM2mBinaryAppDataContainer extends BaseInstanceEnabler {
 
     }
 
-    public LwM2mBinaryAppDataContainer(ScheduledExecutorService executorService) {
+    public LwM2mBinaryAppDataContainer(ScheduledExecutorService executorService, List<Integer> unSupportedResources, Integer id) {
         try {
+            if (id != null) this.setId(id);
+            this.unSupportedResourcesInit = unSupportedResources;
             executorService.scheduleWithFixedDelay(() ->
                     fireResourcesChange(0, 2), 5000, 5000, TimeUnit.MILLISECONDS);
         } catch (Throwable e) {
@@ -91,59 +87,59 @@ public class LwM2mBinaryAppDataContainer extends BaseInstanceEnabler {
     }
 
     @Override
-    public ReadResponse read(ServerIdentity identity, int resourceid) {
+    public ReadResponse read(ServerIdentity identity, int resourceId) {
 //        log.info("Read on Location resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceid);
-        switch (resourceid) {
+        resourceId = getSupportedResource (resourceId);
+        switch (resourceId) {
             case 0:
 //                log.info("Read on Location resource /[{}]/[{}]/[{}], {}", getModel().id, getId(), resourceid, Hex.encodeHexString(this.data).toLowerCase());
-                return ReadResponse.success(resourceid, getData());
+                return ReadResponse.success(resourceId, getData());
             case 1:
-                return ReadResponse.success(resourceid, getPriority());
+                return ReadResponse.success(resourceId, getPriority());
             case 2:
-                return ReadResponse.success(resourceid, getTimestamp());
+                return ReadResponse.success(resourceId, getTimestamp());
             case 3:
-                return ReadResponse.success(resourceid, getDescription());
+                return ReadResponse.success(resourceId, getDescription());
             case 4:
-                return ReadResponse.success(resourceid, getDataFormat());
+                return ReadResponse.success(resourceId, getDataFormat());
             case 5:
-                return ReadResponse.success(resourceid, getAppID());
+                return ReadResponse.success(resourceId, getAppID());
             default:
-                return super.read(identity, resourceid);
+                return super.read(identity, resourceId);
         }
     }
 
     @Override
-    public WriteResponse write(ServerIdentity identity, int resourceid, LwM2mResource value) {
+    public WriteResponse write(ServerIdentity identity, int resourceId, LwM2mResource value) {
 //        log.info("Write on Device resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceid);
-
-        switch (resourceid) {
+        resourceId = getSupportedResource (resourceId);
+        switch (resourceId) {
             case 0:
                 setData((byte[]) value.getValue());
-                fireResourcesChange(resourceid);
+                fireResourcesChange(resourceId);
                 return WriteResponse.success();
             case 1:
                 setPriority((Integer) ( value.getValue() instanceof Long ? ((Long) value.getValue()).intValue() : value.getValue()));
-                fireResourcesChange(resourceid);
+                fireResourcesChange(resourceId);
                 return WriteResponse.success();
             case 2:
                 setTimestamp(((Date) value.getValue()).getTime());
-                fireResourcesChange(resourceid);
+                fireResourcesChange(resourceId);
                 return WriteResponse.success();
             case 3:
                 setDescription((String) value.getValue());
-                fireResourcesChange(resourceid);
+                fireResourcesChange(resourceId);
                 return WriteResponse.success();
             case 4:
                 setDataFormat((String) value.getValue());
-                fireResourcesChange(resourceid);
+                fireResourcesChange(resourceId);
                 return WriteResponse.success();
                 case 5:
                 setAppID((Integer) value.getValue());
-                fireResourcesChange(resourceid);
+                fireResourcesChange(resourceId);
                 return WriteResponse.success();
-
             default:
-                return super.write(identity, resourceid, value);
+                return super.write(identity, resourceId, value);
         }
     }
 
@@ -200,15 +196,5 @@ public class LwM2mBinaryAppDataContainer extends BaseInstanceEnabler {
 
     private void setPriority(int value ) {
         this.priority = value;
-    }
-
-//    @Override
-//    public ExecuteResponse execute(ServerIdentity identity, int resourceid, String params) {
-//        return super.execute(identity, resourceid, params);
-//    }
-
-    @Override
-    public List<Integer> getAvailableResourceIds(ObjectModel model) {
-        return supportedResources;
     }
 }

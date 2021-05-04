@@ -50,7 +50,6 @@ public class LwM2mNetworkConfig {
 
         coapConfig.setInt(NetworkConfig.Keys.BLOCKWISE_STATUS_LIFETIME, 300000);
         /**
-         * !!! REQUEST_ENTITY_TOO_LARGE CODE=4.13
          * The maximum size of a resource body (in bytes) that will be accepted
          * as the payload of a POST/PUT or the response to a GET request in a
          * transparent> blockwise transfer.
@@ -62,8 +61,9 @@ public class LwM2mNetworkConfig {
          * implementations from sending large bodies as part of a request or response to a peer.
          * The default value of this property is DEFAULT_MAX_RESOURCE_BODY_SIZE = 8192
          * A value of {@code 0} turns off transparent handling of blockwise transfers altogether.
+         * !!! REQUEST_ENTITY_TOO_LARGE CODE=4.13
+         * For large packet: MAX_RESOURCE_BODY_SIZE = 256 * 1024 * 1024 !!!
          */
-//        coapConfig.setInt(NetworkConfig.Keys.MAX_RESOURCE_BODY_SIZE, 8192);
         coapConfig.setInt(NetworkConfig.Keys.MAX_RESOURCE_BODY_SIZE, 256 * 1024 * 1024);
         /**
          * The default DTLS response matcher.

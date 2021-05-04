@@ -16,24 +16,21 @@
 package org.thingsboard.tools.lwm2m.client.objects;
 
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.leshan.client.resource.BaseInstanceEnabler;
 import org.eclipse.leshan.client.servers.ServerIdentity;
 import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.response.ExecuteResponse;
 import org.eclipse.leshan.core.response.ReadResponse;
-import org.eclipse.leshan.core.util.NamedThreadFactory;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
-public class LwM2mTemperatureSensor extends BaseInstanceEnabler {
+public class LwM2mTemperatureSensor extends LwM2mBaseInstanceEnabler {
 
     private static final String UNIT_CELSIUS = "cel";
     private static final int SENSOR_VALUE = 5700;
@@ -53,30 +50,39 @@ public class LwM2mTemperatureSensor extends BaseInstanceEnabler {
 
     }
 
-    public LwM2mTemperatureSensor(ScheduledExecutorService executorService) {
+    public LwM2mTemperatureSensor(ScheduledExecutorService executorService, List<Integer> unSupportedResources, Integer id) {
+        try {
+            if (id != null) this.setId(id);
+            this.unSupportedResourcesInit = unSupportedResources;
         executorService.scheduleWithFixedDelay(this::adjustTemperature, 2000, 2000, TimeUnit.MILLISECONDS);
+        } catch (Throwable e) {
+            log.error("[{}]Throwable", e.toString());
+            e.printStackTrace();
+        }
     }
 
     @Override
-    public synchronized ReadResponse read(ServerIdentity identity, int resourceId) {
+    public synchronized ReadResponse read(ServerIdentity identity, int resourceid) {
 //        log.info("Read on Temperature resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceId);
-        switch (resourceId) {
+        resourceid = getSupportedResource (resourceid);
+        switch (resourceid) {
             case MIN_MEASURED_VALUE:
-                return ReadResponse.success(resourceId, getTwoDigitValue(minMeasuredValue));
+                return ReadResponse.success(resourceid, getTwoDigitValue(minMeasuredValue));
             case MAX_MEASURED_VALUE:
-                return ReadResponse.success(resourceId, getTwoDigitValue(maxMeasuredValue));
+                return ReadResponse.success(resourceid, getTwoDigitValue(maxMeasuredValue));
             case SENSOR_VALUE:
-                return ReadResponse.success(resourceId, getTwoDigitValue(currentTemp));
+                return ReadResponse.success(resourceid, getTwoDigitValue(currentTemp));
             case UNITS:
-                return ReadResponse.success(resourceId, UNIT_CELSIUS);
+                return ReadResponse.success(resourceid, UNIT_CELSIUS);
             default:
-                return super.read(identity, resourceId);
+                return super.read(identity, resourceid);
         }
     }
 
     @Override
     public synchronized ExecuteResponse execute(ServerIdentity identity, int resourceId, String params) {
 //        log.info("Execute on Temperature resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceId);
+        resourceId = getSupportedResource (resourceId);
         switch (resourceId) {
             case RESET_MIN_MAX_MEASURED_VALUES:
                 resetMinMaxMeasuredValues();

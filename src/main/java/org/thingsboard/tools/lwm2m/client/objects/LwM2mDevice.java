@@ -17,9 +17,7 @@ package org.thingsboard.tools.lwm2m.client.objects;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.leshan.client.resource.BaseInstanceEnabler;
 import org.eclipse.leshan.client.servers.ServerIdentity;
-import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.model.ResourceModel.Type;
 import org.eclipse.leshan.core.node.LwM2mResource;
 import org.eclipse.leshan.core.request.WriteAttributesRequest;
@@ -29,49 +27,61 @@ import org.eclipse.leshan.core.response.WriteAttributesResponse;
 import org.eclipse.leshan.core.response.WriteResponse;
 
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.TimeZone;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Data
-public class LwM2mDevice extends BaseInstanceEnabler {
-    private static final Random RANDOM = new Random();
-    private static final List<Integer> supportedResources = Arrays.asList(0, 1, 2, 3, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
-            19, 20, 21);
-    private static List<Integer> readableResourceIds = new ArrayList<>();
-    private int id;
-    private ObjectModel model;
+public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
     private String Manufacturer = "Thingsboard Test Device";
     private String modelNumber = "Model 500";
     private String serialNumber = "TH-500-000-0001";
     private String firmwareVersion = "1.2";
-    private Integer availablePowerSources = 2;
+    private Integer availablePowerSources = 1;
     private Integer powerSourceVoltage = 5000;  // mV
     private Integer powerSourceCurrent = 3;  // mA
     private Integer batteryLevel;  // mV
+    private Integer batteryLevelCritical = 10;  // mV
     private Integer memoryFree = 256;  // in kilobytes
-    private Integer errorCode = 0;  // 0=No error... 32=Device specific error codes
-    private int keyCode = 0;
-    private  Map<Integer, Long> errorCodes = new HashMap<Integer, Long>();  // 0=No error... 32=Device specific error codes
+    private Integer memoryFreeCritical = 128;  // in kilobytes
+    /**
+     * 0=No error
+     * 1=Low battery power
+     * 2=External power supply off
+     * 3=GPS module failure
+     * 4=Low received signal strength
+     * 5=Out of memory
+     * 6=SMS failure
+     * 7=IP connectivity failure
+     * 8=Peripheral malfunction
+     * 9..15=Reserved for future use
+     * 16..32=Device specific error codes
+     */
+    private  Map<Integer, Integer> errorCode = new HashMap<>();  // 0=No error... 32=Device specific error codes
     private Date currentTime;
     private String utcOffset = new SimpleDateFormat("X").format(Calendar.getInstance().getTime());
     private String timeZone = TimeZone.getDefault().getID();
     private String supportedBinding = "UQ";
-    private String deviceType = "mart meters";
+    private String deviceType = "smart meters";
     private String hardwareVersion = "1.01";
     private String softwareVersion = "1.02";
+    /**
+     * 0	Normal	The battery is operating normally and not on power.
+     * 1	Charging	The battery is currently charging.
+     * 2	Charge Complete	The battery is fully charged and still on power.
+     * 3	Damaged	The battery has some problem.
+     * 4	Low Battery	The battery is low on charge.
+     * 5	Not Installed	The battery is not installed.
+     * 6	Unknown	The battery information is not available.
+     */
     private Integer batteryStatus = 0;
     private Integer memoryTotal = 512;
 
@@ -86,18 +96,12 @@ public class LwM2mDevice extends BaseInstanceEnabler {
         }, 5000, 5000);
     }
 
-    public LwM2mDevice(ScheduledExecutorService executorService) {
+    public LwM2mDevice(ScheduledExecutorService executorService, List<Integer> unSupportedResources, Integer id) {
         try {
-//            ResourceChangedListener resourceChangedListener = new ResourceChangedListener() {
-//                @Override
-//                public void resourcesChanged(int... resourceIds) {
-//                    log.warn("Listener resourceIds: {}", resourceIds);
-//                }
-//            };
-//            this.addResourceChangedListener(resourceChangedListener);
+            if (id != null) this.setId(id);
+            this.unSupportedResourcesInit = unSupportedResources;
             executorService.scheduleWithFixedDelay(() ->
                     fireResourcesChange(9, 13, 14, 15), 10000, 10000, TimeUnit.MILLISECONDS);
-//                    fireResourcesChange(9, 13), 5000, 5000, TimeUnit.MILLISECONDS);
         } catch (Throwable e) {
             log.error("[{}]Throwable", e.toString());
             e.printStackTrace();
@@ -106,60 +110,62 @@ public class LwM2mDevice extends BaseInstanceEnabler {
     }
 
     @Override
-    public ReadResponse read(ServerIdentity identity, int resourceid) {
+    public ReadResponse read(ServerIdentity identity, int resourceId) {
 //        log.info("Read on Device resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceid);
-        switch (resourceid) {
+        resourceId = getSupportedResource (resourceId);
+        switch (resourceId) {
             case 0:
-                return ReadResponse.success(resourceid, getManufacturer());
+                return ReadResponse.success(resourceId, getManufacturer());
             case 1:
-                return ReadResponse.success(resourceid, getModelNumber());
+                return ReadResponse.success(resourceId, getModelNumber());
             case 2:
-                return ReadResponse.success(resourceid, getSerialNumber());
+                return ReadResponse.success(resourceId, getSerialNumber());
             case 3:
-                return ReadResponse.success(resourceid, getFirmwareVersion());
+                return ReadResponse.success(resourceId, getFirmwareVersion());
             case 6:
-                return ReadResponse.success(resourceid, getAvailablePowerSources());
+                return ReadResponse.success(resourceId, getAvailablePowerSources());
             case 7:
-                return ReadResponse.success(resourceid, getPowerSourceVoltage());
+                return ReadResponse.success(resourceId, getPowerSourceVoltage());
             case 8:
-                return ReadResponse.success(resourceid, getPowerSourceCurrent());
+                return ReadResponse.success(resourceId, getPowerSourceCurrent());
             case 9:
-                return ReadResponse.success(resourceid, getBatteryLevel());
+                return ReadResponse.success(resourceId, getBatteryLevel());
             case 10:
-                return ReadResponse.success(resourceid, getMemoryFree());
+                return ReadResponse.success(resourceId, getMemoryFree());
             case 11:
-                return ReadResponse.success(resourceid, getErrorCodes(), Type.INTEGER);
+                return ReadResponse.success(resourceId, getErrorCode(), Type.INTEGER);
             case 13:
-                return ReadResponse.success(resourceid, getCurrentTime());
+                return ReadResponse.success(resourceId, getCurrentTime());
             case 14:
-                return ReadResponse.success(resourceid, getUtcOffset());
+                return ReadResponse.success(resourceId, getUtcOffset());
             case 15:
-                return ReadResponse.success(resourceid, getTimezone());
+                return ReadResponse.success(resourceId, getTimezone());
             case 16:
-                return ReadResponse.success(resourceid, getSupportedBinding());
+                return ReadResponse.success(resourceId, getSupportedBinding());
             case 17:
-                return ReadResponse.success(resourceid, getDeviceType());
+                return ReadResponse.success(resourceId, getDeviceType());
             case 18:
-                return ReadResponse.success(resourceid, getHardwareVersion());
+                return ReadResponse.success(resourceId, getHardwareVersion());
             case 19:
-                return ReadResponse.success(resourceid, getSoftwareVersion());
+                return ReadResponse.success(resourceId, getSoftwareVersion());
             case 20:
-                return ReadResponse.success(resourceid, getBatteryStatus());
+                return ReadResponse.success(resourceId, getBatteryStatus());
             case 21:
-                return ReadResponse.success(resourceid, getMemoryTotal());
+                return ReadResponse.success(resourceId, getMemoryTotal());
             default:
-                return super.read(identity, resourceid);
+                return super.read(identity, resourceId);
         }
     }
 
     @Override
-    public ExecuteResponse execute(ServerIdentity identity, int resourceid, String params) {
+    public ExecuteResponse execute(ServerIdentity identity, int resourceId, String params) {
 //        String withParams = null;
 //        if (params != null && params.length() != 0)
 //            withParams = " with params " + params;
 //        log.info("Execute on Device resource /[{}]/[{}]/[{}] [{}]", getModel().id, getId(), resourceid,
 //                withParams != null ? withParams : "");
-        switch (resourceid) {
+        resourceId = getSupportedResource (resourceId);
+        switch (resourceId) {
             case 4:
                 new Timer("Reboot Lwm2mClient").schedule(new TimerTask() {
                     @Override
@@ -177,9 +183,7 @@ public class LwM2mDevice extends BaseInstanceEnabler {
                 getLwM2mClient().triggerRegistrationUpdate();
                 break;
             case 12:
-                errorCodes = new HashMap<Integer, Long>();
-                errorCode = 0;
-                keyCode = 0;
+                errorCode = new HashMap<>();
                 break;
             default:
                 break;
@@ -188,22 +192,22 @@ public class LwM2mDevice extends BaseInstanceEnabler {
     }
 
     @Override
-    public WriteResponse write(ServerIdentity identity, int resourceid, LwM2mResource value) {
+    public WriteResponse write(ServerIdentity identity, int resourceId, LwM2mResource value) {
 //        log.info("Write on Device resource /[{}]/[{}]/[{}] value [{}]", getModel().id, getId(), resourceid, value);
-
-        switch (resourceid) {
+        resourceId = getSupportedResource (resourceId);
+        switch (resourceId) {
             case 13:
                 return WriteResponse.notFound();
             case 14:
                 setUtcOffset((String) value.getValue());
-                fireResourcesChange(resourceid);
+                fireResourcesChange(resourceId);
                 return WriteResponse.success();
             case 15:
                 setTimezone((String) value.getValue());
-                fireResourcesChange(resourceid);
+                fireResourcesChange(resourceId);
                 return WriteResponse.success();
             default:
-                return super.write(identity, resourceid, value);
+                return super.write(identity, resourceId, value);
         }
     }
 
@@ -219,7 +223,11 @@ public class LwM2mDevice extends BaseInstanceEnabler {
     }
 
     private int getBatteryLevel() {
-        return batteryLevel = RANDOM.nextInt(101);
+        this.batteryLevel = RANDOM.nextInt(101);
+        if (this.batteryLevel < this.batteryLevelCritical) {
+            setErrorCode(1);
+        }
+        return batteryLevel;
     }
 
     private int getPowerSourceVoltage() {
@@ -230,16 +238,20 @@ public class LwM2mDevice extends BaseInstanceEnabler {
     }
 
     private long getMemoryFree() {
-        return memoryFree = Math.toIntExact(Runtime.getRuntime().freeMemory() / 1024);
+        this.memoryFree = Math.toIntExact(Runtime.getRuntime().freeMemory() / 1024);
+        if (this.memoryFree < this.memoryFreeCritical) {
+            setErrorCode(5);
+        }
+        return this.memoryFree;
     }
 
-    private long getErrorCode() {
-        return errorCode = RANDOM.nextInt(33);
+    private Map<Integer, Integer> getErrorCode() {
+        return this.errorCode;
     }
 
-    private Map<Integer, Long> getErrorCodes () {
-         errorCodes.put(keyCode++, getErrorCode());
-        return errorCodes;
+    private Map<Integer, Integer> setErrorCode(int errorCode) {
+         this.errorCode.put( this.errorCode.size(), errorCode);
+        return this.errorCode;
     }
 
     private Date getCurrentTime() {
@@ -263,32 +275,14 @@ public class LwM2mDevice extends BaseInstanceEnabler {
     }
 
     private int getBatteryStatus() {
-        return batteryStatus = RANDOM.nextInt(7);
+        batteryStatus = RANDOM.nextInt(7);
+        if (this.batteryStatus == 4) {
+            setErrorCode(1);
+        }
+        return batteryStatus;
     }
 
     private long getMemoryTotal() {
         return memoryTotal = Math.toIntExact(Runtime.getRuntime().totalMemory() / 1024);
-    }
-
-    @Override
-    public List<Integer> getAvailableResourceIds(ObjectModel model) {
-        this.model = this.model == null ? model : this.model;
-        this.id = this.model != null ? this.model.id : this.id;
-        return supportedResources;
-    }
-
-    public List<Integer> getReadableResourceIds() {
-        return model != null ? readableResourceIds = model.resources.entrySet().stream()
-                .filter(rez -> rez.getValue().operations.isReadable()).map(s -> s.getValue().id)
-                .collect(Collectors.toList()) : new ArrayList<>();
-    }
-
-    public Integer getId () {
-        return super.getId();
-    }
-
-    @Override
-    public ObjectModel getModel() {
-        return super.getModel();
     }
 }

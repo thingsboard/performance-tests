@@ -50,13 +50,13 @@ lwm2m:
   recommended_supported_groups: "${LWM2M_RECOMMENDED_SUPPORTED_GROUPS:false}"
   prefix_end_point: "${PREFIX_END_POINT:Lw}"
   noSec:
-    enabled: "${NO_SEC_ENABLED:false}"
+    enabled: "${NO_SEC_ENABLED:true}"
     server:
 #      host: "${NO_SEC_HOST:192.168.1.110}"
       host: "${NO_SEC_HOST:localhost}"
       port: "${NO_SEC_PORT:5685}"
     bootStrap:
-      enabled: "${NO_SEC_BS_ENABLED:false}"
+      enabled: "${NO_SEC_BS_ENABLED:true}"
       host: "${NO_SEC_BS_HOST:localhost}"
       port: "${NO_SEC_BS_PORT:5687}"
   psk:
@@ -66,20 +66,20 @@ lwm2m:
       host: "${PSK_HOST:localhost}"
       port: "${PSK_PORT:5686}"
     bootStrap:
-      enabled: "${PSK_BS_ENABLED:false}"
+      enabled: "${PSK_BS_ENABLED:true}"
       host: "${PSK_BS_HOST:localhost}"
       port: "${PSK_BS_PORT:5688}"
   rpk:
-    enabled: "${RPK_ENABLED:false}"
+    enabled: "${RPK_ENABLED:true}"
     server:
       host: "${RPK_HOST:localhost}"
       port: "${RPK_PORT:5686}"
     bootStrap:
-      enabled: "${RPK_BS_ENABLED:false}"
+      enabled: "${RPK_BS_ENABLED:true}"
       host: "${RPK_BS_HOST:localhost}"
       port: "${RPK_BS_PORT:5688}"
   x509:
-    enabled: "${X509_ENABLED:false}"
+    enabled: "${X509_ENABLED:true}"
     prefix_client: "${CLIENT_ALIAS:client}"
     prefix_client_alias: "${CLIENT_ALIAS:client_alias_}"
     prefix_client_self_alias: "${CLIENT_SELF_ALIAS:client_self_signed_}"
