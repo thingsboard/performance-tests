@@ -20,7 +20,6 @@ import org.eclipse.leshan.client.servers.ServerIdentity;
 import org.eclipse.leshan.core.response.ReadResponse;
 
 import java.util.Date;
-import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -52,11 +51,9 @@ public class LwM2mLocation extends LwM2mBaseInstanceEnabler {
         timestamp = new Date();
     }
 
-    public LwM2mLocation(Float latitude, Float longitude, float scaleFactor, ScheduledExecutorService executorService,
-                         List<Integer> unSupportedResources, Integer id) {
+    public LwM2mLocation(Float latitude, Float longitude, float scaleFactor, ScheduledExecutorService executorService, Integer id) {
         try {
             if (id != null) this.setId(id);
-            this.unSupportedResourcesInit = unSupportedResources;
             if (latitude != null) {
                 this.latitude = latitude + 90f;
             } else {

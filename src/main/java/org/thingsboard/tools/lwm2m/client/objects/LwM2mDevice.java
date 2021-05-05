@@ -30,7 +30,6 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.Timer;
@@ -65,7 +64,7 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
      * 9..15=Reserved for future use
      * 16..32=Device specific error codes
      */
-    private  Map<Integer, Integer> errorCode = new HashMap<>();  // 0=No error... 32=Device specific error codes
+    private Map<Integer, Long> errorCode = new HashMap<>();  // 0=No error... 32=Device specific error codes
     private Date currentTime;
     private String utcOffset = new SimpleDateFormat("X").format(Calendar.getInstance().getTime());
     private String timeZone = TimeZone.getDefault().getID();
@@ -96,10 +95,11 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
         }, 5000, 5000);
     }
 
-    public LwM2mDevice(ScheduledExecutorService executorService, List<Integer> unSupportedResources, Integer id) {
+    public LwM2mDevice(ScheduledExecutorService executorService, Integer id) {
         try {
             if (id != null) this.setId(id);
-            this.unSupportedResourcesInit = unSupportedResources;
+            // 15 - not present
+//            this.supportedResources =  Arrays.asList(0, 1, 2, 3, 9, 10, 11, 13, 14, 16, 17, 18, 19, 20, 21);
             executorService.scheduleWithFixedDelay(() ->
                     fireResourcesChange(9, 13, 14, 15), 10000, 10000, TimeUnit.MILLISECONDS);
         } catch (Throwable e) {
@@ -225,7 +225,7 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
     private int getBatteryLevel() {
         this.batteryLevel = RANDOM.nextInt(101);
         if (this.batteryLevel < this.batteryLevelCritical) {
-            setErrorCode(1);
+            setErrorCode(1L);
         }
         return batteryLevel;
     }
@@ -240,18 +240,17 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
     private long getMemoryFree() {
         this.memoryFree = Math.toIntExact(Runtime.getRuntime().freeMemory() / 1024);
         if (this.memoryFree < this.memoryFreeCritical) {
-            setErrorCode(5);
+            setErrorCode(5L);
         }
         return this.memoryFree;
     }
 
-    private Map<Integer, Integer> getErrorCode() {
+    private Map<Integer, Long> getErrorCode() {
         return this.errorCode;
     }
 
-    private Map<Integer, Integer> setErrorCode(int errorCode) {
+    private void setErrorCode(Long errorCode) {
          this.errorCode.put( this.errorCode.size(), errorCode);
-        return this.errorCode;
     }
 
     private Date getCurrentTime() {
@@ -277,7 +276,7 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
     private int getBatteryStatus() {
         batteryStatus = RANDOM.nextInt(7);
         if (this.batteryStatus == 4) {
-            setErrorCode(1);
+            setErrorCode(1L);
         }
         return batteryStatus;
     }

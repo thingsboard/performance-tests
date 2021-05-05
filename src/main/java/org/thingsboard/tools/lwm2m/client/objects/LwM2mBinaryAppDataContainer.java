@@ -23,7 +23,6 @@ import org.eclipse.leshan.core.response.WriteResponse;
 
 import java.sql.Time;
 import java.util.Date;
-import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -60,24 +59,16 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
      */
 //    private String data = "InNlcnZpY2VJZCI6Ik1ldGVyIiwNCiJzZXJ2aWNlRGF0YSI6ew0KImN1cnJlbnRSZWFkaW5nIjoiNDYuMyIsDQoic2lnbmFsU3RyZW5ndGgiOjE2LA0KImRhaWx5QWN0aXZpdHlUaW1lIjo1NzA2DQo=";
     private byte[] data;
-
     private Integer priority = 0;
-
     private Time timestamp;
-
     private String description;
-
     private String dataFormat;
-
     private Integer appID;
-    public LwM2mBinaryAppDataContainer() {
+    public LwM2mBinaryAppDataContainer() { }
 
-    }
-
-    public LwM2mBinaryAppDataContainer(ScheduledExecutorService executorService, List<Integer> unSupportedResources, Integer id) {
+    public LwM2mBinaryAppDataContainer(ScheduledExecutorService executorService, Integer id) {
         try {
             if (id != null) this.setId(id);
-            this.unSupportedResourcesInit = unSupportedResources;
             executorService.scheduleWithFixedDelay(() ->
                     fireResourcesChange(0, 2), 5000, 5000, TimeUnit.MILLISECONDS);
         } catch (Throwable e) {

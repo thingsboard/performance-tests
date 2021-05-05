@@ -50,7 +50,6 @@ import org.thingsboard.tools.lwm2m.client.objects.LwObjectEnabler;
 import org.thingsboard.tools.lwm2m.secure.LwM2MSecurityStore;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -115,8 +114,7 @@ public class LwM2MClientConfiguration {
         // Device (0)
         List<LwM2mObjectEnabler> enablers = new ArrayList<>();
         Map<Integer, LwM2mInstanceEnabler> deviceMapInstances = new HashMap<>();
-        List<Integer> unSupportedResources = Arrays.asList(9);
-        LwM2mDevice lwM2mDevice0 = new LwM2mDevice(executorService, unSupportedResources, 0);
+        LwM2mDevice lwM2mDevice0 = new LwM2mDevice(executorService, 0);
         deviceMapInstances.put(0, lwM2mDevice0);
         LwM2mInstanceEnabler[] deviceInstances = {lwM2mDevice0};
         initializerModel.setInstancesForObject(DEVICE, deviceInstances);
@@ -149,9 +147,8 @@ public class LwM2MClientConfiguration {
         /** initializeMultiInstanceObjects */
         // BinaryAppDataContainer (0, 1)
         Map<Integer, LwM2mInstanceEnabler> lwM2mBinaryAppDataContainerMapInstances = new HashMap<>();
-        unSupportedResources = Arrays.asList();
-        LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer0 = new LwM2mBinaryAppDataContainer(executorService, unSupportedResources, 0);
-        LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer1 = new LwM2mBinaryAppDataContainer(executorService, unSupportedResources, 1);
+        LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer0 = new LwM2mBinaryAppDataContainer(executorService, 0);
+        LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer1 = new LwM2mBinaryAppDataContainer(executorService, 1);
         lwM2mBinaryAppDataContainerMapInstances.put(0, lwM2mBinaryAppDataContainer0);
         lwM2mBinaryAppDataContainerMapInstances.put(1, lwM2mBinaryAppDataContainer1);
         LwM2mInstanceEnabler[] lwM2mBinaryAppDataContainerInstances = {lwM2mBinaryAppDataContainer0, lwM2mBinaryAppDataContainer1};

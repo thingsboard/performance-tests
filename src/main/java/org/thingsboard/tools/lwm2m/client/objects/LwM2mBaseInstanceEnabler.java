@@ -11,12 +11,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class LwM2mBaseInstanceEnabler extends BaseInstanceEnabler {
+//public class LwM2mBaseInstanceEnabler extends LwObjectEnabler2 {
     protected static final Random RANDOM = new Random();
-    protected static List<Integer> supportedResources;
-    protected List<Integer> unSupportedResourcesInit;
-    protected static List<Integer> readableResourceIds = new ArrayList<>();
-//    protected int id;
-//    protected ObjectModel model;
+    protected List<Integer> supportedResources;
+    protected List<Integer> readableResourceIds = new ArrayList<>();
 
     @Override
     public List<Integer> getAvailableResourceIds(ObjectModel model) {
@@ -24,7 +22,6 @@ public class LwM2mBaseInstanceEnabler extends BaseInstanceEnabler {
             this.model = this.model == null ? model : this.model;
             // By default we consider that all resources defined in the model are supported
             this.supportedResources = new ArrayList<>(model.resources.keySet());
-            if (this.unSupportedResourcesInit != null && this.unSupportedResourcesInit.size() > 0) this.updateSupportedResources (this.unSupportedResourcesInit, false);
             Collections.sort(this.supportedResources);
         }
         return this.supportedResources;

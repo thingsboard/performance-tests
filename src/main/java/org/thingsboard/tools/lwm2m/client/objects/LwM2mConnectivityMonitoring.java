@@ -21,7 +21,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.eclipse.leshan.client.servers.ServerIdentity;
 import org.eclipse.leshan.core.response.ReadResponse;
 
-import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -46,10 +45,9 @@ public class LwM2mConnectivityMonitoring extends LwM2mBaseInstanceEnabler {
 
     }
 
-    public LwM2mConnectivityMonitoring (ScheduledExecutorService executorService, List<Integer> unSupportedResources, Integer id) {
+    public LwM2mConnectivityMonitoring (ScheduledExecutorService executorService, Integer id) {
         try {
             if (id != null) this.setId(id);
-            this.unSupportedResourcesInit = unSupportedResources;
         executorService.scheduleWithFixedDelay(() ->
                 fireResourcesChange(8), 5000, 5000, TimeUnit.MILLISECONDS);
         } catch (Throwable e) {
