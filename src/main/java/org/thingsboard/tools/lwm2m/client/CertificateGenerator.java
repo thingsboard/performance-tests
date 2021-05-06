@@ -96,7 +96,7 @@ public class CertificateGenerator {
     private ContentSigner rootCsrContentSigner;
     private KeyStore sslKeyStoreServer;
     private KeyStore sslKeyStoreClient;
-    private static final String fileNameKeyStore = "KeyStore";
+    private static final String fileNameKeyStore = "lwm2m";
     private static final String keyStorePrefixJks = ".jks";
 
 
@@ -161,7 +161,7 @@ public class CertificateGenerator {
      * - Elliptic Curve parameters  : [secp256r1 [NIST P-256, X9.62 prime256v1] (1.2.840.10045.3.1.7)]
      */
     public void generationX509WithRootAndJks(int start, int finish) throws Exception {
-        String fileNameJks = this.context.getServerAlias() + fileNameKeyStore + keyStorePrefixJks;
+        String fileNameJks = fileNameKeyStore + this.context.getServerAlias() + keyStorePrefixJks;
         this.generationX509RootJava();
         this.generationX509(this.sslKeyStoreServer, this.context.getServerAlias(),
                 context.getLwm2mHostX509() + " " + this.context.getServerAlias(),
@@ -178,7 +178,7 @@ public class CertificateGenerator {
                     this.context.getClientAlias(i), this.context.getEndPoint(i, LwM2MSecurityMode.X509),
                     context.getClientKeyStorePwd());
         }
-        fileNameJks = this.context.getPrefixClient() + fileNameKeyStore + keyStorePrefixJks;
+        fileNameJks = fileNameKeyStore + this.context.getPrefixClient() + keyStorePrefixJks;
         this.exportKeyPairToKeystoreFile(this.sslKeyStoreClient, context.returnPathForCreatedNewX509().toUri().getPath() + fileNameJks, context.getClientKeyStorePwd());
         this.verifyKeyStore(context.returnPathForCreatedNewX509().toUri().getPath() + fileNameJks, context.getClientKeyStorePwd());
     }

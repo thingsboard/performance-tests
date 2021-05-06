@@ -18,20 +18,16 @@ package org.thingsboard.tools.lwm2m.client.objects;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.leshan.client.resource.BaseInstanceEnabler;
 import org.eclipse.leshan.client.servers.ServerIdentity;
 import org.eclipse.leshan.core.response.ReadResponse;
 
-import java.util.*;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 
 @Slf4j
 @Data
-public class LwM2mConnectivityMonitoring extends BaseInstanceEnabler {
-    private static final List<Integer> supportedResources = Arrays.asList(0, 1, 2, 3, 4, 5,6,7,8,9,10);
-    private static final Random RANDOM = new Random();
+public class LwM2mConnectivityMonitoring extends LwM2mBaseInstanceEnabler {
 
     private Integer networkBearer = 0;  // 0    value 0-50
     private Integer availableNetworkBearer = 1;  // 1  value 0-50
@@ -49,47 +45,46 @@ public class LwM2mConnectivityMonitoring extends BaseInstanceEnabler {
 
     }
 
-    public LwM2mConnectivityMonitoring (ScheduledExecutorService executorService) {
+    public LwM2mConnectivityMonitoring (ScheduledExecutorService executorService, Integer id) {
+        try {
+            if (id != null) this.setId(id);
         executorService.scheduleWithFixedDelay(() ->
                 fireResourcesChange(8), 5000, 5000, TimeUnit.MILLISECONDS);
-//        Timer timer = new Timer("Device-Current Time, Value betery");
-//        timer.schedule(new TimerTask() {
-//            @Override
-//            public void run() {
-//                fireResourcesChange(8);
-//            }
-//        }, 5000, 5000);
+        } catch (Throwable e) {
+            log.error("[{}]Throwable", e.toString());
+            e.printStackTrace();
+        }
     }
 
     @Override
-    public ReadResponse read(ServerIdentity identity, int resourceid) {
+    public ReadResponse read(ServerIdentity identity, int resourceId) {
 //        log.info("Read on Device resource /{}/{}/{}", getModel().id, getId(), resourceid);
-        switch (resourceid) {
+        resourceId = getSupportedResource (resourceId);
+        switch (resourceId) {
             case 0:
-                return ReadResponse.success(resourceid, getNetworkBearer());
+                return ReadResponse.success(resourceId, getNetworkBearer());
             case 1:
-                return ReadResponse.success(resourceid, getAvailableNetworkBearer());
+                return ReadResponse.success(resourceId, getAvailableNetworkBearer());
             case 2:
-                return ReadResponse.success(resourceid, getRadioSignalStrength());
+                return ReadResponse.success(resourceId, getRadioSignalStrength());
             case 3:
-                return ReadResponse.success(resourceid, getLinkQuality());
+                return ReadResponse.success(resourceId, getLinkQuality());
             case 4:
-                return ReadResponse.success(resourceid, getIPAddresses());
+                return ReadResponse.success(resourceId, getIPAddresses());
             case 5:
-                return ReadResponse.success(resourceid, getRouterIPAddresses());
+                return ReadResponse.success(resourceId, getRouterIPAddresses());
             case 6:
-                return ReadResponse.success(resourceid, getLinkUtilization());
+                return ReadResponse.success(resourceId, getLinkUtilization());
             case 7:
-                return ReadResponse.success(resourceid, getAPN());
+                return ReadResponse.success(resourceId, getAPN());
             case 8:
-                return ReadResponse.success(resourceid, getCellID());
+                return ReadResponse.success(resourceId, getCellID());
             case 9:
-                return ReadResponse.success(resourceid, getSMNC());
+                return ReadResponse.success(resourceId, getSMNC());
             case 10:
-                return ReadResponse.success(resourceid, getSMCC());
-
+                return ReadResponse.success(resourceId, getSMCC());
             default:
-                return super.read(identity, resourceid);
+                return super.read(identity, resourceId);
         }
     }
 

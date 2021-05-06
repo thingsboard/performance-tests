@@ -15,25 +15,17 @@
  */
 package org.thingsboard.tools.lwm2m.client.objects;
 
-import com.google.common.hash.HashFunction;
-import com.google.common.hash.Hasher;
-import com.google.common.hash.Hashing;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.leshan.client.resource.BaseInstanceEnabler;
 import org.eclipse.leshan.client.resource.ResourceChangedListener;
 import org.eclipse.leshan.client.servers.ServerIdentity;
-import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.node.LwM2mResource;
-import org.eclipse.leshan.core.node.LwM2mSingleResource;
 import org.eclipse.leshan.core.response.ExecuteResponse;
 import org.eclipse.leshan.core.response.ReadResponse;
 import org.eclipse.leshan.core.response.WriteResponse;
 
 import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -43,9 +35,7 @@ import static org.eclipse.leshan.core.model.ResourceModel.Type.INTEGER;
 
 @Slf4j
 @Data
-public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
-    private static final Random RANDOM = new Random();
-    private static final List<Integer> supportedResources = Arrays.asList(0, 1, 2, 3, 5, 6, 7, 8, 9);
+public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
 
     private byte[] packageData;
     private String packageURI = "coaps://example.org/firmware";
@@ -68,9 +58,10 @@ public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
 
     }
 
-    public LwM2mFirmwareUpdate(ScheduledExecutorService executorService) {
+    public LwM2mFirmwareUpdate(ScheduledExecutorService executorService, Integer id) {
         try {
             this.executorService = executorService;
+            if (id != null) this.setId(id);
             this.init();
             ResourceChangedListener resourceChangedListener = new ResourceChangedListener() {
                 @Override
@@ -117,55 +108,43 @@ public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
 
     }
 
-//    @Override
-//    public ReadResponse read(ServerIdentity identity) {
-//        List<LwM2mResource> resources = new ArrayList<>();
-//        for (ResourceModel resourceModel : model.resources.values()) {
-//            // check, if internal request (SYSTEM) or readable
-//            if (identity.isSystem() || resourceModel.operations.isReadable()) {
-//                ReadResponse response = read(identity, resourceModel.id);
-//                if (response.isSuccess() && response.getContent() instanceof LwM2mResource)
-//                    resources.add((LwM2mResource) response.getContent());
-//            }
-//        }
-//        return ReadResponse.success(new LwM2mObjectInstance(id, resources));
-//    }
-
     @Override
-    public ReadResponse read(ServerIdentity identity, int resourceid) {
+    public ReadResponse read(ServerIdentity identity, int resourceId) {
 //        log.info("Read on Location resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceid);
         identity = identity != null ? identity : this.identity;
         this.identity = identity;
-        switch (resourceid) {
+        resourceId = getSupportedResource (resourceId);
+        switch (resourceId) {
             case 0:
 //                log.info("Read on Location resource /[{}]/[{}]/[{}], {}", getModel().id, getId(), resourceid, Hex.encodeHexString(this.data).toLowerCase());
                 return ReadResponse.notFound();
             case 1:
-                return ReadResponse.success(resourceid, getPackageURI());
+                return ReadResponse.success(resourceId, getPackageURI());
             case 3:
-                return ReadResponse.success(resourceid, this.getState());
+                return ReadResponse.success(resourceId, this.getState());
             case 5:
-                return ReadResponse.success(resourceid, getUpdateResult());
+                return ReadResponse.success(resourceId, getUpdateResult());
             case 6:
-                return ReadResponse.success(resourceid, getPkgName());
+                return ReadResponse.success(resourceId, getPkgName());
             case 7:
-                return ReadResponse.success(resourceid, getPkgVersion());
+                return ReadResponse.success(resourceId, getPkgVersion());
             case 8:
-                return ReadResponse.success(resourceid, getFirmwareUpdateProtocolSupport(), INTEGER);
+                return ReadResponse.success(resourceId, getFirmwareUpdateProtocolSupport(), INTEGER);
             case 9:
-                return ReadResponse.success(resourceid, getFirmwareUpdateDeliveryMethod());
+                return ReadResponse.success(resourceId, getFirmwareUpdateDeliveryMethod());
             default:
-                return super.read(identity, resourceid);
+                return super.read(identity, resourceId);
         }
     }
 
     @Override
-    public WriteResponse write(ServerIdentity identity, int resourceid, LwM2mResource value) {
+    public WriteResponse write(ServerIdentity identity, int resourceId, LwM2mResource value) {
 //        log.info("Write on Device resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceid);
-        LwM2mSingleResource resource = (LwM2mSingleResource)value;
-        byte[] data = (byte[])(resource.getValue());
-        System.out.println(Hashing.sha256().newHasher().putBytes(data).hash().toString());
-        switch (resourceid) {
+//        LwM2mSingleResource resource = (LwM2mSingleResource)value;
+//        byte[] data = (byte[])(resource.getValue());
+//        System.out.println(Hashing.sha256().newHasher().putBytes(data).hash().toString());
+        resourceId = getSupportedResource (resourceId);
+        switch (resourceId) {
             case 0:
                 log.info(new String((byte[])value.getValue()));
                 this.identity = identity;
@@ -173,16 +152,17 @@ public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
                 return WriteResponse.success();
             case 1:
                 setPackageURI((String) value.getValue());
-                fireResourcesChange(resourceid);
+                fireResourcesChange(resourceId);
                 return WriteResponse.success();
             default:
-                return super.write(identity, resourceid, value);
+                return super.write(identity, resourceId, value);
         }
     }
 
     @Override
-    public ExecuteResponse execute(ServerIdentity identity, int resourceid, String params) {
-        switch (resourceid) {
+    public ExecuteResponse execute(ServerIdentity identity, int resourceId, String params) {
+        resourceId = getSupportedResource (resourceId);
+        switch (resourceId) {
             // Update
             case 2:
                 if (state == 1) {
@@ -195,7 +175,7 @@ public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
                     return ExecuteResponse.badRequest("firmware update already running");
                 }
         }
-        return super.execute(identity, resourceid, params);
+        return super.execute(identity, resourceId, params);
     }
 
     private boolean setPackageData(byte[] value) {
@@ -293,15 +273,5 @@ public class LwM2mFirmwareUpdate extends BaseInstanceEnabler {
         states.put(0, "Pull only");
         states.put(1, "Push only");
         states.put(2, "Both");
-    }
-
-//    @Override
-//    public ExecuteResponse execute(ServerIdentity identity, int resourceid, String params) {
-//        return super.execute(identity, resourceid, params);
-//    }
-
-    @Override
-    public List<Integer> getAvailableResourceIds(ObjectModel model) {
-        return supportedResources;
     }
 }

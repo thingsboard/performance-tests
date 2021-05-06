@@ -69,8 +69,5 @@ public class LwM2MLocationParams {
         } catch (NumberFormatException e) {
             log.error("Scale factor must be a float, e.g. 1.0 or 0.01");
         }
-
     }
-
-
 }

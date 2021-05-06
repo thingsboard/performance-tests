@@ -536,6 +536,7 @@ public class LwObjectEnabler extends ObjectEnabler {
         for (LwM2mInstanceEnabler instanceEnabler : instances.values()) {
             instanceEnabler.setLwM2mClient(client);
         }
+        super.setLwM2mClient(client);
     }
 
     @Override
