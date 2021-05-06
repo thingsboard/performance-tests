@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-#/home/nick/Igor_project/Thingsboard_Perfrmance_test/performance-tests/src/main/resources/credentials/shell/lwM2M_credentials.sh -p LwX509 -s 0 -f 2000 -a client_alias_ -e client_self_signed_ -b bootstrap -d server -j serverKeyStore.jks -k clientKeyStore.jks -c client_ks_password -w server_ks_password
+#/home/nick/Igor_project/Thingsboard_Perfrmance_test/performance-tests/src/main/resources/credentials/shell/lwM2M_credentials.sh -p LwX509 -s 0 -f 2000 -a client_alias_ -e client_self_signed_ -b bootstrap -d server -j lwm2mserver.jks -k lwm2mclient.jks -c client_ks_password -w server_ks_password
 
 #p) CLIENT_CN=$CLIENT_PREFIX00000000
 #s) client_start=0
@@ -24,8 +24,8 @@
 #e) CLIENT_SELF_ALIAS=CLIENT_SELF_ALIAS_PREFIX_00000000
 #b) BOOTSTRAP_ALIAS=bootstrap
 #d) SERVER_ALIAS=server
-#j) SERVER_STORE=serverKeyStore.jks
-#k) CLIENT_STORE=clientKeyStore.jks
+#j) SERVER_STORE=lwm2mserver.jks
+#k) CLIENT_STORE=lwm2mclient.jks
 #c) CLIENT_STORE_PWD=client_ks_password
 #w) SERVER_STORE_PWD=server_ks_password
 #l) ROOT_KEY_ALIAS=root_key_alias

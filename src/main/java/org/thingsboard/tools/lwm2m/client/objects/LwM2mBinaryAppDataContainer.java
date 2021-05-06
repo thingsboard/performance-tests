@@ -63,7 +63,7 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
     private Time timestamp;
     private String description;
     private String dataFormat;
-    private Integer appID;
+    private Integer appID = -1;
     public LwM2mBinaryAppDataContainer() { }
 
     public LwM2mBinaryAppDataContainer(ScheduledExecutorService executorService, Integer id) {

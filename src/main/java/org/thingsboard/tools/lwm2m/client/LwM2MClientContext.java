@@ -273,10 +273,10 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
     private final String SH_CREATED_KEY_STORE_DEFAULT = "lwM2M_credentials.sh";
 
     @Getter
-    private final String keyStoreServerFile = "serverKeyStore.jks";
+    private final String keyStoreServerFile = "lwm2mserver.jks";
 
     @Getter
-    private final String keyStoreClientFile = "clientKeyStore.jks";
+    private final String keyStoreClientFile = "lwm2mclient.jks";
 
     @Getter
     private final String clientKeyStorePwd = "client_ks_password";
@@ -505,8 +505,8 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
      * -b: bootstrapAlias = "bootstrap";
      * -d: serverAlias = "server";
      * getCreatedNewX509() => SH_CREATED_KEY_STORE_DEFAULT = "lwM2M_credentials.sh";
-     * -j: keyStoreServerFile = "serverKeyStore.jks";
-     * -k: keyStoreClientFile = "clientKeyStore.jks";
+     * -j: keyStoreServerFile = "lwm2mserver.jks";
+     * -k: keyStoreClientFile = "lwm2mclient.jks";
      * -c: clientKeyStorePwd = "client_ks_password";
      * -w: serverKeyStorePwd = "server_ks_password";
      *
