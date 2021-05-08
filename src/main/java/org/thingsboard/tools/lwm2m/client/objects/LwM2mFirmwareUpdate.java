@@ -17,14 +17,12 @@ package org.thingsboard.tools.lwm2m.client.objects;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.leshan.client.resource.ResourceChangedListener;
 import org.eclipse.leshan.client.servers.ServerIdentity;
 import org.eclipse.leshan.core.node.LwM2mResource;
 import org.eclipse.leshan.core.response.ExecuteResponse;
 import org.eclipse.leshan.core.response.ReadResponse;
 import org.eclipse.leshan.core.response.WriteResponse;
 
-import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
@@ -63,35 +61,35 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
             this.executorService = executorService;
             if (id != null) this.setId(id);
             this.init();
-            ResourceChangedListener resourceChangedListener = new ResourceChangedListener() {
-                @Override
-                public void resourcesChanged(int... resourceIds) {
-                    log.warn("Listener resourceIds: {}", resourceIds);
-                    Arrays.stream(resourceIds).forEach(i -> {
-                        read(identity, i);
-                    });
-                    if (getState() == 1) {
-                        execute(identity, 2, null);
+//            ResourceChangedListener resourceChangedListener = new ResourceChangedListener() {
+//                @Override
+//                public void resourcesChanged(int... resourceIds) {
+//                    log.warn("Listener resourceIds: {}", resourceIds);
+//                    Arrays.stream(resourceIds).forEach(i -> {
+//                        read(identity, i);
+//                    });
+//                    if (getState() == 1) {
+//                        execute(identity, 2, null);
+////                        executorService.schedule(() -> {
+////                            setState(2);
+////                            setUpdateResult(1);
+////                        },timeDelay,  TimeUnit.MILLISECONDS);
+//                    }
+//                    else if (getState() == 2) {
 //                        executorService.schedule(() -> {
-//                            setState(2);
-//                            setUpdateResult(1);
+//                            setPkgVersion("2.04");
+//                            setState(3);
 //                        },timeDelay,  TimeUnit.MILLISECONDS);
-                    }
-                    else if (getState() == 2) {
-                        executorService.schedule(() -> {
-                            setPkgVersion("2.04");
-                            setState(3);
-                        },timeDelay,  TimeUnit.MILLISECONDS);
-                    }
-                    else if (getState() == 3) {
-                        executorService.schedule(() -> {
-                            setUpdateResult(1); // "Firmware updated successfully"
-                            setState(0);        // "Idle
-                        },timeDelay,  TimeUnit.MILLISECONDS);
-                    }
-                }
-            };
-            this.addResourceChangedListener(resourceChangedListener);
+//                    }
+//                    else if (getState() == 3) {
+//                        executorService.schedule(() -> {
+//                            setUpdateResult(1); // "Firmware updated successfully"
+//                            setState(0);        // "Idle
+//                        },timeDelay,  TimeUnit.MILLISECONDS);
+//                    }
+//                }
+//            };
+//            this.addResourceChangedListener(resourceChangedListener);
         } catch (Throwable e) {
             log.error("[{}]Throwable", e.toString());
             e.printStackTrace();
@@ -146,10 +144,14 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
         resourceId = getSupportedResource (resourceId);
         switch (resourceId) {
             case 0:
-                log.info(new String((byte[])value.getValue()));
                 this.identity = identity;
-                setPackageData((byte[]) value.getValue());
-                return WriteResponse.success();
+                if (this.setPackageData((byte[]) value.getValue())) {
+                    return WriteResponse.success();
+                }
+                else {
+                    return WriteResponse.badRequest("Bad write data");
+                }
+
             case 1:
                 setPackageURI((String) value.getValue());
                 fireResourcesChange(resourceId);
@@ -179,16 +181,27 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
     }
 
     private boolean setPackageData(byte[] value) {
+        String pkg = new String(value);
+        log.warn(pkg);
         this.packageData = value;
-        fireResourcesChange(0);
+        executorService.schedule(() -> {
+                        },timeDelay,  TimeUnit.MILLISECONDS);
+        this.setPkgVersion (pkg.substring(pkg.lastIndexOf("ver")+4,pkg.lastIndexOf("ver")+8));
+        this.setPkgName (pkg.substring(0, 7));
+//        fireResourcesChange(0);
         this.setState(1); // "Downloading"
-        this.setUpdateResult(0); // "Initial value"
+        this.setUpdateResult(Integer.parseInt(pkg.substring(8, 10))); // "Initial value"
         return true;
     }
 
     private void setState (int state) {
         this.state = state;
         fireResourcesChange(3);
+    }
+
+    private void setPkgName (String pkgName) {
+        this.pkgName = pkgName;
+        fireResourcesChange(6);
     }
 
     private void setPkgVersion (String pkgVersion) {
