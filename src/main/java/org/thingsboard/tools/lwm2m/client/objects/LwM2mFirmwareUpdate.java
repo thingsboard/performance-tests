@@ -155,6 +155,7 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
         }
     }
 
+
     @Override
     public ExecuteResponse execute(ServerIdentity identity, int resourceId, String params) {
         resourceId = getSupportedResource(resourceId);
@@ -162,14 +163,26 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
             // Update
             case 2:
                 if (this.state == StateFw.DOWNLOADED.code && this.updateResult == UpdateResultFw.INITIAL.code) {
-//                    this.executorService.schedule(() -> {
-//                    setState(StateFw.UPDATING.code);        // Success
-//                    }, timeDelay, TimeUnit.MILLISECONDS);
-//                    this.executorService.schedule(() -> {
-                    setState(StateFw.IDLE.code);        //  Success
-                    setUpdateResult(UpdateResultFw.UPDATE_SUCCESSFULLY.code);        //  Success
-//                    }, timeDelay, TimeUnit.MILLISECONDS);
-//                    getLwM2mClient().triggerRegistrationUpdate(identity);
+                    /**
+                     * When in Downloaded state, and the executable Resource Update is triggered,
+                     * -the state changes to Updating.
+                     * If the Update Resource failed,
+                     * -the state returns at Downloaded.
+                     * If performing the Update Resource was successful,
+                     * -the state changes from Updating to 0 "Idle".
+                     */
+                    this.setUpdateResult(this.stateAfterUpdate);        //  Success/Fail
+                    if (UpdateResultFw.UPDATE_SUCCESSFULLY.code == this.getUpdateResult()){
+                        this.setState(StateFw.IDLE.code);        //  Success
+                    }
+                    else if (UpdateResultFw.INITIAL.code == this.getUpdateResult()) {
+                        this.setState(StateFw.IDLE.code); // resets the Firmware Update State Machine
+                    }
+                    else if (UpdateResultFw.UPDATE_SUCCESSFULLY.code < this.getUpdateResult()) {
+                        this.setState(StateFw.DOWNLOADED.code); // Fail
+                        return ExecuteResponse.badRequest(String.format(":Firmware update failed. %s.",
+                                UpdateResultFw.fromUpdateResultFwByCode(this.getUpdateResult()).type));
+                    }
                     return ExecuteResponse.success();
                 } else if (this.state == StateFw.DOWNLOADED.code && this.updateResult > UpdateResultFw.UPDATE_SUCCESSFULLY.code) {
                     // Failed
@@ -340,13 +353,22 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
             this.isAgain = isAgain;
         }
 
-        public static StateFw fromStateFw(String type) {
-            for (StateFw to : StateFw.values()) {
+        public static UpdateResultFw fromUpdateResultFwByType(String type) {
+            for (UpdateResultFw to : UpdateResultFw.values()) {
                 if (to.type.equals(type)) {
                     return to;
                 }
             }
             throw new IllegalArgumentException(String.format("Unsupported FW Update Result type  : %s", type));
+        }
+
+        public static UpdateResultFw fromUpdateResultFwByCode(int code) {
+            for (UpdateResultFw to : UpdateResultFw.values()) {
+                if (to.code == code) {
+                    return to;
+                }
+            }
+            throw new IllegalArgumentException(String.format("Unsupported FW Update Result code  : %s", code));
         }
     }
 
