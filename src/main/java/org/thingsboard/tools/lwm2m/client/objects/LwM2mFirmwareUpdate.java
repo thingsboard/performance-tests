@@ -45,7 +45,7 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
     Map<Integer, Long> firmwareUpdateProtocolSupport = new ConcurrentHashMap<>();
     private int firmwareUpdateDeliveryMethod;
     private ServerIdentity identity;
-    private Long timeDelay = 10000L;
+    private Long timeDelay = 2000L;
     public ScheduledExecutorService executorService;
     // for test
     private volatile int stateAfterUpdate;
@@ -161,16 +161,18 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
         switch (resourceId) {
             // Update
             case 2:
-                if (state == 2) {
-                    this.executorService.schedule(() -> {
-                        setState(StateFw.UPDATING.code);        // "Downloaded"
-                    }, timeDelay, TimeUnit.MILLISECONDS);
-                    this.executorService.schedule(() -> {
-                        setState(StateFw.IDLE.code);        // "IDLE" Success
-                        setUpdateResult(UpdateResultFw.UPDATE_SUCCESSFULLY.code);        // "IDLE" Success
-                    }, timeDelay, TimeUnit.MILLISECONDS);
+                if (this.state == StateFw.DOWNLOADED.code && this.updateResult == UpdateResultFw.INITIAL.code) {
+//                    this.executorService.schedule(() -> {
+//                    setState(StateFw.UPDATING.code);        // Success
+//                    }, timeDelay, TimeUnit.MILLISECONDS);
+//                    this.executorService.schedule(() -> {
+                    setState(StateFw.IDLE.code);        //  Success
+                    setUpdateResult(UpdateResultFw.UPDATE_SUCCESSFULLY.code);        //  Success
+//                    }, timeDelay, TimeUnit.MILLISECONDS);
 //                    getLwM2mClient().triggerRegistrationUpdate(identity);
                     return ExecuteResponse.success();
+                } else if (this.state == StateFw.DOWNLOADED.code && this.updateResult > UpdateResultFw.UPDATE_SUCCESSFULLY.code) {
+                    // Failed
                 } else {
                     return ExecuteResponse.badRequest("firmware update already running");
                 }
@@ -188,8 +190,11 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
     }
 
     private void setState(int state) {
-        this.state = state;
-        fireResourcesChange(3);
+        executorService.schedule(() -> {
+            this.state = state;
+            fireResourcesChange(3);
+        }, timeDelay, TimeUnit.MILLISECONDS);
+
     }
 
     private void setPkgName(String pkgName) {
@@ -207,8 +212,10 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
     }
 
     private void setUpdateResult(int updateResult) {
-        this.updateResult = updateResult;
-        fireResourcesChange(5);
+        executorService.schedule(() -> {
+            this.updateResult = updateResult;
+            fireResourcesChange(5);
+        }, timeDelay, TimeUnit.MILLISECONDS);
     }
 
     private int getUpdateResult() {
