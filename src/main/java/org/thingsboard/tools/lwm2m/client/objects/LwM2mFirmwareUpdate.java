@@ -26,7 +26,6 @@ import org.eclipse.leshan.core.response.WriteResponse;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import static org.eclipse.leshan.core.model.ResourceModel.Type.INTEGER;
 
@@ -155,40 +154,31 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
         }
     }
 
-
     @Override
     public ExecuteResponse execute(ServerIdentity identity, int resourceId, String params) {
         resourceId = getSupportedResource(resourceId);
         switch (resourceId) {
             // Update
             case 2:
-                if (this.state == StateFw.DOWNLOADED.code && this.updateResult == UpdateResultFw.INITIAL.code) {
-                    /**
-                     * When in Downloaded state, and the executable Resource Update is triggered,
-                     * -the state changes to Updating.
-                     * If the Update Resource failed,
-                     * -the state returns at Downloaded.
-                     * If performing the Update Resource was successful,
-                     * -the state changes from Updating to 0 "Idle".
-                     */
-                    this.setUpdateResult(this.stateAfterUpdate);        //  Success/Fail
-                    if (UpdateResultFw.UPDATE_SUCCESSFULLY.code == this.getUpdateResult()){
-                        this.setState(StateFw.IDLE.code);        //  Success
-                    }
-                    else if (UpdateResultFw.INITIAL.code == this.getUpdateResult()) {
-                        this.setState(StateFw.IDLE.code); // resets the Firmware Update State Machine
-                    }
-                    else if (UpdateResultFw.UPDATE_SUCCESSFULLY.code < this.getUpdateResult()) {
-                        this.setState(StateFw.DOWNLOADED.code); // Fail
-                        return ExecuteResponse.badRequest(String.format(":Firmware update failed. %s.",
-                                UpdateResultFw.fromUpdateResultFwByCode(this.getUpdateResult()).type));
-                    }
-                    return ExecuteResponse.success();
-                } else if (this.state == StateFw.DOWNLOADED.code && this.updateResult > UpdateResultFw.UPDATE_SUCCESSFULLY.code) {
-                    // Failed
-                } else {
-                    return ExecuteResponse.badRequest("firmware update already running");
+                /**
+                 * When in Downloaded state, and the executable Resource Update is triggered,
+                 * -the state changes to Updating.
+                 * If the Update Resource failed,
+                 * -the state returns at Downloaded.
+                 * If performing the Update Resource was successful,
+                 * -the state changes from Updating to 0 "Idle".
+                 */
+                this.setUpdateResult(this.updateResultAfterUpdate);        //  Success/Fail
+                if (UpdateResultFw.UPDATE_SUCCESSFULLY.code == this.getUpdateResult()) {
+                    this.setState(StateFw.IDLE.code);        //  Success
+                } else if (UpdateResultFw.INITIAL.code == this.getUpdateResult()) {
+                    this.setState(StateFw.IDLE.code); // resets the Firmware Update State Machine
+                } else if (UpdateResultFw.UPDATE_SUCCESSFULLY.code < this.getUpdateResult()) {
+                    this.setState(StateFw.DOWNLOADED.code); // Fail
+                    return ExecuteResponse.badRequest(String.format(":Firmware update failed during updating. %s.",
+                            UpdateResultFw.fromUpdateResultFwByCode(this.getUpdateResult()).type));
                 }
+                return ExecuteResponse.success();
         }
         return super.execute(identity, resourceId, params);
     }
@@ -203,10 +193,10 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
     }
 
     private void setState(int state) {
-        executorService.schedule(() -> {
+//        executorService.schedule(() -> {
             this.state = state;
             fireResourcesChange(3);
-        }, timeDelay, TimeUnit.MILLISECONDS);
+//        }, timeDelay, TimeUnit.MILLISECONDS);
 
     }
 
@@ -225,10 +215,10 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
     }
 
     private void setUpdateResult(int updateResult) {
-        executorService.schedule(() -> {
+//        executorService.schedule(() -> {
             this.updateResult = updateResult;
             fireResourcesChange(5);
-        }, timeDelay, TimeUnit.MILLISECONDS);
+//        }, timeDelay, TimeUnit.MILLISECONDS);
     }
 
     private int getUpdateResult() {
@@ -248,8 +238,8 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
     }
 
     private void downloadedPackage() {
-        executorService.schedule(() -> {
-        }, timeDelay, TimeUnit.MILLISECONDS);
+//        executorService.schedule(() -> {
+//        }, timeDelay, TimeUnit.MILLISECONDS);
         String pkg = new String(this.packageData);
         int start = pkg.indexOf("pkgVer:") + ("pkgVer:").length();
         int finish = pkg.indexOf("updateResult");
