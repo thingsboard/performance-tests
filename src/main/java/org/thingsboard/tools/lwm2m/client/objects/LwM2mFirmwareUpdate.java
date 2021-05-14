@@ -26,6 +26,7 @@ import org.eclipse.leshan.core.response.WriteResponse;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import static org.eclipse.leshan.core.model.ResourceModel.Type.INTEGER;
 
@@ -44,7 +45,7 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
     Map<Integer, Long> firmwareUpdateProtocolSupport = new ConcurrentHashMap<>();
     private int firmwareUpdateDeliveryMethod;
     private ServerIdentity identity;
-    private Long timeDelay = 2000L;
+    private Long timeDelay = 1000L;
     public ScheduledExecutorService executorService;
     // for test
     private volatile int stateAfterUpdate;
@@ -131,23 +132,13 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
 
     @Override
     public WriteResponse write(ServerIdentity identity, int resourceId, LwM2mResource value) {
-//        log.info("Write on Device resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceid);
-//        LwM2mSingleResource resource = (LwM2mSingleResource)value;
-//        byte[] data = (byte[])(resource.getValue());
-//        System.out.println(Hashing.sha256().newHasher().putBytes(data).hash().toString());
         resourceId = getSupportedResource(resourceId);
         switch (resourceId) {
             case 0:
                 this.identity = identity;
-                if (this.setPackageData((byte[]) value.getValue())) {
-                    return WriteResponse.success();
-                } else {
-                    return WriteResponse.badRequest("Bad write data");
-                }
-
+                return this.setPackageData((byte[]) value.getValue());
             case 1:
-                setPackageURI((String) value.getValue());
-                fireResourcesChange(resourceId);
+                setPackageURI((String) value.getValue(), resourceId);
                 return WriteResponse.success();
             default:
                 return super.write(identity, resourceId, value);
@@ -169,33 +160,59 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
                  * -the state changes from Updating to 0 "Idle".
                  */
                 this.setUpdateResult(this.updateResultAfterUpdate);        //  Success/Fail
-                if (UpdateResultFw.UPDATE_SUCCESSFULLY.code == this.getUpdateResult()) {
-                    this.setState(StateFw.IDLE.code);        //  Success
-                } else if (UpdateResultFw.INITIAL.code == this.getUpdateResult()) {
-                    this.setState(StateFw.IDLE.code); // resets the Firmware Update State Machine
-                } else if (UpdateResultFw.UPDATE_SUCCESSFULLY.code < this.getUpdateResult()) {
-                    this.setState(StateFw.DOWNLOADED.code); // Fail
-                    return ExecuteResponse.badRequest(String.format(":Firmware update failed during updating. %s.",
-                            UpdateResultFw.fromUpdateResultFwByCode(this.getUpdateResult()).type));
+                try {
+                    Thread.sleep(timeDelay);
+                } catch (InterruptedException e) {
+                    return ExecuteResponse.badRequest(String.format("Firmware update failed during updating. Error: %s.",
+                            e.getMessage()));
                 }
-                return ExecuteResponse.success();
+                executorService.schedule(() -> {
+                    if (UpdateResultFw.UPDATE_SUCCESSFULLY.code == this.getUpdateResult()) {
+                        this.setState(StateFw.UPDATING.code);        //  Success
+                        try {
+                            Thread.sleep(timeDelay);
+                        } catch (InterruptedException e) {
+                            return ExecuteResponse.badRequest(String.format("Firmware update failed during updating. Error: %s.",
+                                    e.getMessage()));
+                        }
+                        this.setState(StateFw.IDLE.code);        //  Success
+                    } else if (UpdateResultFw.INITIAL.code == this.getUpdateResult()) {
+                        this.setState(StateFw.IDLE.code); // resets the Firmware Update State Machine
+                    } else if (UpdateResultFw.UPDATE_FAILED.code == this.getUpdateResult()) {
+                        this.setState(StateFw.DOWNLOADED.code); // Fail
+                        return ExecuteResponse.badRequest(String.format(":Firmware update failed during updating. UpdateResult^ %s.",
+                                UpdateResultFw.fromUpdateResultFwByCode(this.getUpdateResult()).type));
+                    }
+                    return ExecuteResponse.success();
+                }, timeDelay, TimeUnit.MILLISECONDS);
         }
         return super.execute(identity, resourceId, params);
     }
 
-    private boolean setPackageData(byte[] value) {
-        this.setState(StateFw.DOWNLOADING.code); // "Downloading"
-        String pkg = new String(value);
-        log.warn(pkg);
-        this.packageData = value;
-        this.downloadedPackage();
-        return true;
+    private WriteResponse setPackageData(byte[] value) {
+        try {
+            this.setState(StateFw.DOWNLOADING.code); // "Downloading"
+            try {
+                Thread.sleep(timeDelay);
+            } catch (InterruptedException e) {
+                return WriteResponse.badRequest(String.format("Firmware write failed during downloading. Error: %s.",
+                        e.getMessage()));
+            }
+            String pkg = new String(value);
+            log.warn(pkg);
+            this.packageData = value;
+            return this.downloadedPackage();
+        }
+        catch(Exception e) {
+            return WriteResponse.badRequest(String.format(":Firmware write failed during downloading. Error: %s.",
+                    e.getMessage()));
+        }
     }
 
     private void setState(int state) {
 //        executorService.schedule(() -> {
-            this.state = state;
-            fireResourcesChange(3);
+        this.state = state;
+        fireResourcesChange(3);
 //        }, timeDelay, TimeUnit.MILLISECONDS);
 
     }
@@ -216,8 +233,8 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
 
     private void setUpdateResult(int updateResult) {
 //        executorService.schedule(() -> {
-            this.updateResult = updateResult;
-            fireResourcesChange(5);
+        this.updateResult = updateResult;
+        fireResourcesChange(5);
 //        }, timeDelay, TimeUnit.MILLISECONDS);
     }
 
@@ -229,17 +246,16 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
         return this.packageURI;
     }
 
-    private void setPackageURI(String value) {
+    private void setPackageURI(String value, int resourceId) {
         this.packageURI = value;
+        fireResourcesChange(resourceId);
     }
 
     private void setFirmwareUpdateProtocolSupport(Long protocolSupport) {
         this.firmwareUpdateProtocolSupport.put(this.firmwareUpdateProtocolSupport.size(), protocolSupport);
     }
 
-    private void downloadedPackage() {
-//        executorService.schedule(() -> {
-//        }, timeDelay, TimeUnit.MILLISECONDS);
+    private WriteResponse downloadedPackage() {
         String pkg = new String(this.packageData);
         int start = pkg.indexOf("pkgVer:") + ("pkgVer:").length();
         int finish = pkg.indexOf("updateResult");
@@ -253,8 +269,42 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
         start = pkg.indexOf("stateAfterUpdate:") + ("stateAfterUpdate:").length();
         finish = pkg.length() - 1;
         this.stateAfterUpdate = (Integer.parseInt(pkg.substring(start, finish).trim()));
-        this.setState(StateFw.DOWNLOADED.code); // "Downloaded"
-        this.setUpdateResult(UpdateResultFw.INITIAL.code); // "Initial value"
+        /**
+         * true:
+         *         INITIAL(0)
+         *         UPDATE_SUCCESSFULLY(1),
+         *         UPDATE_FAILED(8),
+         * false:
+         *         NOT_ENOUGH(2),
+         *         OUT_OFF_RAM(3),
+         *         CONNECTION_LOST(4),
+         *         INTEGRITY_CHECK_FAILURE(5),
+         *         UNSUPPORTED_TYPE(6),
+         *         INVALID_URI(7),
+         *         UNSUPPORTED_PROTOCOL(9);
+         */
+        if (this.stateAfterUpdate <= UpdateResultFw.UPDATE_SUCCESSFULLY.code || this.stateAfterUpdate == UpdateResultFw.UPDATE_FAILED.code) {
+            this.setState(StateFw.DOWNLOADED.code); // "Downloaded"
+            this.setUpdateResult(UpdateResultFw.INITIAL.code); // "Initial value"
+            try {
+                Thread.sleep(timeDelay);
+            } catch (InterruptedException e) {
+                return WriteResponse.badRequest(String.format("Firmware write failed during downloaded. Error: %s.",
+                        e.getMessage()));
+            }
+            return WriteResponse.success();
+        }
+        else {
+            this.setUpdateResult(this.updateResultAfterUpdate);        //  Success/Fail
+            try {
+                Thread.sleep(timeDelay);
+            } catch (InterruptedException e) {
+                return WriteResponse.badRequest(String.format("Firmware write failed during downloaded. Error: %s.",
+                        e.getMessage()));
+            }
+            return WriteResponse.badRequest(String.format("Firmware write failed during downloaded. UpdateResult: %s.",
+                    UpdateResultFw.fromUpdateResultFwByCode(this.getUpdateResult()).type));
+        }
     }
 
     /**
@@ -288,7 +338,6 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
 
         public int code;
         public String type;
-
         StateFw(int code, String type) {
             this.code = code;
             this.type = type;
@@ -305,7 +354,7 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
     }
 
     /**
-     * 0, "Initial value");  // nce the updating process is initiated (Download /Update), this Resource MUST be reset to Initial value.
+     * 0, "Initial value");  // once the updating process is initiated (Download /Update), this Resource MUST be reset to Initial value.
      * 1, "Firmware updated successfully");
      * 2, "Not enough flash memory for the new firmware package.");
      * 3, "Out of RAM during downloading process");

@@ -60,6 +60,7 @@ import static org.eclipse.leshan.core.LwM2mId.DEVICE;
 import static org.eclipse.leshan.core.LwM2mId.FIRMWARE;
 import static org.eclipse.leshan.core.LwM2mId.SECURITY;
 import static org.eclipse.leshan.core.LwM2mId.SERVER;
+import static org.eclipse.leshan.core.LwM2mId.SOFTWARE_MANAGEMENT;
 import static org.eclipse.leshan.core.request.ContentFormat.TLV;
 
 
@@ -128,7 +129,7 @@ public class LwM2MClientConfiguration {
         LwM2mObjectEnabler device = new LwObjectEnabler(DEVICE, models.stream().filter(mod -> mod.id == DEVICE)
                 .collect(Collectors.toUnmodifiableList()).get(0), deviceMapInstances, factoryDevice, TLV);
 
-        // FormwareUpdate (0)
+        // FirmwareUpdate (0)
         Map<Integer, LwM2mInstanceEnabler> firmwareUpdateMapInstances = new HashMap<>();
         LwM2mFirmwareUpdate firmwareUpdate0 = new LwM2mFirmwareUpdate(executorService, 0);
         firmwareUpdateMapInstances.put(0, firmwareUpdate0);
@@ -143,6 +144,22 @@ public class LwM2MClientConfiguration {
         };
         LwM2mObjectEnabler firmwareUpdate = new LwObjectEnabler(FIRMWARE, models.stream().filter(mod -> mod.id == FIRMWARE)
                 .collect(Collectors.toUnmodifiableList()).get(0), firmwareUpdateMapInstances, factoryFirmware, TLV);
+
+        //  LwM2mSoftwareManagement (0)
+        Map<Integer, LwM2mInstanceEnabler>  softwareManagementMapInstances = new HashMap<>();
+        LwM2mFirmwareUpdate softwareUpdate0 = new LwM2mFirmwareUpdate(executorService, 0);
+        firmwareUpdateMapInstances.put(0, softwareUpdate0);
+        LwM2mInstanceEnabler[] softwareUpdateInstances = {firmwareUpdate0};
+        initializerModel.setInstancesForObject(SOFTWARE_MANAGEMENT , softwareUpdateInstances);
+        initializerModel.setClassForObject(SOFTWARE_MANAGEMENT , LwM2mFirmwareUpdate.class);
+        LwM2mInstanceEnablerFactory factorySoftwareManagement = new BaseInstanceEnablerFactory() {
+            @Override
+            public LwM2mInstanceEnabler create() {
+                return new LwM2mFirmwareUpdate();
+            }
+        };
+        LwM2mObjectEnabler softwareUpdate = new LwObjectEnabler(SOFTWARE_MANAGEMENT , models.stream().filter(mod -> mod.id == SOFTWARE_MANAGEMENT )
+                .collect(Collectors.toUnmodifiableList()).get(0), softwareManagementMapInstances, factorySoftwareManagement, TLV);
 
         /** initializeMultiInstanceObjects */
         // BinaryAppDataContainer (0, 1)
@@ -170,6 +187,7 @@ public class LwM2MClientConfiguration {
         enablers.add(server);
         enablers.add(device);
         enablers.add(firmwareUpdate);
+        enablers.add(softwareUpdate);
         enablers.add(LwM2mBinaryAppDataContainer);
 
 //        initializer.setInstancesForObject(BINARY_APP_DATA_CONTAINER, new LwM2mBinaryAppDataContainer(executorService));
