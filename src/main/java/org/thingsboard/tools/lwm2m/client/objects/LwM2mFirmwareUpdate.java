@@ -17,6 +17,7 @@ package org.thingsboard.tools.lwm2m.client.objects;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.eclipse.leshan.client.servers.ServerIdentity;
 import org.eclipse.leshan.core.node.LwM2mResource;
 import org.eclipse.leshan.core.response.ExecuteResponse;
@@ -26,7 +27,6 @@ import org.eclipse.leshan.core.response.WriteResponse;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import static org.eclipse.leshan.core.model.ResourceModel.Type.INTEGER;
 
@@ -159,32 +159,26 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
                  * If performing the Update Resource was successful,
                  * -the state changes from Updating to 0 "Idle".
                  */
-                this.setUpdateResult(this.updateResultAfterUpdate);        //  Success/Fail
-                try {
-                    Thread.sleep(timeDelay);
-                } catch (InterruptedException e) {
-                    return ExecuteResponse.badRequest(String.format("Firmware update failed during updating. Error: %s.",
-                            e.getMessage()));
-                }
-                executorService.schedule(() -> {
-                    if (UpdateResultFw.UPDATE_SUCCESSFULLY.code == this.getUpdateResult()) {
-                        this.setState(StateFw.UPDATING.code);        //  Success
-                        try {
-                            Thread.sleep(timeDelay);
-                        } catch (InterruptedException e) {
-                            return ExecuteResponse.badRequest(String.format("Firmware update failed during updating. Error: %s.",
-                                    e.getMessage()));
-                        }
-                        this.setState(StateFw.IDLE.code);        //  Success
-                    } else if (UpdateResultFw.INITIAL.code == this.getUpdateResult()) {
-                        this.setState(StateFw.IDLE.code); // resets the Firmware Update State Machine
-                    } else if (UpdateResultFw.UPDATE_FAILED.code == this.getUpdateResult()) {
-                        this.setState(StateFw.DOWNLOADED.code); // Fail
-                        return ExecuteResponse.badRequest(String.format(":Firmware update failed during updating. UpdateResult^ %s.",
-                                UpdateResultFw.fromUpdateResultFwByCode(this.getUpdateResult()).type));
+                if (UpdateResultFw.UPDATE_SUCCESSFULLY.code == this.updateResultAfterUpdate) {
+                    this.setState(StateFw.UPDATING.code);                       //  Success
+                    this.setUpdateResult(this.updateResultAfterUpdate);         //  Success
+                    try {
+                        Thread.sleep(timeDelay);
+                    } catch (InterruptedException e) {
+                        return ExecuteResponse.badRequest(String.format("Firmware update failed during updating. Error: %s.",
+                                e.getMessage()));
                     }
+                    this.setState(StateFw.IDLE.code);                           //  Success
                     return ExecuteResponse.success();
-                }, timeDelay, TimeUnit.MILLISECONDS);
+                } else if (UpdateResultFw.INITIAL.code == this.updateResultAfterUpdate) {
+                    this.setState(StateFw.IDLE.code); // resets the Firmware Update State Machine
+                    return ExecuteResponse.success();
+                } else if (UpdateResultFw.UPDATE_FAILED.code == this.updateResultAfterUpdate) {
+                    this.setState(StateFw.DOWNLOADED.code);                     // Fail
+                    this.setUpdateResult(this.updateResultAfterUpdate);         //Fail
+                    return ExecuteResponse.badRequest(String.format(":Firmware update failed during updating. UpdateResult^ %s.",
+                            UpdateResultFw.fromUpdateResultFwByCode(this.getUpdateResult()).type));
+                }
         }
         return super.execute(identity, resourceId, params);
     }
@@ -198,12 +192,8 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
                 return WriteResponse.badRequest(String.format("Firmware write failed during downloading. Error: %s.",
                         e.getMessage()));
             }
-            String pkg = new String(value);
-            log.warn(pkg);
-            this.packageData = value;
-            return this.downloadedPackage();
-        }
-        catch(Exception e) {
+            return this.downloadedPackage(value);
+        } catch (Exception e) {
             return WriteResponse.badRequest(String.format(":Firmware write failed during downloading. Error: %s.",
                     e.getMessage()));
         }
@@ -255,54 +245,80 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
         this.firmwareUpdateProtocolSupport.put(this.firmwareUpdateProtocolSupport.size(), protocolSupport);
     }
 
-    private WriteResponse downloadedPackage() {
-        String pkg = new String(this.packageData);
-        int start = pkg.indexOf("pkgVer:") + ("pkgVer:").length();
-        int finish = pkg.indexOf("updateResult");
-        this.setPkgVersion(pkg.substring(start, finish).trim());
-        start = pkg.indexOf("pkgName:") + ("pkgName:").length();
-        finish = pkg.indexOf("pkgVer");
-        this.setPkgName(pkg.substring(start, finish).trim());
-        start = pkg.indexOf("updateResultAfterUpdate:") + ("updateResultAfterUpdate:").length();
-        finish = pkg.indexOf("stateAfterUpdate");
-        this.updateResultAfterUpdate = (Integer.parseInt(pkg.substring(start, finish).trim()));
-        start = pkg.indexOf("stateAfterUpdate:") + ("stateAfterUpdate:").length();
-        finish = pkg.length() - 1;
-        this.stateAfterUpdate = (Integer.parseInt(pkg.substring(start, finish).trim()));
+    private WriteResponse downloadedPackage(byte[] value) {
+        String pkg = new String(value);
+        log.warn(pkg);
         /**
-         * true:
-         *         INITIAL(0)
-         *         UPDATE_SUCCESSFULLY(1),
-         *         UPDATE_FAILED(8),
-         * false:
-         *         NOT_ENOUGH(2),
-         *         OUT_OFF_RAM(3),
-         *         CONNECTION_LOST(4),
-         *         INTEGRITY_CHECK_FAILURE(5),
-         *         UNSUPPORTED_TYPE(6),
-         *         INVALID_URI(7),
-         *         UNSUPPORTED_PROTOCOL(9);
+         * Writing an empty string to Package URI Resource or setting the Package Resource to NULL (‘\0’),
+         * - resets the Firmware Update State Machine:
          */
-        if (this.stateAfterUpdate <= UpdateResultFw.UPDATE_SUCCESSFULLY.code || this.stateAfterUpdate == UpdateResultFw.UPDATE_FAILED.code) {
-            this.setState(StateFw.DOWNLOADED.code); // "Downloaded"
-            this.setUpdateResult(UpdateResultFw.INITIAL.code); // "Initial value"
-            try {
-                Thread.sleep(timeDelay);
-            } catch (InterruptedException e) {
-                return WriteResponse.badRequest(String.format("Firmware write failed during downloaded. Error: %s.",
-                        e.getMessage()));
+        if (StringUtils.trimToNull(pkg) != null) {
+            this.packageData = value;
+            int start = pkg.indexOf("pkgVer:") + ("pkgVer:").length();
+            int finish = pkg.indexOf("updateResult");
+            this.setPkgVersion(pkg.substring(start, finish).trim());
+            start = pkg.indexOf("pkgName:") + ("pkgName:").length();
+            finish = pkg.indexOf("pkgVer");
+            this.setPkgName(pkg.substring(start, finish).trim());
+            start = pkg.indexOf("updateResultAfterUpdate:") + ("updateResultAfterUpdate:").length();
+            finish = pkg.indexOf("stateAfterUpdate");
+            this.updateResultAfterUpdate = (Integer.parseInt(pkg.substring(start, finish).trim()));
+            start = pkg.indexOf("stateAfterUpdate:") + ("stateAfterUpdate:").length();
+            finish = pkg.length() - 1;
+            this.stateAfterUpdate = (Integer.parseInt(pkg.substring(start, finish).trim()));
+            /**
+             * true:
+             *  DOWNLOADING -> DOWNLOADED
+             *         INITIAL(0)
+             *         UPDATE_SUCCESSFULLY(1),
+             *         UPDATE_FAILED(8),
+             * false: DOWNLOADING && brake
+             *         NOT_ENOUGH(2),
+             *         OUT_OFF_RAM(3),
+             *         CONNECTION_LOST(4),
+             *         INTEGRITY_CHECK_FAILURE(5),
+             *         UNSUPPORTED_TYPE(6),
+             *         INVALID_URI(7),
+             *         UNSUPPORTED_PROTOCOL(9);
+             */
+            if (UpdateResultFw.UPDATE_SUCCESSFULLY.code >= this.stateAfterUpdate || UpdateResultFw.UPDATE_FAILED.code ==this.stateAfterUpdate) {
+                this.setState(StateFw.DOWNLOADED.code); // "Downloaded"
+                this.setUpdateResult(UpdateResultFw.INITIAL.code); // "Initial value"
+                try {
+                    Thread.sleep(timeDelay);
+                } catch (InterruptedException e) {
+                    return WriteResponse.badRequest(String.format("Firmware write failed during downloaded. Error: %s.",
+                            e.getMessage()));
+                }
+                return WriteResponse.success();
+            } else {
+                this.setUpdateResult(this.updateResultAfterUpdate);        //  Fail
+                try {
+                    Thread.sleep(timeDelay);
+                } catch (InterruptedException e) {
+                    return WriteResponse.badRequest(String.format("Firmware write failed during downloading. Error: %s.",
+                            e.getMessage()));
+                }
+                return WriteResponse.badRequest(String.format("Firmware write failed during downloading. UpdateResult: %s.",
+                        UpdateResultFw.fromUpdateResultFwByCode(this.getUpdateResult()).type));
             }
-            return WriteResponse.success();
         }
-        else {
-            this.setUpdateResult(this.updateResultAfterUpdate);        //  Success/Fail
+        /**
+         * Writing an empty string to Package URI Resource or setting the Package Resource to NULL (‘\0’),
+         * - resets the Firmware Update State Machine:
+         * -- state = 0 IDLE Idle
+         * -- updateResult = 5 integrity check failure for new downloaded package
+         */
+        else  {
+            this.setState(StateFw.IDLE.code);
+            this.setUpdateResult(UpdateResultFw.INTEGRITY_CHECK_FAILURE.code);
             try {
                 Thread.sleep(timeDelay);
             } catch (InterruptedException e) {
                 return WriteResponse.badRequest(String.format("Firmware write failed during downloaded. Error: %s.",
                         e.getMessage()));
             }
-            return WriteResponse.badRequest(String.format("Firmware write failed during downloaded. UpdateResult: %s.",
+            return WriteResponse.badRequest(String.format("Firmware write failed during downloading. UpdateResult: %s.",
                     UpdateResultFw.fromUpdateResultFwByCode(this.getUpdateResult()).type));
         }
     }
@@ -338,6 +354,7 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
 
         public int code;
         public String type;
+
         StateFw(int code, String type) {
             this.code = code;
             this.type = type;

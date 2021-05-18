@@ -1,12 +1,12 @@
 /**
  * Copyright © 2016-2018 The Thingsboard Authors
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * <p>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -46,6 +46,7 @@ import org.thingsboard.tools.lwm2m.client.objects.LwM2MLocationParams;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2mBinaryAppDataContainer;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2mDevice;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2mFirmwareUpdate;
+import org.thingsboard.tools.lwm2m.client.objects.LwM2mSoftwareManagement;
 import org.thingsboard.tools.lwm2m.client.objects.LwObjectEnabler;
 import org.thingsboard.tools.lwm2m.secure.LwM2MSecurityStore;
 
@@ -112,83 +113,114 @@ public class LwM2MClientConfiguration {
         new LwM2MSecurityStore(context, initializerModel, this.endPoint, this.mode, this.numberClient);
 
         /** Initialize SingleOne objects */
-        // Device (0)
         List<LwM2mObjectEnabler> enablers = new ArrayList<>();
-        Map<Integer, LwM2mInstanceEnabler> deviceMapInstances = new HashMap<>();
-        LwM2mDevice lwM2mDevice0 = new LwM2mDevice(executorService, 0);
-        deviceMapInstances.put(0, lwM2mDevice0);
-        LwM2mInstanceEnabler[] deviceInstances = {lwM2mDevice0};
-        initializerModel.setInstancesForObject(DEVICE, deviceInstances);
-        initializerModel.setClassForObject(DEVICE, LwM2mDevice.class);
-        LwM2mInstanceEnablerFactory factoryDevice = new BaseInstanceEnablerFactory() {
-            @Override
-            public LwM2mInstanceEnabler create() {
-                return new LwM2mDevice();
-            }
-        };
-        LwM2mObjectEnabler device = new LwObjectEnabler(DEVICE, models.stream().filter(mod -> mod.id == DEVICE)
-                .collect(Collectors.toUnmodifiableList()).get(0), deviceMapInstances, factoryDevice, TLV);
-
+        // Device (0)
+        LwM2mObjectEnabler device = null;
+        String versionObject = "1.0";
+        String versionDevice = versionObject;
+        List<ObjectModel> objectModels = models.stream().filter(mod -> mod.id == DEVICE && mod.version.equals(versionDevice))
+                .collect(Collectors.toUnmodifiableList());
+        if (objectModels.size() > 0) {
+            Map<Integer, LwM2mInstanceEnabler> deviceMapInstances = new HashMap<>();
+            LwM2mDevice lwM2mDevice0 = new LwM2mDevice(executorService, 0);
+            deviceMapInstances.put(0, lwM2mDevice0);
+            LwM2mInstanceEnabler[] deviceInstances = {lwM2mDevice0};
+            initializerModel.setInstancesForObject(DEVICE, deviceInstances);
+            initializerModel.setClassForObject(DEVICE, LwM2mDevice.class);
+            LwM2mInstanceEnablerFactory factoryDevice = new BaseInstanceEnablerFactory() {
+                @Override
+                public LwM2mInstanceEnabler create() {
+                    return new LwM2mDevice();
+                }
+            };
+            device = new LwObjectEnabler(DEVICE, objectModels.get(0), deviceMapInstances, factoryDevice, TLV);
+        }
         // FirmwareUpdate (0)
-        Map<Integer, LwM2mInstanceEnabler> firmwareUpdateMapInstances = new HashMap<>();
-        LwM2mFirmwareUpdate firmwareUpdate0 = new LwM2mFirmwareUpdate(executorService, 0);
-        firmwareUpdateMapInstances.put(0, firmwareUpdate0);
-        LwM2mInstanceEnabler[] firmwareUpdateInstances = {firmwareUpdate0};
-        initializerModel.setInstancesForObject(FIRMWARE, firmwareUpdateInstances);
-        initializerModel.setClassForObject(FIRMWARE, LwM2mFirmwareUpdate.class);
-        LwM2mInstanceEnablerFactory factoryFirmware = new BaseInstanceEnablerFactory() {
-            @Override
-            public LwM2mInstanceEnabler create() {
-                return new LwM2mFirmwareUpdate();
-            }
-        };
-        LwM2mObjectEnabler firmwareUpdate = new LwObjectEnabler(FIRMWARE, models.stream().filter(mod -> mod.id == FIRMWARE)
-                .collect(Collectors.toUnmodifiableList()).get(0), firmwareUpdateMapInstances, factoryFirmware, TLV);
-
+        LwM2mObjectEnabler firmwareUpdate = null;
+        versionObject = "1.0";
+        String versionFirmware = versionObject;
+        objectModels = models.stream().filter(mod -> mod.id == FIRMWARE && mod.version.equals(versionFirmware))
+                .collect(Collectors.toUnmodifiableList());
+        if (objectModels.size() > 0) {
+            Map<Integer, LwM2mInstanceEnabler> firmwareUpdateMapInstances = new HashMap<>();
+            LwM2mFirmwareUpdate firmwareUpdate0 = new LwM2mFirmwareUpdate(executorService, 0);
+            firmwareUpdateMapInstances.put(0, firmwareUpdate0);
+            LwM2mInstanceEnabler[] firmwareUpdateInstances = {firmwareUpdate0};
+            initializerModel.setInstancesForObject(FIRMWARE, firmwareUpdateInstances);
+            initializerModel.setClassForObject(FIRMWARE, LwM2mFirmwareUpdate.class);
+            LwM2mInstanceEnablerFactory factoryFirmware = new BaseInstanceEnablerFactory() {
+                @Override
+                public LwM2mInstanceEnabler create() {
+                    return new LwM2mFirmwareUpdate();
+                }
+            };
+            firmwareUpdate = new LwObjectEnabler(FIRMWARE, models.stream().filter(mod -> mod.id == FIRMWARE)
+                    .collect(Collectors.toUnmodifiableList()).get(0), firmwareUpdateMapInstances, factoryFirmware, TLV);
+        }
         //  LwM2mSoftwareManagement (0)
-        Map<Integer, LwM2mInstanceEnabler>  softwareManagementMapInstances = new HashMap<>();
-        LwM2mFirmwareUpdate softwareUpdate0 = new LwM2mFirmwareUpdate(executorService, 0);
-        firmwareUpdateMapInstances.put(0, softwareUpdate0);
-        LwM2mInstanceEnabler[] softwareUpdateInstances = {firmwareUpdate0};
-        initializerModel.setInstancesForObject(SOFTWARE_MANAGEMENT , softwareUpdateInstances);
-        initializerModel.setClassForObject(SOFTWARE_MANAGEMENT , LwM2mFirmwareUpdate.class);
-        LwM2mInstanceEnablerFactory factorySoftwareManagement = new BaseInstanceEnablerFactory() {
-            @Override
-            public LwM2mInstanceEnabler create() {
-                return new LwM2mFirmwareUpdate();
-            }
-        };
-        LwM2mObjectEnabler softwareUpdate = new LwObjectEnabler(SOFTWARE_MANAGEMENT , models.stream().filter(mod -> mod.id == SOFTWARE_MANAGEMENT )
-                .collect(Collectors.toUnmodifiableList()).get(0), softwareManagementMapInstances, factorySoftwareManagement, TLV);
-
+        LwM2mObjectEnabler softwareManagement = null;
+        versionObject = "1.0";
+        String versionSoftware = versionObject;
+        objectModels = models.stream().filter(mod -> mod.id == SOFTWARE_MANAGEMENT && mod.version.equals(versionSoftware))
+                .collect(Collectors.toUnmodifiableList());
+        if (objectModels.size() > 0) {
+            Map<Integer, LwM2mInstanceEnabler> softwareManagementMapInstances = new HashMap<>();
+            LwM2mSoftwareManagement softwareUpdate0 = new LwM2mSoftwareManagement(executorService, 0);
+            softwareManagementMapInstances.put(0, softwareUpdate0);
+            LwM2mInstanceEnabler[] softwareUpdateInstances = {softwareUpdate0};
+            initializerModel.setInstancesForObject(SOFTWARE_MANAGEMENT, softwareUpdateInstances);
+            initializerModel.setClassForObject(SOFTWARE_MANAGEMENT, LwM2mSoftwareManagement.class);
+            LwM2mInstanceEnablerFactory factorySoftwareManagement = new BaseInstanceEnablerFactory() {
+                @Override
+                public LwM2mInstanceEnabler create() {
+                    return new LwM2mSoftwareManagement();
+                }
+            };
+            softwareManagement = new LwObjectEnabler(SOFTWARE_MANAGEMENT, models.stream().filter(mod -> mod.id == SOFTWARE_MANAGEMENT)
+                    .collect(Collectors.toUnmodifiableList()).get(0), softwareManagementMapInstances, factorySoftwareManagement, TLV);
+        }
         /** initializeMultiInstanceObjects */
         // BinaryAppDataContainer (0, 1)
-        Map<Integer, LwM2mInstanceEnabler> lwM2mBinaryAppDataContainerMapInstances = new HashMap<>();
-        LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer0 = new LwM2mBinaryAppDataContainer(executorService, 0);
-        LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer1 = new LwM2mBinaryAppDataContainer(executorService, 1);
-        lwM2mBinaryAppDataContainerMapInstances.put(0, lwM2mBinaryAppDataContainer0);
-        lwM2mBinaryAppDataContainerMapInstances.put(1, lwM2mBinaryAppDataContainer1);
-        LwM2mInstanceEnabler[] lwM2mBinaryAppDataContainerInstances = {lwM2mBinaryAppDataContainer0, lwM2mBinaryAppDataContainer1};
-        initializerModel.setInstancesForObject(BINARY_APP_DATA_CONTAINER, lwM2mBinaryAppDataContainerInstances);
-        initializerModel.setClassForObject(BINARY_APP_DATA_CONTAINER, LwM2mBinaryAppDataContainer.class);
-        LwM2mInstanceEnablerFactory factoryLwM2mBinaryAppDataContainer = new BaseInstanceEnablerFactory() {
-            @Override
-            public LwM2mInstanceEnabler create() {
-                return new LwM2mBinaryAppDataContainer();
-            }
-        };
-        LwM2mObjectEnabler LwM2mBinaryAppDataContainer = new LwObjectEnabler(BINARY_APP_DATA_CONTAINER,
-                models.stream().filter(mod -> mod.id == BINARY_APP_DATA_CONTAINER).collect(Collectors.toUnmodifiableList()).get(0),
-                lwM2mBinaryAppDataContainerMapInstances, factoryLwM2mBinaryAppDataContainer, TLV);
-
+        LwM2mObjectEnabler LwM2mBinaryAppDataContainer = null;
+        versionObject = "1.0";
+        String versionBinaryAppData = versionObject;
+        objectModels = models.stream().filter(mod -> mod.id == BINARY_APP_DATA_CONTAINER && mod.version.equals(versionBinaryAppData))
+                .collect(Collectors.toUnmodifiableList());
+        if (objectModels.size() > 0) {
+            Map<Integer, LwM2mInstanceEnabler> lwM2mBinaryAppDataContainerMapInstances = new HashMap<>();
+            LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer0 = new LwM2mBinaryAppDataContainer(executorService, 0);
+            LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer1 = new LwM2mBinaryAppDataContainer(executorService, 1);
+            lwM2mBinaryAppDataContainerMapInstances.put(0, lwM2mBinaryAppDataContainer0);
+            lwM2mBinaryAppDataContainerMapInstances.put(1, lwM2mBinaryAppDataContainer1);
+            LwM2mInstanceEnabler[] lwM2mBinaryAppDataContainerInstances = {lwM2mBinaryAppDataContainer0, lwM2mBinaryAppDataContainer1};
+            initializerModel.setInstancesForObject(BINARY_APP_DATA_CONTAINER, lwM2mBinaryAppDataContainerInstances);
+            initializerModel.setClassForObject(BINARY_APP_DATA_CONTAINER, LwM2mBinaryAppDataContainer.class);
+            LwM2mInstanceEnablerFactory factoryLwM2mBinaryAppDataContainer = new BaseInstanceEnablerFactory() {
+                @Override
+                public LwM2mInstanceEnabler create() {
+                    return new LwM2mBinaryAppDataContainer();
+                }
+            };
+             LwM2mBinaryAppDataContainer = new LwObjectEnabler(BINARY_APP_DATA_CONTAINER,
+                    models.stream().filter(mod -> mod.id == BINARY_APP_DATA_CONTAINER).collect(Collectors.toUnmodifiableList()).get(0),
+                    lwM2mBinaryAppDataContainerMapInstances, factoryLwM2mBinaryAppDataContainer, TLV);
+        }
         LwM2mObjectEnabler security = initializerModel.create(SECURITY);
         LwM2mObjectEnabler server = initializerModel.create(SERVER);
         enablers.add(security);
         enablers.add(server);
-        enablers.add(device);
-        enablers.add(firmwareUpdate);
-        enablers.add(softwareUpdate);
-        enablers.add(LwM2mBinaryAppDataContainer);
+        if (device != null) {
+            enablers.add(device);
+        }
+        if (firmwareUpdate != null) {
+            enablers.add(firmwareUpdate);
+        }
+        if (softwareManagement != null) {
+            enablers.add(softwareManagement);
+        }
+        if (LwM2mBinaryAppDataContainer != null) {
+            enablers.add(LwM2mBinaryAppDataContainer);
+        }
 
 //        initializer.setInstancesForObject(BINARY_APP_DATA_CONTAINER, new LwM2mBinaryAppDataContainer(executorService));
 //        initializer.setInstancesForObject(CONNECTIVITY_MONITORING, new LwM2mConnectivityMonitoring(executorService));

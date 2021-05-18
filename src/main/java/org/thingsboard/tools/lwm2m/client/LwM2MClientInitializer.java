@@ -26,11 +26,7 @@ import org.eclipse.leshan.core.request.BootstrapRequest;
 import org.eclipse.leshan.core.request.DeregisterRequest;
 import org.eclipse.leshan.core.request.RegisterRequest;
 import org.eclipse.leshan.core.request.UpdateRequest;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.util.Map;
 
@@ -81,13 +77,14 @@ public class LwM2MClientInitializer {
 
             @Override
             public void onRegistrationStarted(ServerIdentity server, RegisterRequest request) {
-//                log.info("ClientObserver -> onRegistrationStarted...  EndpointName [{}]", request.getEndpointName());
+                log.info("ClientObserver -> onRegistrationStarted...  EndpointName [{}]", request.getEndpointName());
             }
 
             @Override
             public void onRegistrationSuccess(ServerIdentity server, RegisterRequest request, String registrationID) {
                 clientAccessConnect.put(registrationID, request.getEndpointName());
-                log.info("ClientObserver -> onRegistrationSuccess...  EndpointName [{}] [{}]", request.getEndpointName(), registrationID);
+//                log.info("ClientObserver -> onRegistrationSuccess...  EndpointName [{}] [{}]", request.getEndpointName(), registrationID);
+                log.info("ClientObserver -> onRegistrationSuccess... ServerIdentity [{}] \n request: {} \n registrationID {}", server, request, registrationID);
             }
 
             @Override

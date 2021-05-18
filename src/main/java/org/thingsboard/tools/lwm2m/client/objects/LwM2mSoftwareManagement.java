@@ -17,6 +17,7 @@ package org.thingsboard.tools.lwm2m.client.objects;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.eclipse.leshan.client.servers.ServerIdentity;
 import org.eclipse.leshan.core.node.LwM2mResource;
 import org.eclipse.leshan.core.node.ObjectLink;
@@ -36,7 +37,7 @@ public class LwM2mSoftwareManagement extends LwM2mBaseInstanceEnabler {
     private String packageURI = "coaps://example.org/software";
     private volatile int updateState;
     private volatile int updateResult;
-    private ObjectLink checkpoint;
+    private ObjectLink checkpoint = new ObjectLink();
 
     /**
      * If this value is true, the LwM2M Client MUST inform the registered LwM2M Servers of Objects and
@@ -60,7 +61,7 @@ public class LwM2mSoftwareManagement extends LwM2mBaseInstanceEnabler {
      * This is an application specific object.
      * Note: OMA might provide a template for a Package Settings object in a future release of this specification.
      */
-    private volatile ObjectLink packageSettings;
+    private volatile ObjectLink packageSettings = new ObjectLink();
     /**
      * User Name for access to SW Update Package in pull mode.
      * Key based mechanism can alternatively use for talking to the component server instead of user name and password combination.
@@ -74,16 +75,16 @@ public class LwM2mSoftwareManagement extends LwM2mBaseInstanceEnabler {
      * Contains the status of the actions done by the client on the SW Component(s) referred by the present SW Update Package.
      * The status is defined in Appendix B.
      */
-    private String statusReason;
+    private String statusReason = "";
     /**
      * Reference to SW Components downloaded and installed in scope of the present SW Update Package Note:
      * When resource 17 objlink exist, resources 2, 3 and 12 in this table are ignored.
      */
-    private ObjectLink softwareComponentLink;
+    private ObjectLink softwareComponentLink = new ObjectLink();
     /**
      * Software Component tree length indicates the number of instances existing for this software package in the Software Component Object.
      */
-    private Integer softwareComponentTreeLength;
+    private int softwareComponentTreeLength;
 
     private volatile String pkgName = "";         // Name of the Software Package
     private volatile String pkgVersion = "";      // Version of the Software package
@@ -118,7 +119,6 @@ public class LwM2mSoftwareManagement extends LwM2mBaseInstanceEnabler {
 //        log.info("Read on Location resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceid);
         identity = identity != null ? identity : this.identity;
         this.identity = identity;
-
         resourceId = getSupportedResource(resourceId);
         switch (resourceId) {
             case 0:
@@ -163,11 +163,7 @@ public class LwM2mSoftwareManagement extends LwM2mBaseInstanceEnabler {
         switch (resourceId) {
             case 2:
                 this.identity = identity;
-                if (this.setPackageData((byte[]) value.getValue())) {
-                    return WriteResponse.success();
-                } else {
-                    return WriteResponse.badRequest("Bad write data");
-                }
+                return this.setPackageData((byte[]) value.getValue());
             case 3:
                 setPackageURI((String) value.getValue(), resourceId);
                 return WriteResponse.success();
@@ -221,7 +217,7 @@ public class LwM2mSoftwareManagement extends LwM2mBaseInstanceEnabler {
                      * fail
                      * 57: Device defined update error
                      * 58: Software installation failure
-                     * 59: Uninstallation Failure during forUpdate(arg=0)
+                     * 59: Uninstallation Failure during for Update(arg=0)
                      * 60-200 : (for expansion, selection to be in blocks depending on new introduction of features)
                      * This Resource MAY be reported by sending Observe operation.
                      */
@@ -277,14 +273,16 @@ public class LwM2mSoftwareManagement extends LwM2mBaseInstanceEnabler {
         return super.execute(identity, resourceId, params);
     }
 
-    private boolean setPackageData(byte[] value) {
+    private WriteResponse setPackageData(byte[] value) {
         this.setUpdateState(UpdateStateSw.DOWNLOAD_STARTED.code); // "DOWNLOAD_STARTED"
+        try {
+            Thread.sleep(timeDelay);
+        } catch (InterruptedException e) {
+            return WriteResponse.badRequest(String.format("Software write failed during downloading. Error: %s.",
+                    e.getMessage()));
+        }
         this.setUpdateResult(UpdateResultSw.DOWNLOADING.code); // "DOWNLOADING"
-        String pkg = new String(value);
-        log.warn(pkg);
-        this.packageData = value;
-        this.downloadedPackage();
-        return true;
+        return this.downloadedPackage(value);
     }
 
     private void setUpdateState(int updateState) {
@@ -329,102 +327,108 @@ public class LwM2mSoftwareManagement extends LwM2mBaseInstanceEnabler {
         fireResourcesChange(resourceId);
     }
 
-
-    private void setActivationState(boolean activationState) {
-        this.activationState = activationState;
-    }
-
-    private WriteResponse downloadedPackage() {
-        String pkg = new String(this.packageData);
-        int start = pkg.indexOf("pkgVer:") + ("pkgVer:").length();
-        int finish = pkg.indexOf("updateResult");
-        this.setPkgVersion(pkg.substring(start, finish).trim());
-        start = pkg.indexOf("pkgName:") + ("pkgName:").length();
-        finish = pkg.indexOf("pkgVer");
-        this.setPkgName(pkg.substring(start, finish).trim());
-        start = pkg.indexOf("updateResultAfterUpdate:") + ("updateResultAfterUpdate:").length();
-        finish = pkg.indexOf("stateAfterUpdate");
-        this.updateResultAfterUpdate = (Integer.parseInt(pkg.substring(start, finish).trim()));
-        start = pkg.indexOf("stateAfterUpdate:") + ("stateAfterUpdate:").length();
-        finish = pkg.length() - 1;
-        this.stateAfterUpdate = (Integer.parseInt(pkg.substring(start, finish).trim()));
-        this.setUpdateState(UpdateStateSw.DOWNLOAD_STARTED.code); // "DOWNLOAD STARTED"
-        this.setUpdateResult(UpdateResultSw.DOWNLOADING.code);
-        try {
-            Thread.sleep(timeDelay);
-        } catch (InterruptedException e) {
-            return WriteResponse.badRequest(String.format("Software write failed during downloading. Error: %s.",
-                    e.getMessage()));
-        }
-        /**
-         * false
-         * 50: Not enough storage for the new software package.
-         * 51: Out of memory during downloading process.
-         * 52: Connection lost during downloading process.
-         * 54: Unsupported package type.
-         * 56: Invalid URI
-         */
-        if (UpdateResultSw.NOT_ENOUGH_STORAGE.code == this.stateAfterUpdate
-                || UpdateResultSw.OUT_OFF_MEMORY.code == this.stateAfterUpdate
-                || UpdateResultSw.CONNECTION_LOST.code == this.stateAfterUpdate
-                || UpdateResultSw.UNSUPPORTED_PACKAGE_TYPE.code == this.stateAfterUpdate
-                || UpdateResultSw.INVALID_URI.code == this.stateAfterUpdate) {
-            this.setUpdateResult(this.stateAfterUpdate); // "Failed"
+    private WriteResponse downloadedPackage(byte[] value) {
+        String pkg = new String(value);
+        log.warn(pkg);
+        if (StringUtils.trimToNull(pkg) != null) {
+            this.packageData = value;
+            int start = pkg.indexOf("pkgVer:") + ("pkgVer:").length();
+            int finish = pkg.indexOf("updateResult");
+            this.setPkgVersion(pkg.substring(start, finish).trim());
+            start = pkg.indexOf("pkgName:") + ("pkgName:").length();
+            finish = pkg.indexOf("pkgVer");
+            this.setPkgName(pkg.substring(start, finish).trim());
+            start = pkg.indexOf("updateResultAfterUpdate:") + ("updateResultAfterUpdate:").length();
+            finish = pkg.indexOf("stateAfterUpdate");
+            this.updateResultAfterUpdate = (Integer.parseInt(pkg.substring(start, finish).trim()));
+            start = pkg.indexOf("stateAfterUpdate:") + ("stateAfterUpdate:").length();
+            finish = pkg.length() - 1;
+            this.stateAfterUpdate = (Integer.parseInt(pkg.substring(start, finish).trim()));
+            this.setUpdateState(UpdateStateSw.DOWNLOAD_STARTED.code); // "DOWNLOAD STARTED"
+            this.setUpdateResult(UpdateResultSw.DOWNLOADING.code);
             try {
                 Thread.sleep(timeDelay);
             } catch (InterruptedException e) {
                 return WriteResponse.badRequest(String.format("Software write failed during downloading. Error: %s.",
                         e.getMessage()));
             }
-            return WriteResponse.badRequest(String.format("Software write failed during downloading. UpdateResult: %s.",
-                    UpdateResultSw.fromUpdateResultSwByCode(this.getUpdateResult()).type));
-        } else {
-            this.setUpdateState(UpdateStateSw.DOWNLOADED.code); // "DOWNLOAD STARTED"
-            try {
-                Thread.sleep(timeDelay);
-            } catch (InterruptedException e) {
-                return WriteResponse.badRequest(String.format("Software write failed during downloading. Error: %s.",
-                        e.getMessage()));
+            /**
+             * false
+             * 50: Not enough storage for the new software package.
+             * 51: Out of memory during downloading process.
+             * 52: Connection lost during downloading process.
+             * 54: Unsupported package type.
+             * 56: Invalid URI
+             */
+            if (UpdateResultSw.NOT_ENOUGH_STORAGE.code == this.updateResultAfterUpdate
+                    || UpdateResultSw.OUT_OFF_MEMORY.code == this.updateResultAfterUpdate
+                    || UpdateResultSw.CONNECTION_LOST.code == this.updateResultAfterUpdate
+                    || UpdateResultSw.UNSUPPORTED_PACKAGE_TYPE.code == this.updateResultAfterUpdate
+                    || UpdateResultSw.INVALID_URI.code == this.updateResultAfterUpdate) {
+                this.setUpdateResult(this.updateResultAfterUpdate); // "Failed"
+                try {
+                    Thread.sleep(timeDelay);
+                } catch (InterruptedException e) {
+                    return WriteResponse.badRequest(String.format("Software write failed during downloading. Error: %s.",
+                            e.getMessage()));
+                }
+                return WriteResponse.badRequest(String.format("Software write failed during downloading. UpdateResult: %s.",
+                        UpdateResultSw.fromUpdateResultSwByCode(this.getUpdateResult()).type));
+            } else {
+                try {
+                    Thread.sleep(timeDelay);
+                } catch (InterruptedException e) {
+                    return WriteResponse.badRequest(String.format("Software write failed during downloading. Error: %s.",
+                            e.getMessage()));
+                }
+                this.setUpdateState(UpdateStateSw.DOWNLOADED.code);
             }
-        }
 
-        this.setUpdateState(UpdateStateSw.DOWNLOADED.code); // "DOWNLOADED"
-        try {
-            Thread.sleep(timeDelay);
-        } catch (InterruptedException e) {
-            return WriteResponse.badRequest(String.format("Software write failed during downloaded. Error: %s.",
-                    e.getMessage()));
-        }
+            /**
+             * true
+             * 3: Successfully Downloaded and package integrity verified
+             * (( 4-49, for expansion, of other scenarios))
+             * ** Failed
+             * 53: Package integrity check failure.
+             */
 
-        /**
-         * true
-         * 3: Successfully Downloaded and package integrity verified
-         * (( 4-49, for expansion, of other scenarios))
-         * ** Failed
-         * 53: Package integrity check failure.
-         */
-
-        if (UpdateResultSw.PACKAGE_CHECK_FAILURE.code == this.stateAfterUpdate) {
-            this.setUpdateResult(this.updateResultAfterUpdate);        //  Success/Fail
-            try {
-                Thread.sleep(timeDelay);
-            } catch (InterruptedException e) {
-                return WriteResponse.badRequest(String.format("Software write failed after downloaded. Error: %s.",
-                        e.getMessage()));
+            if (UpdateResultSw.PACKAGE_CHECK_FAILURE.code == this.updateResultAfterUpdate) {
+                try {
+                    Thread.sleep(timeDelay);
+                } catch (InterruptedException e) {
+                    return WriteResponse.badRequest(String.format("Software write failed after downloaded. Error: %s.",
+                            e.getMessage()));
+                }
+                this.setUpdateResult(this.updateResultAfterUpdate);        //  Success/Fail
+                try {
+                    Thread.sleep(timeDelay);
+                } catch (InterruptedException e) {
+                    return WriteResponse.badRequest(String.format("Software write failed after downloaded. Error: %s.",
+                            e.getMessage()));
+                }
+                return WriteResponse.badRequest(String.format("Software write failed after downloaded. UpdateResult: %s.",
+                        UpdateResultSw.fromUpdateResultSwByCode(this.getUpdateResult()).type));
+            } else {
+                try {
+                    Thread.sleep(timeDelay);
+                } catch (InterruptedException e) {
+                    return WriteResponse.badRequest(String.format("Software write failed after downloaded. Error: %s.",
+                            e.getMessage()));
+                }
+                this.setUpdateState(UpdateStateSw.DELIVERED.code);
+                this.setUpdateResult(UpdateResultSw.SUCCESSFULLY_DOWNLOADED_VERIFIED.code);
+                try {
+                    Thread.sleep(timeDelay);
+                } catch (InterruptedException e) {
+                    return WriteResponse.badRequest(String.format("Software write failed after downloaded. Error: %s.",
+                            e.getMessage()));
+                }
+                return WriteResponse.success();
             }
-            return WriteResponse.badRequest(String.format("Software write failed after downloaded. UpdateResult: %s.",
-                    UpdateResultSw.fromUpdateResultSwByCode(this.getUpdateResult()).type));
         }
         else {
-            this.setUpdateState(UpdateStateSw.DELIVERED.code);
-            this.setUpdateResult(UpdateResultSw.SUCCESSFULLY_DOWNLOADED_VERIFIED.code);
-            try {
-                Thread.sleep(timeDelay);
-            } catch (InterruptedException e) {
-                return WriteResponse.badRequest(String.format("Software write failed after downloaded. Error: %s.",
-                        e.getMessage()));
-            }
-            return WriteResponse.success();
+            return WriteResponse.badRequest(String.format("Firmware write failed during downloading. UpdateResult: %s.",
+                    UpdateResultSw.fromUpdateResultSwByCode(this.getUpdateResult()).type));
         }
     }
 
@@ -493,7 +497,7 @@ public class LwM2mSoftwareManagement extends LwM2mBaseInstanceEnabler {
      * 56: Invalid URI
      * 57: Device defined update error
      * 58: Software installation failure
-     * 59: Uninstallation Failure during forUpdate(arg=0)
+     * 59: Uninstallation Failure during for Update (arg=0)
      * 60-200 : (for expansion, selection to be in blocks depending on new introduction of features)
      * This Resource MAY be reported by sending Observe operation.
      */
