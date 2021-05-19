@@ -70,7 +70,8 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
         try {
             if (id != null) this.setId(id);
             executorService.scheduleWithFixedDelay(() ->
-                    fireResourcesChange(0, 2), 5000, 5000, TimeUnit.MILLISECONDS);
+//                    fireResourcesChange(0, 2), 5000, 5000, TimeUnit.MILLISECONDS);
+                    fireResourcesChange(0, 2), 1800000, 1800000, TimeUnit.MILLISECONDS); // 30 MIN
         } catch (Throwable e) {
             log.error("[{}]Throwable", e.toString());
             e.printStackTrace();
@@ -80,24 +81,28 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
     @Override
     public ReadResponse read(ServerIdentity identity, int resourceId) {
 //        log.info("Read on Location resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceid);
-        resourceId = getSupportedResource (resourceId);
-        switch (resourceId) {
-            case 0:
+//        try {
+            resourceId = getSupportedResource(resourceId);
+            switch (resourceId) {
+                case 0:
 //                log.info("Read on Location resource /[{}]/[{}]/[{}], {}", getModel().id, getId(), resourceid, Hex.encodeHexString(this.data).toLowerCase());
-                return ReadResponse.success(resourceId, getData());
-            case 1:
-                return ReadResponse.success(resourceId, getPriority());
-            case 2:
-                return ReadResponse.success(resourceId, getTimestamp());
-            case 3:
-                return ReadResponse.success(resourceId, getDescription());
-            case 4:
-                return ReadResponse.success(resourceId, getDataFormat());
-            case 5:
-                return ReadResponse.success(resourceId, getAppID());
-            default:
-                return super.read(identity, resourceId);
-        }
+                    return ReadResponse.success(resourceId, getData());
+                case 1:
+                    return ReadResponse.success(resourceId, getPriority());
+                case 2:
+                    return ReadResponse.success(resourceId, getTimestamp());
+                case 3:
+                    return ReadResponse.success(resourceId, getDescription());
+                case 4:
+                    return ReadResponse.success(resourceId, getDataFormat());
+                case 5:
+                    return ReadResponse.success(resourceId, getAppID());
+                default:
+                    return super.read(identity, resourceId);
+            }
+//        } catch (Exception e) {
+//            return ReadResponse.badRequest(e.getMessage());
+//        }
     }
 
     @Override
@@ -172,12 +177,6 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
     }
 
     private byte[] getData() {
-        int value = RANDOM.nextInt(100000001);
-        this.data = new byte[]{
-                (byte) (value >>> 24),
-                (byte) (value >>> 16),
-                (byte) (value >>> 8),
-                (byte) value};
         return this.data;
     }
 
