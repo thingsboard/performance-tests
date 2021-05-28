@@ -234,6 +234,7 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
             }
         }
         JsonNode nodeConfigClient = mapper.valueToTree(context.getNodeConfig());
+        ((ObjectNode) nodeConfigClient.get("client")).put("endpoint", endPoint);
         ((ObjectNode) nodeConfigClient.get("client")).put("securityConfigClientMode", mode.name());
         ((ObjectNode) nodeConfigClient.get("bootstrap").get("bootstrapServer")).put("securityMode", mode.name());
         ((ObjectNode) nodeConfigClient.get("bootstrap").get("bootstrapServer")).put("clientPublicKeyOrId", publicKeyClient);
@@ -243,17 +244,15 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
         ((ObjectNode) nodeConfigClient.get("bootstrap").get("lwm2mServer")).put("clientSecretKey", privateKeyClient);
         switch (mode) {
             case NO_SEC:
+            case X509:
                 break;
             case PSK:
-                ((ObjectNode) nodeConfigClient.get("client")).put("endpoint", endPoint);
                 ((ObjectNode) nodeConfigClient.get("client")).put("identity", endPoint + context.getLwm2mPSKIdentitySub());
                 ((ObjectNode) nodeConfigClient.get("client")).put("key", privateKeyClient);
                 break;
             case RPK:
                 ((ObjectNode) nodeConfigClient.get("client")).put("key", publicKeyClient);
                 break;
-            case X509:
-                ((ObjectNode) nodeConfigClient.get("client")).put("x509", true);
         }
         return mapper.writeValueAsString(nodeConfigClient);
     }
