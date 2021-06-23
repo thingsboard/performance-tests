@@ -18,13 +18,24 @@ package org.thingsboard.tools.lwm2m.client.objects;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.eclipse.californium.core.CoapClient;
+import org.eclipse.californium.core.CoapResponse;
+import org.eclipse.californium.core.coap.CoAP;
+import org.eclipse.californium.core.coap.OptionSet;
+import org.eclipse.californium.core.coap.Request;
+import org.eclipse.californium.elements.exception.ConnectorException;
+import org.eclipse.leshan.client.californium.LeshanClient;
 import org.eclipse.leshan.client.servers.ServerIdentity;
 import org.eclipse.leshan.core.node.LwM2mResource;
+import org.eclipse.leshan.core.request.ContentFormat;
 import org.eclipse.leshan.core.response.ExecuteResponse;
 import org.eclipse.leshan.core.response.ReadResponse;
 import org.eclipse.leshan.core.response.WriteResponse;
 
+import java.io.IOException;
 import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -43,7 +54,7 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
     private String pkgName = "";         // Name of the Firmware Package
     private volatile String pkgVersion = "";      // Version of the Firmware package
     Map<Integer, Long> firmwareUpdateProtocolSupport = new ConcurrentHashMap<>();
-    private int firmwareUpdateDeliveryMethod;
+    private int firmwareUpdateDeliveryMethod = 2;
     private ServerIdentity identity;
     private Long timeDelay = 1000L;
     public ScheduledExecutorService executorService;
@@ -138,10 +149,63 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
                 this.identity = identity;
                 return this.setPackageData((byte[]) value.getValue());
             case 1:
-                setPackageURI((String) value.getValue(), resourceId);
+                String firmwareURL = (String) value.getValue();
+                setPackageURI(firmwareURL, resourceId);
+                log.info("Received firmware URL: {}", firmwareURL);
+                executorService.submit(() -> {
+                    downloadFirmware(firmwareURL);
+                });
                 return WriteResponse.success();
             default:
                 return super.write(identity, resourceId, value);
+        }
+    }
+
+    private void downloadFirmware(String firmwareURL) {
+        try {
+            CoapClient client = new CoapClient(firmwareURL);
+            Request request = new Request(CoAP.Code.GET);
+
+            OptionSet options = new OptionSet();
+            options.setContentFormat(ContentFormat.OPAQUE_CODE);
+            options.setBlock2(6, false, 0);
+            request.setOptions(options);
+            /**
+             * Gets the 3-bit SZX code for a block size as specified by RFC 7959, Section 2.2 :
+             * 	   16 bytes = 2^4 --> 0
+             * 	   ...
+             * 	   1024 bytes = 2^10 -> 6
+             *
+             * This method is tolerant towards illegal block sizes that are < 16 or > 1024 bytes in that it will return the corresponding codes for sizes 16 or 1024 respectively.
+             * Params:
+             * blockSize – The block size in bytes.
+             * Returns:
+             * The szx code for the largest number of bytes that is less than or equal to the block size.
+             */
+            client.useEarlyNegotiation(1024);
+            /**
+             * 	public static final long DEFAULT_EXCHANGE_LIFETIME = 247 * 1000;
+             */
+
+            /**
+             * Set the maximum resource body size. For incoming messages the protocol stack may set individual sizes. For outgoing requests, this limits the size of the response.
+             * Params:
+             * maxResourceBodySize – maximum resource body size. 0 or default is defined by the NetworkConfig value of NetworkConfig.Keys.MAX_RESOURCE_BODY_SIZE.
+             * DEFAULT_MAX_RESOURCE_BODY_SIZE = 8192
+             * For large packet: MAX_RESOURCE_BODY_SIZE = 256 * 1024 * 1024 !!!
+             */
+//            request.setMaxResourceBodySize(256 * 1024 * 1024);
+            request.setMaxResourceBodySize(((LeshanClient) this.getLwM2mClient()).coap().getServer().getConfig().getOptInteger("MAX_RESOURCE_BODY_SIZE"));
+            CoapResponse response = client.advanced(request);
+            if (response != null) {
+                log.info("1) Received firmware response: {} : {}", response.getCode(), response.getPayload().length);
+                this.setPackageData(response.getPayload());
+            } else {
+                log.info("2) Received firmware response: null");
+            }
+        } catch (ConnectorException | IOException e) {
+            System.err.println("Error occurred while sending request: " + e);
+            System.exit(-1);
         }
     }
 
@@ -168,6 +232,7 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
                         return ExecuteResponse.badRequest(String.format("Firmware update failed during updating. Error: %s.",
                                 e.getMessage()));
                     }
+                    this.reboot (this.getPkgVersion());
                     this.setState(StateFw.IDLE.code);                           //  Success
                     return ExecuteResponse.success();
                 } else if (UpdateResultFw.INITIAL.code == this.updateResultAfterUpdate) {
@@ -246,78 +311,86 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
     }
 
     private WriteResponse downloadedPackage(byte[] value) {
-        String pkg = new String(value);
-        log.warn(pkg);
-        /**
-         * Writing an empty string to Package URI Resource or setting the Package Resource to NULL (‘\0’),
-         * - resets the Firmware Update State Machine:
-         */
-        if (StringUtils.trimToNull(pkg) != null) {
-            this.packageData = value;
-            int start = pkg.indexOf("pkgVer:") + ("pkgVer:").length();
-            int finish = pkg.indexOf("updateResult");
-            this.setPkgVersion(pkg.substring(start, finish).trim());
-            start = pkg.indexOf("pkgName:") + ("pkgName:").length();
-            finish = pkg.indexOf("pkgVer");
-            this.setPkgName(pkg.substring(start, finish).trim());
-            start = pkg.indexOf("updateResultAfterUpdate:") + ("updateResultAfterUpdate:").length();
-            finish = pkg.indexOf("stateAfterUpdate");
-            this.updateResultAfterUpdate = (Integer.parseInt(pkg.substring(start, finish).trim()));
-            start = pkg.indexOf("stateAfterUpdate:") + ("stateAfterUpdate:").length();
-            finish = pkg.length() - 1;
-            this.stateAfterUpdate = (Integer.parseInt(pkg.substring(start, finish).trim()));
+        try {
+            String pkgAll = new String(value);
+            String pkg = pkgAll.substring(0, pkgAll.indexOf("\n"));
+            log.info("1) firmwareUpdate start write prg: [{}]", pkg);
             /**
-             * true:
-             *  DOWNLOADING -> DOWNLOADED
-             *         INITIAL(0)
-             *         UPDATE_SUCCESSFULLY(1),
-             *         UPDATE_FAILED(8),
-             * false: DOWNLOADING && brake
-             *         NOT_ENOUGH(2),
-             *         OUT_OFF_RAM(3),
-             *         CONNECTION_LOST(4),
-             *         INTEGRITY_CHECK_FAILURE(5),
-             *         UNSUPPORTED_TYPE(6),
-             *         INVALID_URI(7),
-             *         UNSUPPORTED_PROTOCOL(9);
+             * Writing an empty string to Package URI Resource or setting the Package Resource to NULL (‘\0’),
+             * - resets the Firmware Update State Machine:
              */
-            if (UpdateResultFw.UPDATE_SUCCESSFULLY.code >= this.stateAfterUpdate || UpdateResultFw.UPDATE_FAILED.code ==this.stateAfterUpdate) {
-                this.setState(StateFw.DOWNLOADED.code); // "Downloaded"
-                this.setUpdateResult(UpdateResultFw.INITIAL.code); // "Initial value"
+            if (StringUtils.trimToNull(pkg) != null) {
+                this.packageData = value;
+                int start = pkg.indexOf("pkgVer:") + ("pkgVer:").length();
+                int finish = pkg.indexOf("updateResult");
+                this.setPkgVersion(pkg.substring(start, finish).trim());
+                start = pkg.indexOf("pkgName:") + ("pkgName:").length();
+                finish = pkg.indexOf("pkgVer");
+                this.setPkgName(pkg.substring(start, finish).trim());
+                start = pkg.indexOf("updateResultAfterUpdate:") + ("updateResultAfterUpdate:").length();
+                finish = pkg.indexOf("stateAfterUpdate");
+                this.updateResultAfterUpdate = (Integer.parseInt(pkg.substring(start, finish).trim()));
+                start = pkg.indexOf("stateAfterUpdate:") + ("stateAfterUpdate:").length();
+                finish = pkg.length() - 1;
+                this.stateAfterUpdate = (Integer.parseInt(pkg.substring(start, finish).trim()));
+                /**
+                 * true:
+                 *  DOWNLOADING -> DOWNLOADED
+                 *         INITIAL(0)
+                 *         UPDATE_SUCCESSFULLY(1),
+                 *         UPDATE_FAILED(8),
+                 * false: DOWNLOADING && brake
+                 *         NOT_ENOUGH(2),
+                 *         OUT_OFF_RAM(3),
+                 *         CONNECTION_LOST(4),
+                 *         INTEGRITY_CHECK_FAILURE(5),
+                 *         UNSUPPORTED_TYPE(6),
+                 *         INVALID_URI(7),
+                 *         UNSUPPORTED_PROTOCOL(9);
+                 */
+                if (UpdateResultFw.UPDATE_SUCCESSFULLY.code >= this.stateAfterUpdate || UpdateResultFw.UPDATE_FAILED.code == this.stateAfterUpdate) {
+                    this.setState(StateFw.DOWNLOADED.code); // "Downloaded"
+                    this.setUpdateResult(UpdateResultFw.INITIAL.code); // "Initial value"
+                    try {
+                        Thread.sleep(timeDelay);
+                    } catch (InterruptedException e) {
+                        return WriteResponse.badRequest(String.format("Firmware write failed during downloaded. Error: %s.",
+                                e.getMessage()));
+                    }
+                    return WriteResponse.success();
+                } else {
+                    this.setUpdateResult(this.updateResultAfterUpdate);        //  Fail
+                    try {
+                        Thread.sleep(timeDelay);
+                    } catch (InterruptedException e) {
+                        return WriteResponse.badRequest(String.format("Firmware write failed during downloading. Error: %s.",
+                                e.getMessage()));
+                    }
+                    return WriteResponse.badRequest(String.format("Firmware write failed during downloading. UpdateResult: %s.",
+                            UpdateResultFw.fromUpdateResultFwByCode(this.getUpdateResult()).type));
+                }
+            }
+            /**
+             * Writing an empty string to Package URI Resource or setting the Package Resource to NULL (‘\0’),
+             * - resets the Firmware Update State Machine:
+             * -- state = 0 IDLE Idle
+             * -- updateResult = 5 integrity check failure for new downloaded package
+             */
+            else {
+                this.setState(StateFw.IDLE.code);
+                this.setUpdateResult(UpdateResultFw.INTEGRITY_CHECK_FAILURE.code);
                 try {
                     Thread.sleep(timeDelay);
                 } catch (InterruptedException e) {
                     return WriteResponse.badRequest(String.format("Firmware write failed during downloaded. Error: %s.",
                             e.getMessage()));
                 }
-                return WriteResponse.success();
-            } else {
-                this.setUpdateResult(this.updateResultAfterUpdate);        //  Fail
-                try {
-                    Thread.sleep(timeDelay);
-                } catch (InterruptedException e) {
-                    return WriteResponse.badRequest(String.format("Firmware write failed during downloading. Error: %s.",
-                            e.getMessage()));
-                }
                 return WriteResponse.badRequest(String.format("Firmware write failed during downloading. UpdateResult: %s.",
                         UpdateResultFw.fromUpdateResultFwByCode(this.getUpdateResult()).type));
+
             }
-        }
-        /**
-         * Writing an empty string to Package URI Resource or setting the Package Resource to NULL (‘\0’),
-         * - resets the Firmware Update State Machine:
-         * -- state = 0 IDLE Idle
-         * -- updateResult = 5 integrity check failure for new downloaded package
-         */
-        else  {
-            this.setState(StateFw.IDLE.code);
-            this.setUpdateResult(UpdateResultFw.INTEGRITY_CHECK_FAILURE.code);
-            try {
-                Thread.sleep(timeDelay);
-            } catch (InterruptedException e) {
-                return WriteResponse.badRequest(String.format("Firmware write failed during downloaded. Error: %s.",
-                        e.getMessage()));
-            }
+        } catch (Exception e) {
+            log.error("", e);
             return WriteResponse.badRequest(String.format("Firmware write failed during downloading. UpdateResult: %s.",
                     UpdateResultFw.fromUpdateResultFwByCode(this.getUpdateResult()).type));
         }
@@ -494,4 +567,34 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
             throw new IllegalArgumentException(String.format("Unsupported FW ProtocolSupport type  : %s", type));
         }
     }
+
+    public  void reboot (String ver) {
+        new Timer("Reboot Lwm2mClient").schedule(new TimerTask() {
+            @Override
+            public void run() {
+                ((LwM2mDevice)((LwObjectEnabler)getLwM2mClient().getObjectTree().getObjectEnablers().get(3)).getInstance(0)).getFirmwareVersion();
+                ((LwM2mDevice)((LwObjectEnabler)getLwM2mClient().getObjectTree().getObjectEnablers().get(3)).getInstance(0)).setFirmwareVersion(ver);
+                try {
+                    Thread.sleep(60000);
+                } catch (InterruptedException e) {
+                }
+                getLwM2mClient().stop(true);
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                }
+                getLwM2mClient().start();
+            }
+        }, 500);
+    }
+
+//    private void sendReaquest () {
+////        Identity.unsecure(InetSocketAddress.createUnresolved(Role.LWM2M_SERVER.toString(), 5685));
+//        // Dacha
+//        Identity identity = Identity.unsecure(InetSocketAddress.createUnresolved("192.168.1.109", 5685));
+//        CoapRequestBuilder requestBuilder = new CoapRequestBuilder(identity);
+//        requestBuilder.getRequest();
+//
+//
+//    }
 }
