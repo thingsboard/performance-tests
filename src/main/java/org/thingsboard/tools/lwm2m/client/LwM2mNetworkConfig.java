@@ -75,7 +75,7 @@ public class LwM2mNetworkConfig {
          * – true with address check, (STRICT, UDP)
          * - false, without
          */
-        coapConfig.setString(NetworkConfig.Keys.RESPONSE_MATCHING, "STRICT");
+        coapConfig.setString(NetworkConfig.Keys.RESPONSE_MATCHING, "RELAXED");
         /**
          * https://tools.ietf.org/html/rfc7959#section-2.9.3
          * The block size (number of bytes) to use when doing a blockwise transfer. \

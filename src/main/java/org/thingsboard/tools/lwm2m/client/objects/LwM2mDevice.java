@@ -43,7 +43,7 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
     private String Manufacturer = "Thingsboard Test Device";
     private String modelNumber = "Model 500";
     private String serialNumber = "TH-500-000-0001";
-    private String firmwareVersion = "1.2";
+    private String firmwareVersion = "TestThingsboard@TestMore1024_2.04";
     private Integer availablePowerSources = 1;
     private Integer powerSourceVoltage = 5000;  // mV
     private Integer powerSourceCurrent = 3;  // mA
@@ -68,7 +68,8 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
     private Date currentTime;
     private String utcOffset = new SimpleDateFormat("X").format(Calendar.getInstance().getTime());
     private String timeZone = TimeZone.getDefault().getID();
-    private String supportedBinding = "UQ";
+//    private String supportedBinding = "UQ";
+    private String supportedBinding = "U";
     private String deviceType = "smart meters";
     private String hardwareVersion = "1.01";
     private String softwareVersion = "1.02";
