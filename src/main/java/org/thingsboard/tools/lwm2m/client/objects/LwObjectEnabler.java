@@ -184,7 +184,7 @@ public class LwObjectEnabler extends ObjectEnabler {
 
         // add/write resource
         for (LwM2mResource resource : resources) {
-            newInstance.write(identity, resource.getId(), resource);
+            newInstance.write(identity, true, resource.getId(), resource);
         }
 
         return newInstance;
@@ -262,7 +262,7 @@ public class LwObjectEnabler extends ObjectEnabler {
         }
 
         // Manage Resource case
-        return instance.write(identity, path.getResourceId(), (LwM2mResource) request.getNode());
+        return instance.write(identity, request.isReplaceRequest(), path.getResourceId(), (LwM2mResource) request.getNode());
     }
 
     @Override
@@ -303,7 +303,7 @@ public class LwObjectEnabler extends ObjectEnabler {
             doCreate(identity, new CreateRequest(path.getObjectId(),
                     new LwM2mObjectInstance(path.getObjectInstanceId(), resource)));
         } else {
-            instanceEnabler.write(identity, path.getResourceId(), resource);
+            instanceEnabler.write(identity, true, path.getResourceId(), resource);
         }
         return BootstrapWriteResponse.success();
     }
@@ -434,10 +434,12 @@ public class LwObjectEnabler extends ObjectEnabler {
 
             if (!getAvailableResourceIds(path.getObjectInstanceId()).contains(path.getResourceId()))
                 return WriteAttributesResponse.notFound();
-
+//            Link resourceLink = new Link(path, request.getAttributes());
             Link resourceLink = LinkFormatHelper.getResourceDescription(this, path.getObjectInstanceId(),
                     path.getResourceId(), null);
             log.warn("WriteAttributes: [{}] [{}]", request.getPath(), request.getAttributes());
+            Link [] link = new Link[] { resourceLink };
+
             log.warn("WriteAttributesResponse: [{}]", new Link[] { resourceLink });
             return WriteAttributesResponse.success();
         }

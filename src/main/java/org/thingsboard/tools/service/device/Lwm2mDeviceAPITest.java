@@ -133,7 +133,7 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
 
     protected Set<String> connectEntities() throws InterruptedException {
         Set<String> result = ConcurrentHashMap.newKeySet(1024 * 1024);
-        int nextPortNumber = deviceStartIdx;
+        int nextPortNumber = deviceStartIdx-1;
         if (context.isLwm2mNoSecEnabled())
             nextPortNumber = this.connectEntitiesLwm2m(result, LwM2MSecurityMode.NO_SEC, nextPortNumber);
         if (context.isLwm2mPSKEnabled())

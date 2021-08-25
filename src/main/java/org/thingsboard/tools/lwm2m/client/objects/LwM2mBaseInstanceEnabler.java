@@ -3,6 +3,7 @@ package org.thingsboard.tools.lwm2m.client.objects;
 import org.eclipse.leshan.client.resource.BaseInstanceEnabler;
 import org.eclipse.leshan.core.model.ObjectModel;
 
+import javax.security.auth.Destroyable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -10,7 +11,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class LwM2mBaseInstanceEnabler extends BaseInstanceEnabler {
+public class LwM2mBaseInstanceEnabler extends BaseInstanceEnabler  implements Destroyable {
 //public class LwM2mBaseInstanceEnabler extends LwObjectEnabler2 {
     protected static final Random RANDOM = new Random();
     protected List<Integer> supportedResources;

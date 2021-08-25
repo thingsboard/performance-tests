@@ -35,7 +35,6 @@ import java.util.TimeZone;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Data
@@ -87,7 +86,7 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
 
     public LwM2mDevice() {
 //                 notify new date each 5 second
-        Timer timer = new Timer("Device-Current Time, Value bet[/1/0/3]ery, utcOffse, timeZone");
+        Timer timer = new Timer("Device-Current Time, Value bettery, utcOffse, timeZone");
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
@@ -99,10 +98,11 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
     public LwM2mDevice(ScheduledExecutorService executorService, Integer id) {
         try {
             if (id != null) this.setId(id);
+            setErrorCode(1L);
             // 15 - not present
 //            this.supportedResources =  Arrays.asList(0, 1, 2, 3, 9, 10, 11, 13, 14, 16, 17, 18, 19, 20, 21);
-            executorService.scheduleWithFixedDelay(() ->
-                    fireResourcesChange(9, 13, 14, 15), 10000, 10000, TimeUnit.MILLISECONDS);
+//            executorService.scheduleWithFixedDelay(() ->
+//                    fireResourcesChange(9, 13, 14, 15), 10000, 10000, TimeUnit.MILLISECONDS);
         } catch (Throwable e) {
             log.error("[{}]Throwable", e.toString());
             e.printStackTrace();
@@ -193,12 +193,13 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
     }
 
     @Override
-    public WriteResponse write(ServerIdentity identity, int resourceId, LwM2mResource value) {
+    public WriteResponse write(ServerIdentity identity,  boolean replace, int resourceId, LwM2mResource value) {
 //        log.info("Write on Device resource /[{}]/[{}]/[{}] value [{}]", getModel().id, getId(), resourceid, value);
         resourceId = getSupportedResource (resourceId);
         switch (resourceId) {
             case 13:
-                return WriteResponse.notFound();
+                setCurrentTime((Date) value.getValue());
+                return WriteResponse.success();
             case 14:
                 setUtcOffset((String) value.getValue());
                 fireResourcesChange(resourceId);
@@ -208,7 +209,7 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
                 fireResourcesChange(resourceId);
                 return WriteResponse.success();
             default:
-                return super.write(identity, resourceId, value);
+                return super.write(identity, replace, resourceId, value);
         }
     }
 
@@ -255,7 +256,11 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
     }
 
     private Date getCurrentTime() {
-        return currentTime = new Date();
+        return currentTime == null ? currentTime = new Date() : currentTime;
+    }
+
+    private Date setCurrentTime(Date date) {
+        return currentTime = date;
     }
 
     private String getUtcOffset() {

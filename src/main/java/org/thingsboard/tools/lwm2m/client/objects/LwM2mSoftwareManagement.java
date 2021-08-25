@@ -158,7 +158,7 @@ public class LwM2mSoftwareManagement extends LwM2mBaseInstanceEnabler {
 
 
     @Override
-    public WriteResponse write(ServerIdentity identity, int resourceId, LwM2mResource value) {
+    public WriteResponse write(ServerIdentity identity, boolean replace, int resourceId, LwM2mResource value) {
         resourceId = getSupportedResource(resourceId);
         switch (resourceId) {
             case 2:
@@ -180,7 +180,7 @@ public class LwM2mSoftwareManagement extends LwM2mBaseInstanceEnabler {
                 setPassword((String) value.getValue());
                 return WriteResponse.success();
             default:
-                return super.write(identity, resourceId, value);
+                return super.write(identity, replace, resourceId, value);
         }
     }
 

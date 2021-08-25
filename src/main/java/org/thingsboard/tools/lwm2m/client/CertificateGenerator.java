@@ -164,10 +164,12 @@ public class CertificateGenerator {
         String fileNameJks = fileNameKeyStore + this.context.getServerAlias() + keyStorePrefixJks;
         this.generationX509RootJava();
         this.generationX509(this.sslKeyStoreServer, this.context.getServerAlias(),
-                context.getLwm2mHostX509() + " " + this.context.getServerAlias(),
+//                context.getLwm2mHostX509() + " " + this.context.getServerAlias(),
+                context.getLwm2mHostX509(),
                 context.getServerKeyStorePwd());
         this.generationX509(this.sslKeyStoreServer, this.context.getBootstrapAlias(),
-                context.getLwm2mHostX509() + " " + this.context.getBootstrapAlias(),
+//                context.getLwm2mHostX509() + " " + this.context.getBootstrapAlias(),
+                context.getLwm2mHostX509(),
                 context.getServerKeyStorePwd());
         this.infoParamsServersX509(this.sslKeyStoreServer);
         this.exportKeyPairToKeystoreFile(this.sslKeyStoreServer, context.returnPathForCreatedNewX509().toUri().getPath() + fileNameJks, context.getServerKeyStorePwd());
@@ -175,7 +177,9 @@ public class CertificateGenerator {
 
         for (int i = start; i < finish; i++) {
             this.generationX509(this.sslKeyStoreClient,
-                    this.context.getClientAlias(i), this.context.getEndPoint(i, LwM2MSecurityMode.X509),
+                    this.context.getClientAlias(i),
+//                    this.context.getEndPoint(i, LwM2MSecurityMode.X509),
+                    this.context.getEndPoint(i, LwM2MSecurityMode.X509),
                     context.getClientKeyStorePwd());
         }
         fileNameJks = fileNameKeyStore + this.context.getPrefixClient() + keyStorePrefixJks;
@@ -191,7 +195,8 @@ public class CertificateGenerator {
         this.rootKeyPair = keyPairGenerator.generateKeyPair();
         BigInteger rootSerialNum = new BigInteger(Long.toString(new SecureRandom().nextLong()));
         // Issued By and Issued To same for root certificate
-        this.rootCertIssuer = new X500Name("CN=" + context.getLwm2mHostX509() + " " + context.getRootAlias() + this.NAME_CERT_GEO_SUFFIX);
+//        this.rootCertIssuer = new X500Name("CN=" + context.getLwm2mHostX509() + " " + context.getRootAlias() + this.NAME_CERT_GEO_SUFFIX);
+        this.rootCertIssuer = new X500Name("CN=" + context.getLwm2mHostX509() + this.NAME_CERT_GEO_SUFFIX);
         X500Name rootCertSubject = this.rootCertIssuer;
         ContentSigner rootCertContentSigner = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BC_PROVIDER).build(this.rootKeyPair.getPrivate());
         X509v3CertificateBuilder rootCertBuilder = new JcaX509v3CertificateBuilder(this.rootCertIssuer, rootSerialNum, startDate, endDate, rootCertSubject, this.rootKeyPair.getPublic());

@@ -80,11 +80,12 @@ lwm2m:
       port: "${RPK_BS_PORT:5688}"
   x509:
     enabled: "${X509_ENABLED:true}"
+    trust: "${X509_ENABLED:true}"
     prefix_client: "${CLIENT_ALIAS:client}"
     prefix_client_alias: "${CLIENT_ALIAS:client_alias_}"
     prefix_client_self_alias: "${CLIENT_SELF_ALIAS:client_self_signed_}"
-    create_new_key_store_sh: "${CREATE_NEW_KET_STORE_SH:false}"
-    create_new_key_store_java: "${CREATE_NEW_KET_STORE_JAVA:false}"
+    create_new_key_store_sh: "${CREATE_NEW_KEY_STORE_SH:false}"
+    create_new_key_store_java: "${CREATE_NEW_KEY_STORE_JAVA:false}"
     server:
       host: "${X509_HOST:localhost}"
       port: "${X509_PORT:5686}"

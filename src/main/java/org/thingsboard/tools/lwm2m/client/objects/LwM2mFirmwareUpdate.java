@@ -48,6 +48,7 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
 
     private byte[] packageData;
     private String packageURI = "coaps://example.org/firmware";
+//    private String packageURI;
     private volatile int state;
     private volatile int updateResult;
 
@@ -142,7 +143,7 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
     }
 
     @Override
-    public WriteResponse write(ServerIdentity identity, int resourceId, LwM2mResource value) {
+    public WriteResponse write(ServerIdentity identity, boolean replace, int resourceId, LwM2mResource value) {
         resourceId = getSupportedResource(resourceId);
         switch (resourceId) {
             case 0:
@@ -157,7 +158,7 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
                 });
                 return WriteResponse.success();
             default:
-                return super.write(identity, resourceId, value);
+                return super.write(identity, replace, resourceId, value);
         }
     }
 
@@ -298,7 +299,7 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
     }
 
     private String getPackageURI() {
-        return this.packageURI;
+        return this.packageURI != null ? this.packageURI : "";
     }
 
     private void setPackageURI(String value, int resourceId) {

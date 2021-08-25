@@ -35,7 +35,7 @@ public class ConnectivityStatistics extends BaseInstanceEnabler {
     }
 
     @Override
-    public WriteResponse write(ServerIdentity identity, int resourceid, LwM2mResource value) {
+    public WriteResponse write(ServerIdentity identity, boolean replace, int resourceid, LwM2mResource value) {
         switch (resourceid) {
             case 15:
 //                setCollectionPeriod((Long) value.getValue());
