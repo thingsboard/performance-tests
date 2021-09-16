@@ -24,14 +24,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.thingsboard.client.tools.RestClient;
+import org.thingsboard.rest.client.RestClient;
 import org.thingsboard.server.common.data.Dashboard;
 import org.thingsboard.server.common.data.DashboardInfo;
 import org.thingsboard.server.common.data.EntityType;
 import org.thingsboard.server.common.data.group.EntityGroup;
 import org.thingsboard.server.common.data.group.EntityGroupInfo;
 import org.thingsboard.server.common.data.id.DashboardId;
-import org.thingsboard.server.common.data.page.TextPageLink;
+import org.thingsboard.server.common.data.page.PageLink;
 import org.thingsboard.server.common.data.permission.Operation;
 import org.thingsboard.server.common.data.role.Role;
 import org.thingsboard.server.common.data.role.RoleType;
@@ -39,6 +39,7 @@ import org.thingsboard.tools.service.shared.RestClientService;
 
 import javax.annotation.PostConstruct;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @Slf4j
@@ -69,7 +70,7 @@ public class DefaultDashboardManager implements DashboardManager {
 
     @PostConstruct
     public void init() {
-        List<Role> readOnlyRoles = getRestClient().getRoles(RoleType.GROUP, new TextPageLink(1, "ReadOnly")).getData();
+        List<Role> readOnlyRoles = getRestClient().getRoles(RoleType.GROUP, new PageLink(1,0, "ReadOnly")).getData();
         if (!readOnlyRoles.isEmpty()) {
             readOnlyRole = readOnlyRoles.get(0);
             log.info("Found ReadOnly role: {}", readOnlyRole.getId());
@@ -130,7 +131,7 @@ public class DefaultDashboardManager implements DashboardManager {
 
     private void createDashboards(String[] dashboardNames, boolean deleteIfExists, boolean shared) {
         // Deleting existing dashboards if needed
-        List<DashboardInfo> dashboards = getRestClient().getTenantDashboards(new TextPageLink(1000)).getData();
+        List<DashboardInfo> dashboards = getRestClient().getTenantDashboards(new PageLink(1000)).getData();
         for (String dashboardName : dashboardNames) {
             for (DashboardInfo existing : dashboards) {
                 if (existing.getName().equalsIgnoreCase(dashboardName.replace(".json", ""))) {
@@ -149,7 +150,7 @@ public class DefaultDashboardManager implements DashboardManager {
             if (shared) {
                 sharedDashboardId = dashboard.getId();
                 //TODO: REST client improvement
-                getRestClient().addEntitiesToEntityGroup(sharedDashboardsGroup.getId().toString(), new String[]{dashboard.getId().toString()});
+                getRestClient().addEntitiesToEntityGroup(sharedDashboardsGroup.getId(), Collections.singletonList(dashboard.getId()));
             } else {
                 tenantDashboardIds.add(dashboard.getId());
             }

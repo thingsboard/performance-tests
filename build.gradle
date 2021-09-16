@@ -17,7 +17,7 @@ import org.apache.tools.ant.filters.ReplaceTokens
 
 buildscript {
     ext {
-        osPackageVersion = "3.8.0"
+        osPackageVersion = "8.3.0"
     }
     repositories {
         jcenter()
@@ -57,7 +57,7 @@ ospackage {
     }
 
     // Copy the config files
-    from("target/conf") {
+    from("${buildDir}/conf") {
         exclude "${pkgName}.conf"
         fileType CONFIG | NOREPLACE
         fileMode 0754
@@ -71,10 +71,10 @@ buildRpm {
 
     arch = NOARCH
 
-    version = projectVersion.replace('-', '')
-    archiveName = "${pkgName}.rpm"
+    archiveVersion = projectVersion.replace('-', '')
+    archiveFileName = "${pkgName}.rpm"
 
-    requires("java-1.8.0")
+    requires("java-11")
 
     from("target/conf") {
         include "${pkgName}.conf"
@@ -99,7 +99,7 @@ buildRpm {
         into "/usr/lib/systemd/system"
     }
 
-    directory(pkgLogFolder, 0755)
+//    directory(pkgLogFolder, 0755)
     link("${pkgInstallFolder}/bin/${pkgName}.yml", "${pkgInstallFolder}/conf/${pkgName}.yml")
     link("/etc/${pkgName}/conf", "${pkgInstallFolder}/conf")
 }
@@ -109,9 +109,9 @@ buildDeb {
 
     arch = "all"
 
-    archiveName = "${pkgName}.deb"
+    archiveFileName = "${pkgName}.deb"
 
-    requires("openjdk-8-jre").or("java8-runtime").or("oracle-java8-installer").or("openjdk-8-jre-headless")
+    requires("openjdk-11-jre").or("java11-runtime").or("oracle-java11-installer").or("openjdk-11-jre-headless")
 
     from("target/conf") {
         include "${pkgName}.conf"
@@ -133,8 +133,28 @@ buildDeb {
     user pkgUser
     permissionGroup pkgUser
 
-    directory(pkgLogFolder, 0755)
+//    directory(pkgLogFolder, 0755)
     link("/etc/init.d/${pkgName}", "${pkgInstallFolder}/bin/${pkgName}.jar")
-    link("${pkgInstallFolder}/bin/${pkgName}.yml", "${pkgInstallFolder}/conf/${pkgName}.yml")
+//    link("${pkgInstallFolder}/bin/${pkgName}.yml", "${pkgInstallFolder}/conf/${pkgName}.yml")
     link("/etc/${pkgName}/conf", "${pkgInstallFolder}/conf")
+}
+
+task renameDeb(type: Copy) {
+    from("${buildDir}/") {
+        include '*.deb'
+        destinationDir file("${buildDir}/")
+        rename { String filename ->
+            "${pkgName}.deb"
+        }
+    }
+}
+
+task renameRpm(type: Copy) {
+    from("${buildDir}/") {
+        include '*.rpm'
+        destinationDir file("${buildDir}/")
+        rename { String filename ->
+            "${pkgName}.rpm"
+        }
+    }
 }

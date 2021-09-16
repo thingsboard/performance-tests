@@ -23,10 +23,11 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.thingsboard.client.tools.RestClient;
+import org.thingsboard.rest.client.RestClient;
 import org.thingsboard.server.common.data.id.IdBased;
 import org.thingsboard.server.common.data.id.RuleChainId;
-import org.thingsboard.server.common.data.page.TextPageData;
+import org.thingsboard.server.common.data.page.PageData;
+import org.thingsboard.server.common.data.page.PageLink;
 import org.thingsboard.server.common.data.rule.RuleChain;
 import org.thingsboard.server.common.data.rule.RuleChainMetaData;
 
@@ -81,42 +82,30 @@ public class RuleChainManager {
     public void revertRootNodeAndCleanUp() {
         restClient.login(username, password);
         setRootRuleChain(defaultRootRuleChainId);
-        restClient.getRestTemplate().delete(restUrl + "/api/ruleChain/" + updatedRuleChainId.getId());
+        restClient.deleteRuleChain(updatedRuleChainId);
     }
 
     private void setRootRuleChain(RuleChainId rootRuleChain) {
-        restClient.getRestTemplate()
-                .postForEntity(restUrl + "/api/ruleChain/" + rootRuleChain.getId() + "/root", null, RuleChain.class);
+        restClient.setRootRuleChain(rootRuleChain);
     }
 
     private RuleChainId saveUpdatedRootRuleChainAndSetAsRoot(RuleChain updatedRuleChain) {
-        ResponseEntity<RuleChain> ruleChainResponse = restClient.getRestTemplate()
-                .postForEntity(restUrl + "/api/ruleChain", updatedRuleChain, RuleChain.class);
-
-        return ruleChainResponse.getBody().getId();
+        return restClient.saveRuleChain(updatedRuleChain).getId();
     }
 
     private void saveUpdatedRootRuleChainMetadata(RuleChainMetaData ruleChainMetaData) {
-        restClient.getRestTemplate()
-                .postForEntity(restUrl + "/api/ruleChain/metadata",
-                        ruleChainMetaData,
-                        RuleChainMetaData.class);
+        restClient.saveRuleChainMetaData(ruleChainMetaData);
     }
 
     private RuleChainId getDefaultRuleChainId() {
-        ResponseEntity<TextPageData<RuleChain>> ruleChains =
-                restClient.getRestTemplate().exchange(
-                        restUrl + "/api/ruleChains?limit=999&textSearch=Root Rule Chain",
-                        HttpMethod.GET,
-                        null,
-                        new ParameterizedTypeReference<TextPageData<RuleChain>>() {
-                        });
+        PageData<RuleChain> ruleChains =
+                restClient.getRuleChains(new PageLink(999, 0, "Root Rule Chain"));
 
-        Optional<RuleChain> defaultRuleChain = ruleChains.getBody().getData()
+        Optional<RuleChain> defaultRuleChain = ruleChains.getData()
                 .stream()
                 .findFirst();
 
-        if (!defaultRuleChain.isPresent()) {
+        if (defaultRuleChain.isEmpty()) {
             throw new RuntimeException("Root rule chain was not found");
         }
 

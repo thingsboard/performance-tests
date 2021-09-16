@@ -21,7 +21,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.thingsboard.client.tools.RestClient;
+import org.thingsboard.rest.client.RestClient;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -34,9 +34,12 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class DefaultRestClientService implements RestClientService {
 
+    @Value("${test.http_pool_size}")
+    private int httpPoolSize;
+
     public static final int LOG_PAUSE = 1;
 
-    private final ExecutorService httpExecutor = Executors.newFixedThreadPool(100);
+    private ExecutorService httpExecutor;
     private final ScheduledExecutorService logScheduler = Executors.newScheduledThreadPool(10);
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(10);
     private final ExecutorService workers = Executors.newFixedThreadPool(10);
@@ -52,6 +55,7 @@ public class DefaultRestClientService implements RestClientService {
     private RestClient restClient;
     @Getter
     private EventLoopGroup eventLoopGroup;
+
 
     @Override
     public ExecutorService getWorkers() {
@@ -75,6 +79,7 @@ public class DefaultRestClientService implements RestClientService {
 
     @PostConstruct
     public void init() {
+        httpExecutor = Executors.newFixedThreadPool(httpPoolSize);
         restClient = new RestClient(restUrl);
         restClient.login(username, password);
         eventLoopGroup = new NioEventLoopGroup();

@@ -27,16 +27,16 @@ public class RandomTelemetryGenerator extends BaseRandomGenerator implements Mes
 
     @Override
     public Msg getNextMessage(String deviceName, boolean shouldTriggerAlarm) {
-        int percent = random.nextInt(100);
-        if (percent < 29) {
-            return new Msg(getTinyRandomMessage(deviceName, shouldTriggerAlarm), shouldTriggerAlarm);
-        } else if (percent < 59) {
-            return new Msg(getSmallRandomMessage(deviceName));
-        } else if (percent < 99) {
+//        int percent = random.nextInt(100);
+//        if (percent < 29) {
+//            return new Msg(getTinyRandomMessage(deviceName, shouldTriggerAlarm), shouldTriggerAlarm);
+//        } else if (percent < 59) {
+//            return new Msg(getSmallRandomMessage(deviceName));
+//        } else if (percent < 99) {
             return new Msg(getRandomMessage(deviceName));
-        } else {
-            return new Msg(getHugeRandomMessage(deviceName));
-        }
+//        } else {
+//            return new Msg(getHugeRandomMessage(deviceName));
+//        }
     }
 
     private byte[] getTinyRandomMessage(String deviceName, boolean shouldTriggerAlarm) {
@@ -98,7 +98,11 @@ public class RandomTelemetryGenerator extends BaseRandomGenerator implements Mes
             tsNode.put("ts", System.currentTimeMillis());
             ObjectNode values = tsNode.putObject("values");
 
+            values.put("t1", getValueToRandomMessage(100));
+            values.put("t2", getValueToRandomMessage(100));
             values.put("t3", getValueToRandomMessage(100));
+            values.put("t4", getValueToRandomMessage(100));
+            values.put("t5", getValueToRandomMessage(100));
 
             return mapper.writeValueAsBytes(data);
         } catch (Exception e) {

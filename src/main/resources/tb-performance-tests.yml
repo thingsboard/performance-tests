@@ -80,5 +80,7 @@ test:
     end: "${ALARM_STORM_END_SECOND:0}"
     # alarms per second should be less them messages per second.
     aps: "${ALARMS_PER_SECOND:10}"
+  http_pool_size: "${HTTP_POOL_SIZE:100}"
+
 
 

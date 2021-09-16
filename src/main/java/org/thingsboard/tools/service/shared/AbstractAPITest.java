@@ -30,8 +30,19 @@ import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.mqtt.MqttClientConfig;
 import org.thingsboard.mqtt.MqttConnectResult;
 import org.thingsboard.server.common.data.Device;
+import org.thingsboard.server.common.data.DeviceProfile;
+import org.thingsboard.server.common.data.DeviceProfileInfo;
+import org.thingsboard.server.common.data.DeviceProfileProvisionType;
+import org.thingsboard.server.common.data.DeviceProfileType;
+import org.thingsboard.server.common.data.DeviceTransportType;
+import org.thingsboard.server.common.data.device.profile.DefaultDeviceProfileConfiguration;
+import org.thingsboard.server.common.data.device.profile.DefaultDeviceProfileTransportConfiguration;
+import org.thingsboard.server.common.data.device.profile.DeviceProfileData;
+import org.thingsboard.server.common.data.device.profile.DisabledDeviceProfileProvisionConfiguration;
 import org.thingsboard.server.common.data.id.CustomerId;
 import org.thingsboard.server.common.data.id.DeviceId;
+import org.thingsboard.server.common.data.id.DeviceProfileId;
+import org.thingsboard.server.common.data.page.PageLink;
 import org.thingsboard.tools.service.customer.CustomerManager;
 import org.thingsboard.tools.service.mqtt.DeviceClient;
 import org.thingsboard.tools.service.msg.Msg;
@@ -128,7 +139,7 @@ public abstract class AbstractAPITest {
     private volatile CountDownLatch testDurationLatch;
     private EventLoopGroup EVENT_LOOP_GROUP;
 
-    protected final List<DeviceClient> deviceClients =  Collections.synchronizedList(new ArrayList<>(1024 * 1024));
+    protected final List<DeviceClient> deviceClients = Collections.synchronizedList(new ArrayList<>(1024 * 1024));
 
     protected int deviceStartIdx;
     protected int deviceEndIdx;
@@ -308,6 +319,13 @@ public abstract class AbstractAPITest {
         CountDownLatch latch = new CountDownLatch(entityCount);
         AtomicInteger count = new AtomicInteger();
         List<CustomerId> customerIds = customerManager.getCustomerIds();
+
+        if (isGateway) {
+            createDeviceProfile("gateway");
+        } else {
+            createDeviceProfile("device");
+        }
+
         for (int i = startIdx; i < endIdx; i++) {
             final int tokenNumber = i;
             restClientService.getHttpExecutor().submit(() -> {
@@ -330,9 +348,9 @@ public abstract class AbstractAPITest {
                         entity.setOwnerId(customerId);
                     }
                     if (setCredentials) {
-                        entity = restClientService.getRestClient().createDevice(entity, token);
+                        entity = restClientService.getRestClient().saveDevice(entity, token);
                     } else {
-                        entity = restClientService.getRestClient().createDevice(entity);
+                        entity = restClientService.getRestClient().saveDevice(entity);
                     }
 
                     result.add(entity);
@@ -362,6 +380,32 @@ public abstract class AbstractAPITest {
         log.info("{} {} have been created successfully!", result.size(), isGateway ? "gateways" : "devices");
 
         return result;
+    }
+
+    private DeviceProfileId createDeviceProfile(String name) {
+        DeviceProfileInfo deviceProfileInfo =
+                restClientService.getRestClient().getDeviceProfileInfos(
+                        new PageLink(1, 0, name), DeviceTransportType.DEFAULT).getData().get(0);
+        if (deviceProfileInfo != null) {
+            return (DeviceProfileId) deviceProfileInfo.getId();
+        }
+
+        DeviceProfile deviceProfile = new DeviceProfile();
+        deviceProfile.setDefault(false);
+        deviceProfile.setName(name);
+        deviceProfile.setType(DeviceProfileType.DEFAULT);
+        deviceProfile.setTransportType(DeviceTransportType.DEFAULT);
+        deviceProfile.setProvisionType(DeviceProfileProvisionType.DISABLED);
+        deviceProfile.setDescription(name + " device profile");
+        DeviceProfileData deviceProfileData = new DeviceProfileData();
+        DefaultDeviceProfileConfiguration configuration = new DefaultDeviceProfileConfiguration();
+        DefaultDeviceProfileTransportConfiguration transportConfiguration = new DefaultDeviceProfileTransportConfiguration();
+        DisabledDeviceProfileProvisionConfiguration provisionConfiguration = new DisabledDeviceProfileProvisionConfiguration(null);
+        deviceProfileData.setConfiguration(configuration);
+        deviceProfileData.setTransportConfiguration(transportConfiguration);
+        deviceProfileData.setProvisionConfiguration(provisionConfiguration);
+        deviceProfile.setProfileData(deviceProfileData);
+        return restClientService.getRestClient().saveDeviceProfile(deviceProfile).getId();
     }
 
     protected String getToken(boolean isGateway, int token) {

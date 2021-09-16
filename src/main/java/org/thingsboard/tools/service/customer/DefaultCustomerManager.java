@@ -21,7 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.thingsboard.client.tools.RestClient;
+import org.thingsboard.rest.client.RestClient;
 import org.thingsboard.server.common.data.Customer;
 import org.thingsboard.server.common.data.EntityType;
 import org.thingsboard.server.common.data.User;
@@ -79,10 +79,11 @@ public class DefaultCustomerManager implements CustomerManager {
                 Customer customer = null;
                 try {
                     String title = "C" + String.format("%8d", tokenNumber).replace(" ", "0");
-                    customer = getRestClient().createCustomer(title);
+                    customer = new Customer();
+                    customer.setTitle(title);
+                    customer = getRestClient().saveCustomer(customer);
                     //TODO: REST client improvement
-                    List<EntityGroupInfo> groups = getRestClient().getEntityGroupsByOwnerAndType(
-                            customer.getId().getEntityType().name(), customer.getId().getId().toString(), EntityType.USER);
+                    List<EntityGroupInfo> groups = getRestClient().getEntityGroupsByOwnerAndType(customer.getId(), EntityType.USER);
                     EntityGroupInfo customerAdmins = groups.stream().filter(g -> g.getName().equalsIgnoreCase("Customer Administrators")).findFirst().orElseThrow(() -> new RuntimeException("Customer Administrator Group is not present!"));
 
                     GroupPermission readOnlyPermission = new GroupPermission();
@@ -107,8 +108,8 @@ public class DefaultCustomerManager implements CustomerManager {
 
                     customerAdmin = getRestClient().saveUser(customerAdmin, false);
                     //TODO: REST CLIENT
-                    getRestClient().addEntitiesToEntityGroup(customerAdmins.getId().toString(), new String[]{customerAdmin.getId().toString()});
-                    getRestClient().activateUser(customerAdmin.getId().toString(), "customer");
+                    getRestClient().addEntitiesToEntityGroup(customerAdmins.getId(), Collections.singletonList(customerAdmin.getId()));
+                    getRestClient().activateUser(customerAdmin.getId(), "customer");
                     customerIds.add(customer.getId());
                     count.getAndIncrement();
                 } catch (Exception e) {
