@@ -21,7 +21,7 @@
 
     <groupId>org.thingsboard</groupId>
     <artifactId>performance-tests</artifactId>
-    <version>3.3.0-SNAPSHOT</version>
+    <version>3.3.2-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>ThingsBoard Performance Tests</name>
