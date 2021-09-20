@@ -133,7 +133,7 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
 
     protected Set<String> connectEntities() throws InterruptedException {
         Set<String> result = ConcurrentHashMap.newKeySet(1024 * 1024);
-        int nextPortNumber = deviceStartIdx-1;
+        int nextPortNumber = deviceStartIdx;
         if (context.isLwm2mNoSecEnabled())
             nextPortNumber = this.connectEntitiesLwm2m(result, LwM2MSecurityMode.NO_SEC, nextPortNumber);
         if (context.isLwm2mPSKEnabled())
@@ -220,9 +220,9 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
             privateKeyClient = context.getNodeConfigKeys().get(mode.name()).get("clientSecretKey").asText();
         } else if (mode == LwM2MSecurityMode.X509) {
             try {
-                X509Certificate serverCertificate = (X509Certificate) context.getClientKeyStoreValue().getCertificate(context.getClientAlias(numberClient));
+                X509Certificate serverCertificate = (X509Certificate) context.getClientKeyStoreValue().getCertificate(context.getClientAlias(numberClient, false));
                 publicKeyClient = Hex.encodeHexString(serverCertificate.getEncoded());
-                PrivateKey privateKey = (PrivateKey) context.getClientKeyStoreValue().getKey(context.getClientAlias(numberClient), context.getClientKeyStorePwd().toCharArray());
+                PrivateKey privateKey = (PrivateKey) context.getClientKeyStoreValue().getKey(context.getClientAlias(numberClient, true), context.getClientKeyStorePwd().toCharArray());
                 privateKeyClient = Hex.encodeHexString(privateKey.getEncoded());
                 log.info("Client  [{}] uses X509 : \n X509 Certificate (Hex): [{}] \n Private Key (Hex): [{}]", endPoint, publicKeyClient, privateKeyClient);
             } catch (KeyStoreException | CertificateEncodingException e) {
@@ -269,6 +269,7 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
                 restClientService.getLwm2mExecutor().submit(() -> {
                     try {
                         String endPoint = context.getEndPoint(finalI, mode);
+
 //                        LwM2MClientConfiguration clientConfiguration = new LwM2MClientConfiguration(context, locationParams, endPoint, finalNextPortNumber, mode, restClientService.getSchedulerCoapConfig(), finalI);
 //                        LwM2MClientConfiguration clientConfiguration = LwM2MClientConfiguration.getInstance();
                         LwM2MClientConfiguration clientConfiguration = new LwM2MClientConfiguration();

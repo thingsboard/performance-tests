@@ -177,7 +177,7 @@ public class CertificateGenerator {
 
         for (int i = start; i < finish; i++) {
             this.generationX509(this.sslKeyStoreClient,
-                    this.context.getClientAlias(i),
+                    this.context.getClientAlias(i, false),
 //                    this.context.getEndPoint(i, LwM2MSecurityMode.X509),
                     this.context.getEndPoint(i, LwM2MSecurityMode.X509),
                     context.getClientKeyStorePwd());

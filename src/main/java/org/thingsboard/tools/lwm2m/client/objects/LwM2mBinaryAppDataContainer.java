@@ -28,7 +28,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 
 @Slf4j
@@ -79,8 +78,8 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
         try {
             if (id != null) this.setId(id);
             this.dataSingle = dataSingle;
-            executorService.scheduleWithFixedDelay(() ->
-                    fireResourcesChange(0, 2), 5000, 5000, TimeUnit.MILLISECONDS);
+//            executorService.scheduleWithFixedDelay(() ->
+//                    fireResourcesChange(0, 2), 5000, 5000, TimeUnit.MILLISECONDS);
 //                    fireResourcesChange(0, 2), 1800000, 1800000, TimeUnit.MILLISECONDS); // 30 MIN
         } catch (Throwable e) {
             log.error("[{}]Throwable", e.toString());
@@ -96,9 +95,17 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
             switch (resourceId) {
                 case 0:
                     log.warn("Read on Location resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceId);
-                    ReadResponse response;
+                    ReadResponse response = null;
                     if (this.dataSingle) {
-                        response = ReadResponse.success(resourceId, (byte[]) getData());
+                        if (getData() == null) {
+                            if (this.id==1) {
+                                return ReadResponse.internalServerError("error");
+                            }
+                            else {
+                                setDataSingle(new byte[0]);
+                                return ReadResponse.success(resourceId, getDataSingle());
+                            }
+                        }
                     } else {
                         response = ReadResponse.success(resourceId, (Map<Integer, ?>) getData(), ResourceModel.Type.OPAQUE);
                     }
@@ -129,7 +136,7 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
         resourceId = getSupportedResource(resourceId);
         switch (resourceId) {
             case 0:
-                if (setData(value, replace)) {
+                if (setDataMulti(value, replace)) {
                     fireResourcesChange(resourceId);
                     return WriteResponse.success();
                 } else {
@@ -194,7 +201,7 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
     }
 
     //    fireResourcesChange(resourceId);
-    private boolean setData(LwM2mResource value, boolean replace) {
+    private boolean setDataMulti(LwM2mResource value, boolean replace) {
         try {
             if (value instanceof LwM2mMultipleResource) {
                 if (replace || this.data == null) {
@@ -213,8 +220,19 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
         }
     }
 
+
+    private void setDataSingle(byte[] value) {
+        this.data = value;
+    }
+
     private Object getData() {
         return data;
+//        this.data.put(23, new byte[]{0, 0, 2, 3});
+
+    }
+    
+    private byte[] getDataSingle() {
+        return (byte[]) data;
 //        this.data.put(23, new byte[]{0, 0, 2, 3});
 
     }

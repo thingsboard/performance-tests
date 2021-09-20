@@ -80,12 +80,15 @@ lwm2m:
       port: "${RPK_BS_PORT:5688}"
   x509:
     enabled: "${X509_ENABLED:true}"
-    trust: "${X509_ENABLED:true}"
+    trust: "${X509_ENABLED_TRUST:false}"
     prefix_client: "${CLIENT_ALIAS:client}"
     prefix_client_alias: "${CLIENT_ALIAS:client_alias_}"
     prefix_client_self_alias: "${CLIENT_SELF_ALIAS:client_self_signed_}"
     create_new_key_store_sh: "${CREATE_NEW_KEY_STORE_SH:false}"
     create_new_key_store_java: "${CREATE_NEW_KEY_STORE_JAVA:false}"
+    client_alias_no_trust: "${CLIENT_ALIAS_NO_TRUST:client_not_trusted}"
+    client_alias_private_key_no_trust: "${CLIENT_ALIAS_PRIVATE_KEY_NO_TRUST:client}"
+    endpoint_client_no_trust: "${ENDPOINT_CLIENT_NO_TRUST:deviceAEndpoint}"
     server:
       host: "${X509_HOST:localhost}"
       port: "${X509_PORT:5686}"

@@ -17,10 +17,12 @@ package org.thingsboard.tools.lwm2m.secure;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.eclipse.leshan.client.object.Security;
 import org.eclipse.leshan.client.object.Server;
 import org.eclipse.leshan.client.resource.ObjectsInitializer;
 import org.eclipse.leshan.core.request.BindingMode;
 import org.eclipse.leshan.core.util.Hex;
+import org.springframework.util.Base64Utils;
 import org.thingsboard.tools.lwm2m.client.LwM2MClientContext;
 import org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode;
 
@@ -84,8 +86,9 @@ public class LwM2MSecurityStore {
         if (this.context.isLwm2mNoSecBootStrapEnabled()) {
             serverURI = LwM2MClientContext.coapLink + this.context.getLwm2mHostNoSecBootStrap() + ":" + this.context.getLwm2mPortNoSecBootStrap();
             this.initializer.setInstancesForObject(SECURITY, noSecBootstap(serverURI));
-            this.initializer.setClassForObject(SERVER, Server.class);
-        } else {
+            this.initializer.setInstancesForObject(SERVER, new Server(this.context.getBootstrapShortId(), this.context.getLifetime(), EnumSet.of(BindingMode.U), false, BindingMode.U));
+        }
+        else {
             serverURI = this.context.coapLink + context.getLwm2mHostNoSec() + ":" + this.context.getLwm2mPortNoSec();
             this.initializer.setInstancesForObject(SECURITY, noSec(serverURI, this.context.getServerShortId()));
             this.initializer.setInstancesForObject(SERVER, new Server(this.context.getServerShortId(), this.context.getLifetime(), EnumSet.of(BindingMode.U), false, BindingMode.U));
@@ -146,10 +149,12 @@ public class LwM2MSecurityStore {
             initializer.setClassForObject(SERVER, Server.class);
         } else {
             serverSecureURI = this.context.coapLinkSec + this.context.getLwm2mHostX509() + ":" + this.context.getLwm2mPortX509();
-            initializer.setInstancesForObject(SECURITY, x509(serverSecureURI, this.context.getServerShortId(),
+            Security security = x509(serverSecureURI,
+                    this.context.getServerShortId(),
                     Hex.decodeHex(this.clientPublicKey.toCharArray()),
                     Hex.decodeHex(this.clientPrivateKey.toCharArray()),
-                    Hex.decodeHex(this.serverPublicKey.toCharArray())));
+                    Hex.decodeHex(this.serverPublicKey.toCharArray()));
+            initializer.setInstancesForObject(SECURITY, security);
             initializer.setInstancesForObject(SERVER, new Server(this.context.getServerShortId(), this.context.getLifetime(), EnumSet.of(BindingMode.U), true, BindingMode.U));
         }
     }
@@ -164,8 +169,8 @@ public class LwM2MSecurityStore {
 
     private void getKeyCertForX509(int numberClient) {
         try {
-            Certificate clientCertificate = (X509Certificate) this.context.getClientKeyStoreValue().getCertificate(this.context.getClientAlias(numberClient));
-            PrivateKey clientPrivKey = (PrivateKey) this.context.getClientKeyStoreValue().getKey(this.context.getClientAlias(numberClient), this.context.getClientKeyStorePwd().toCharArray());
+            Certificate clientCertificate = (X509Certificate) this.context.getClientKeyStoreValue().getCertificate(this.context.getClientAlias(numberClient, false));
+            PrivateKey clientPrivKey = (PrivateKey) this.context.getClientKeyStoreValue().getKey(this.context.getClientAlias(numberClient, true), this.context.getClientKeyStorePwd().toCharArray());
             Certificate serverCertificate = (X509Certificate) this.context.getServerKeyStoreValue().getCertificate(this.context.getServerAlias());
             Certificate bootStrapCertificate = (X509Certificate) this.context.getServerKeyStoreValue().getCertificate(this.context.getBootstrapAlias());
             this.clientPublicKey = Hex.encodeHexString(clientCertificate.getEncoded());
@@ -183,7 +188,9 @@ public class LwM2MSecurityStore {
     private static void getParamsInfoX509(X509Certificate certificate, String whose, PrivateKey privateKey) {
         try {
             log.info("{} uses X509 : " +
+                            "\n Endpoint: [{}] " +
                             "\n X509 Certificate (Hex): [{}] " +
+                            "\n X509 Certificate (Base64): [{}] " +
                             "\n PrivateKey (Hex): [{}] " +
                             "\n getSigAlgName: [{}] " +
                             "\n getSigAlgOID: [{}] " +
@@ -191,7 +198,9 @@ public class LwM2MSecurityStore {
                             "\n IssuerDN().getName: [{}] " +
                             "\n SubjectDN().getName: [{}]",
                     whose,
+                    certificate.getSubjectDN().getName(),
                     Hex.encodeHexString(certificate.getEncoded()),
+                    Base64Utils.encodeToString(certificate.getEncoded()),
                     privateKey == null ? "null" : Hex.encodeHexString(privateKey.getEncoded()),
                     certificate.getSigAlgName(),
                     certificate.getSigAlgOID(),

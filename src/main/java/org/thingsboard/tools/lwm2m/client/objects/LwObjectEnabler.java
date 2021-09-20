@@ -235,17 +235,15 @@ public class LwObjectEnabler extends ObjectEnabler {
             return ObserveResponse.success(new LwM2mObject(getId(), lwM2mObjectInstances));
         }
 
-        // Manage Instance case
         final LwM2mInstanceEnabler instance = instances.get(path.getObjectInstanceId());
-        if (instance == null)
-            return ObserveResponse.notFound();
-
-        if (path.getResourceId() == null) {
-            return instance.observe(identity);
+        if (instance != null) {
+            if (path.isResource()) {                // Manage Resource case
+                return instance.observe(identity, path.getResourceId());
+            } else if (path.isObjectInstance()) {   // Manage Instance case
+                return instance.observe(identity);
+            }
         }
-
-        // Manage Resource case
-        return instance.observe(identity, path.getResourceId());
+        return ObserveResponse.notFound();
     }
 
     @Override

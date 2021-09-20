@@ -31,6 +31,7 @@ import org.eclipse.leshan.core.util.Hex;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.springframework.util.Base64Utils;
 import org.thingsboard.tools.service.shared.BaseLwm2mAPITest;
 
 import javax.annotation.PostConstruct;
@@ -95,6 +96,10 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
     @Getter
     @Value("${lwm2m.x509.enabled:}")
     protected boolean lwm2mX509Enabled;
+
+    @Getter
+    @Value("${lwm2m.x509.trust:}")
+    protected boolean lwm2mX509Trust;
 
     @Getter
     protected JsonNode nodeConfig = getConfigNoSec();
@@ -276,10 +281,16 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
     private final String keyStoreServerFile = "lwm2mserver.jks";
 
     @Getter
-    private final String keyStoreClientFile = "lwm2mclient.jks";
+    private String keyStoreClientFile = "lwm2mclient.jks";
 
     @Getter
-    private final String clientKeyStorePwd = "client_ks_password";
+    private final String keyStoreClientNoTrustFile = "lwm2mclientnotrust.jks";
+
+    @Getter
+    private String clientKeyStorePwd = "client_ks_password";
+
+    @Getter
+    private final String clientNoTrustKeyStorePwd = "client";
 
     @Getter
     private final String serverKeyStorePwd = "server_ks_password";
@@ -291,6 +302,10 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
     @Getter
     @Value("${lwm2m.x509.prefix_client:}")
     private String prefixClient;
+
+    @Getter
+    @Value("${lwm2m.x509.endpoint_client_no_trust:}")
+    private String endpointClientNoTrust;
 
     @Getter
     @Value("${lwm2m.x509.prefix_client_self_alias:}")
@@ -333,6 +348,13 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
     @Value("${lwm2m.x509.create_new_key_store_java:}")
     private boolean createNewKeyStoreJava;
 
+    @Getter
+    @Value("${lwm2m.x509.client_alias_no_trust:}")
+    private String clientAliasNoTrust;
+    @Getter
+    @Value("${lwm2m.x509.client_alias_private_key_no_trust:}")
+    private String clientAliasPrivateKeyNoTrust;
+
     @PostConstruct
     public void init() {
 //        modelsValue = ObjectLoader.loadDefault();
@@ -350,6 +372,10 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
             log.error(" [{}] Read Models", path.getAbsoluteFile());
         }
         if (this.lwm2mX509Enabled || this.lwm2mX509BootStrapEnabled) {
+            if (lwm2mX509Trust) {
+                this.keyStoreClientFile = keyStoreClientNoTrustFile;
+                this.clientKeyStorePwd = clientNoTrustKeyStorePwd;
+            }
             this.setClientKeyStore();
             this.setServerKeyStore();
         }
@@ -451,7 +477,7 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
 
 
     public String getEndPoint(int numberClient, LwM2MSecurityMode mode) {
-        return getPrefEndPoint(mode) + String.format("%8d", numberClient).replace(" ", "0");
+        return lwm2mX509Trust ? endpointClientNoTrust : getPrefEndPoint(mode) + String.format("%8d", numberClient).replace(" ", "0");
     }
 
     private String getPrefEndPoint(LwM2MSecurityMode mode) {
@@ -465,8 +491,8 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
      * @param numberClient -
      * @return ClientAlias
      */
-    public String getClientAlias(int numberClient) {
-        return this.prefixClientAlias + String.format("%8d", numberClient).replace(" ", "0");
+    public String getClientAlias(int numberClient, boolean isPrivate) {
+        return lwm2mX509Trust ? isPrivate ? clientAliasPrivateKeyNoTrust : clientAliasNoTrust : this.prefixClientAlias + String.format("%8d", numberClient).replace(" ", "0");
     }
 
     public Map<String, String> getAddAttrs(String addAttrs) {
@@ -614,6 +640,7 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
         try {
             log.info("{} uses X509 : " +
                             "\n X509 Certificate (Hex): [{}] " +
+                            "\n X509 Certificate (Bas64): [{}] " +
                             "\n PrivateKey (Hex): [{}] " +
                             "\n getSigAlgName: [{}] " +
                             "\n getSigAlgOID: [{}] " +
@@ -622,6 +649,7 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
                             "\n SubjectDN().getName: [{}]",
                     whose,
                     Hex.encodeHexString(certificate.getEncoded()),
+                    Base64Utils.encodeToString(certificate.getEncoded()),
                     Hex.encodeHexString(privateKey.getEncoded()),
                     certificate.getSigAlgName(),
                     certificate.getSigAlgOID(),
