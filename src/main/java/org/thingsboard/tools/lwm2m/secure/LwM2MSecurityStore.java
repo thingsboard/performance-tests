@@ -19,12 +19,19 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.leshan.client.object.Security;
 import org.eclipse.leshan.client.object.Server;
+import org.eclipse.leshan.client.resource.DummyInstanceEnabler;
+import org.eclipse.leshan.client.resource.LwM2mInstanceEnabler;
+import org.eclipse.leshan.client.resource.LwM2mInstanceEnablerFactory;
 import org.eclipse.leshan.client.resource.ObjectsInitializer;
+import org.eclipse.leshan.core.LwM2mId;
+import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.request.BindingMode;
 import org.eclipse.leshan.core.util.Hex;
 import org.springframework.util.Base64Utils;
 import org.thingsboard.tools.lwm2m.client.LwM2MClientContext;
 import org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode;
+import org.thingsboard.tools.lwm2m.client.objects.LwM2mBinaryAppDataContainer;
+import org.thingsboard.tools.lwm2m.client.objects.Lwm2mServer;
 
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -34,6 +41,7 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.EnumSet;
+import java.util.List;
 
 import static org.eclipse.leshan.client.object.Security.noSec;
 import static org.eclipse.leshan.client.object.Security.noSecBootstap;
@@ -59,7 +67,7 @@ public class LwM2MSecurityStore {
     private ObjectsInitializer initializer;
     private LwM2MSecurityMode mode;
 
-    public LwM2MSecurityStore(LwM2MClientContext context, ObjectsInitializer initializer, String endPoint, LwM2MSecurityMode mode, int numberClient) {
+    public LwM2MSecurityStore(LwM2MClientContext context, ObjectsInitializer initializer, String endPoint, LwM2MSecurityMode mode, int numberClient, List<ObjectModel> objectModels) {
         this.context = context;
         this.endPoint = endPoint;
         this.initializer = initializer;
@@ -89,9 +97,18 @@ public class LwM2MSecurityStore {
             this.initializer.setInstancesForObject(SERVER, new Server(this.context.getBootstrapShortId(), this.context.getLifetime(), EnumSet.of(BindingMode.U), false, BindingMode.U));
         }
         else {
-            serverURI = this.context.coapLink + context.getLwm2mHostNoSec() + ":" + this.context.getLwm2mPortNoSec();
-            this.initializer.setInstancesForObject(SECURITY, noSec(serverURI, this.context.getServerShortId()));
-            this.initializer.setInstancesForObject(SERVER, new Server(this.context.getServerShortId(), this.context.getLifetime(), EnumSet.of(BindingMode.U), false, BindingMode.U));
+            Server serverBootstrap0 = new Lwm2mServer(this.context.getBootstrapShortId(), this.context.getLifetime(), EnumSet.of(BindingMode.U), false, BindingMode.U, 0);
+            Server server1 = new Lwm2mServer(this.context.getServerShortId(), this.context.getLifetime(), EnumSet.of(BindingMode.U), false, BindingMode.U, 1);
+            LwM2mInstanceEnabler[] instances = new LwM2mInstanceEnabler[]{serverBootstrap0, server1};
+            initializer.setClassForObject(SERVER, Server.class);
+            this.initializer.setInstancesForObject(SERVER, instances);
+            String serverURIServer = this.context.coapLink + context.getLwm2mHostNoSec() + ":" + this.context.getLwm2mPortNoSec();
+            String serverURIBootstrap = LwM2MClientContext.coapLink + this.context.getLwm2mHostNoSecBootStrap() + ":" + this.context.getLwm2mPortNoSecBootStrap();
+            Security securityBootstrap = noSecBootstap(serverURIBootstrap);
+            Security securityServer = noSec(serverURIServer, this.context.getServerShortId());
+            instances = new LwM2mInstanceEnabler[]{securityBootstrap, securityServer};
+            this.initializer.setInstancesForObject(SECURITY, instances);
+//            this.initializer.setInstancesForObject(SERVER, new Server(this.context.getServerShortId(), this.context.getLifetime(), EnumSet.of(BindingMode.U), false, BindingMode.U));
         }
     }
 

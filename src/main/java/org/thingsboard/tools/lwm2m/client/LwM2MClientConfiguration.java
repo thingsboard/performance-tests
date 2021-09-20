@@ -142,12 +142,15 @@ public class LwM2MClientConfiguration {
         log.info("Start LwM2M client... PostConstruct [{}] [{}] [{}]", this.endPoint, this.mode, this.numberClient);
 
         /** Initialize security object */
-        new LwM2MSecurityStore(context, initializerModel, this.endPoint, this.mode, this.numberClient);
+        //
+        List<ObjectModel> objectModels  = models.stream().filter(mod -> mod.id == SERVER)
+                .collect(Collectors.toUnmodifiableList());
+        new LwM2MSecurityStore(context, initializerModel, this.endPoint, this.mode, this.numberClient, objectModels);
 
         /** Initialize SingleOne objects */
 //        List<LwM2mObjectEnabler> enablers = new ArrayList<>();
         // Device (0)
-        List<ObjectModel> objectModels = models.stream().filter(mod -> mod.id == DEVICE)
+        objectModels = models.stream().filter(mod -> mod.id == DEVICE)
                 .collect(Collectors.toUnmodifiableList());
         if (objectModels.size() > 0) {
             initializerModel.setInstancesForObject(DEVICE, new LwM2mDevice(executorService, 0));
@@ -171,6 +174,7 @@ public class LwM2MClientConfiguration {
         objectModels = models.stream().filter(mod -> mod.id == BINARY_APP_DATA_CONTAINER)
                 .collect(Collectors.toUnmodifiableList());
         if (objectModels.size() > 0) {
+            initializerModel.setClassForObject(BINARY_APP_DATA_CONTAINER, LwM2mBinaryAppDataContainer.class);
             boolean dataSingle = !objectModels.get(0).resources.get(0).multiple;
             LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer0 = new LwM2mBinaryAppDataContainer(executorService, 0, dataSingle);
             LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer1 = new LwM2mBinaryAppDataContainer(executorService, 1, dataSingle);
@@ -178,6 +182,7 @@ public class LwM2MClientConfiguration {
             initializerModel.setInstancesForObject(BINARY_APP_DATA_CONTAINER, instances);
         }
 
+        initializerModel.setClassForObject(CONNECTIVITY_MONITORING, LwM2mConnectivityMonitoring.class);
         initializerModel.setInstancesForObject(CONNECTIVITY_MONITORING, new LwM2mConnectivityMonitoring());
         initializerModel.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
         initializerModel.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
