@@ -26,6 +26,7 @@ import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.util.CollectionUtils;
 import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.mqtt.MqttClientConfig;
 import org.thingsboard.mqtt.MqttConnectResult;
@@ -383,11 +384,10 @@ public abstract class AbstractAPITest {
     }
 
     private DeviceProfileId createDeviceProfile(String name) {
-        DeviceProfileInfo deviceProfileInfo =
-                restClientService.getRestClient().getDeviceProfileInfos(
-                        new PageLink(1, 0, name), DeviceTransportType.DEFAULT).getData().get(0);
-        if (deviceProfileInfo != null) {
-            return (DeviceProfileId) deviceProfileInfo.getId();
+        List<DeviceProfileInfo> data = restClientService.getRestClient().getDeviceProfileInfos(
+                new PageLink(1, 0, name), DeviceTransportType.DEFAULT).getData();
+        if (!CollectionUtils.isEmpty(data)) {
+            return (DeviceProfileId) data.get(0).getId();
         }
 
         DeviceProfile deviceProfile = new DeviceProfile();

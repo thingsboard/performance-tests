@@ -19,6 +19,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -98,11 +99,11 @@ public class RandomTelemetryGenerator extends BaseRandomGenerator implements Mes
             tsNode.put("ts", System.currentTimeMillis());
             ObjectNode values = tsNode.putObject("values");
 
-            values.put("t1", getValueToRandomMessage(100));
-            values.put("t2", getValueToRandomMessage(100));
-            values.put("t3", getValueToRandomMessage(100));
-            values.put("t4", getValueToRandomMessage(100));
-            values.put("t5", getValueToRandomMessage(100));
+            values.put("v1", random.nextInt(100));
+            values.put("v2", random.nextFloat() * 100);
+            values.put("v3", random.nextBoolean());
+            values.put("v4", random.nextInt(100));
+            values.put("v5", RandomStringUtils.randomAlphabetic(5));
 
             return mapper.writeValueAsBytes(data);
         } catch (Exception e) {
