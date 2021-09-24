@@ -13,32 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.thingsboard.tools.service.mqtt;
+package org.thingsboard.tools.service.shared;
 
 import lombok.Data;
-import org.thingsboard.mqtt.MqttClient;
-
-import java.util.Objects;
 
 @Data
 public class DeviceClient {
-    private String gatewayName;
-
-    private String deviceName;
-
-    private MqttClient mqttClient;
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        DeviceClient that = (DeviceClient) o;
-        return gatewayName.equals(that.gatewayName) &&
-                deviceName.equals(that.deviceName);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(gatewayName, deviceName);
-    }
+    protected String deviceName;
 }

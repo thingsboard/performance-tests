@@ -70,7 +70,7 @@ public class DefaultDashboardManager implements DashboardManager {
 
     @PostConstruct
     public void init() {
-        List<Role> readOnlyRoles = getRestClient().getRoles(RoleType.GROUP, new PageLink(1,0, "ReadOnly")).getData();
+        List<Role> readOnlyRoles = getRestClient().getRoles(RoleType.GROUP, new PageLink(1, 0, "ReadOnly")).getData();
         if (!readOnlyRoles.isEmpty()) {
             readOnlyRole = readOnlyRoles.get(0);
             log.info("Found ReadOnly role: {}", readOnlyRole.getId());

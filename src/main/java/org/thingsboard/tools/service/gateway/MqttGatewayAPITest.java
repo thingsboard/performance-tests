@@ -21,8 +21,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.IdBased;
-import org.thingsboard.tools.service.mqtt.DeviceClient;
-import org.thingsboard.tools.service.shared.AbstractAPITest;
+import org.thingsboard.tools.service.mqtt.MqttDeviceClient;
+import org.thingsboard.tools.service.shared.AbstractMqttAPITest;
+import org.thingsboard.tools.service.shared.DeviceClient;
 
 import javax.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
@@ -37,7 +38,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-public class MqttGatewayAPITest extends AbstractAPITest implements GatewayAPITest {
+public class MqttGatewayAPITest extends AbstractMqttAPITest implements GatewayAPITest {
 
     @Value("${gateway.startIdx}")
     int gatewayStartIdxConfig;
@@ -112,7 +113,7 @@ public class MqttGatewayAPITest extends AbstractAPITest implements GatewayAPITes
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
             int deviceIdx = i - deviceStartIdx;
             int gatewayIdx = deviceIdx % gatewayCount;
-            DeviceClient client = new DeviceClient();
+            MqttDeviceClient client = new MqttDeviceClient();
             client.setMqttClient(mqttClients.get(gatewayIdx));
             client.setDeviceName(getToken(false, i));
             client.setGatewayName(getToken(true, gatewayIdx));
@@ -125,11 +126,11 @@ public class MqttGatewayAPITest extends AbstractAPITest implements GatewayAPITes
         super.runApiTests(deviceClients.size());
     }
 
-
-    @Override
-    protected String getWarmUpTopic() {
-        return "v1/gateway/connect";
-    }
+//
+//    @Override
+//    protected String getWarmUpTopic() {
+//        return "v1/gateway/connect";
+//    }
 
     @Override
     protected byte[] getData(String deviceName) {
@@ -138,7 +139,8 @@ public class MqttGatewayAPITest extends AbstractAPITest implements GatewayAPITes
 
     @Override
     protected void runApiTestIteration(int iteration, AtomicInteger totalSuccessPublishedCount, AtomicInteger totalFailedPublishedCount, CountDownLatch testDurationLatch) {
-        runApiTestIteration(iteration, totalSuccessPublishedCount, totalFailedPublishedCount, testDurationLatch, true);
+        log.info("[{}] Starting performance iteration for {} {}...", iteration, mqttClients.size(), "gateways");
+        super.runApiTestIteration(iteration, totalSuccessPublishedCount, totalFailedPublishedCount, testDurationLatch);
     }
 
     @Override
@@ -148,13 +150,12 @@ public class MqttGatewayAPITest extends AbstractAPITest implements GatewayAPITes
 
     @Override
     protected void logSuccessTestMessage(int iteration, DeviceClient client) {
-        log.debug("[{}] Message was successfully published to device: {} and gateway: {}", iteration, client.getDeviceName(), client.getGatewayName());
+        log.debug("[{}] Message was successfully published to device: {} and gateway: {}", iteration, client.getDeviceName(), ((MqttDeviceClient) client).getGatewayName());
     }
 
     @Override
-    protected void logFailureTestMessage(int iteration, DeviceClient client, Future<?> future) {
-        log.error("[{}] Error while publishing message to device: {} and gateway: {}", iteration, client.getDeviceName(), client.getGatewayName(),
-                future.cause());
+    protected void logFailureTestMessage(int iteration, DeviceClient client, Throwable t) {
+        log.error("[{}] Error while publishing message to device: {} and gateway: {}", iteration, client.getDeviceName(), ((MqttDeviceClient) client).getGatewayName(), t);
     }
 
     @Override

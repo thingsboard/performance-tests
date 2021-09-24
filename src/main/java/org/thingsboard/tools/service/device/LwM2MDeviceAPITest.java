@@ -17,11 +17,11 @@ package org.thingsboard.tools.service.device;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.IdBased;
-import org.thingsboard.tools.service.mqtt.MqttDeviceClient;
-import org.thingsboard.tools.service.shared.AbstractMqttAPITest;
+import org.thingsboard.tools.service.lwm2m.LwM2MClient;
+import org.thingsboard.tools.service.lwm2m.LwM2MDeviceClient;
+import org.thingsboard.tools.service.shared.AbstractLwM2MAPITest;
 import org.thingsboard.tools.service.shared.DeviceClient;
 
 import java.nio.charset.StandardCharsets;
@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-public class MqttDeviceAPITest extends AbstractMqttAPITest implements DeviceAPITest {
+public class LwM2MDeviceAPITest extends AbstractLwM2MAPITest implements DeviceAPITest {
 
     static String dataAsStr = "{\"t1\":73}";
     static byte[] data = dataAsStr.getBytes(StandardCharsets.UTF_8);
@@ -51,13 +51,8 @@ public class MqttDeviceAPITest extends AbstractMqttAPITest implements DeviceAPIT
 
     @Override
     public void runApiTests() throws InterruptedException {
-        super.runApiTests(mqttClients.size());
+        super.runApiTests(lwM2MClients.size());
     }
-
-//    @Override
-//    protected String getWarmUpTopic() {
-//        return "v1/devices/me/telemetry";
-//    }
 
     @Override
     protected byte[] getData(String deviceName) {
@@ -66,13 +61,8 @@ public class MqttDeviceAPITest extends AbstractMqttAPITest implements DeviceAPIT
 
     @Override
     protected void runApiTestIteration(int iteration, AtomicInteger totalSuccessPublishedCount, AtomicInteger totalFailedPublishedCount, CountDownLatch testDurationLatch) {
-        log.info("[{}] Starting performance iteration for {} {}...", iteration, mqttClients.size(), "devices");
+        log.info("[{}] Starting performance iteration for {} {}...", iteration, lwM2MClients.size(), "devices");
         super.runApiTestIteration(iteration, totalSuccessPublishedCount, totalFailedPublishedCount, testDurationLatch);
-    }
-
-    @Override
-    protected String getTestTopic() {
-        return telemetryTest ? "v1/devices/me/telemetry" : "v1/devices/me/attributes";
     }
 
     @Override
@@ -112,15 +102,13 @@ public class MqttDeviceAPITest extends AbstractMqttAPITest implements DeviceAPIT
         if (pack != null && !pack.isEmpty()) {
             connectDevices(pack, totalConnectedCount, false);
         }
-//        reportScheduledFuture = restClientService.getScheduler().scheduleAtFixedRate(this::reportMqttClientsStats, 10, 10, TimeUnit.SECONDS);
         mapDevicesToDeviceClientConnections();
     }
 
     private void mapDevicesToDeviceClientConnections() {
-        for (MqttClient mqttClient : mqttClients) {
-            MqttDeviceClient client = new MqttDeviceClient();
-            client.setMqttClient(mqttClient);
-            client.setDeviceName(mqttClient.getClientConfig().getUsername());
+        for (LwM2MClient lwM2MClient : lwM2MClients) {
+            LwM2MDeviceClient client = new LwM2MDeviceClient();
+            client.setDeviceName(lwM2MClient.getName());
             deviceClients.add(client);
         }
     }

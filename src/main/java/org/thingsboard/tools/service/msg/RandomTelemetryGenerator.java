@@ -34,7 +34,7 @@ public class RandomTelemetryGenerator extends BaseRandomGenerator implements Mes
 //        } else if (percent < 59) {
 //            return new Msg(getSmallRandomMessage(deviceName));
 //        } else if (percent < 99) {
-            return new Msg(getRandomMessage(deviceName));
+        return new Msg(getRandomMessage(deviceName));
 //        } else {
 //            return new Msg(getHugeRandomMessage(deviceName));
 //        }

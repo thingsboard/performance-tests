@@ -22,7 +22,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 
 import java.util.Arrays;
 
-@SpringBootApplication(        exclude = {
+@SpringBootApplication(exclude = {
         org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration.class
 })
 public class PerformanceTestsApplication {

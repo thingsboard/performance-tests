@@ -13,21 +13,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.thingsboard.tools.service.gateway;
+package org.thingsboard.tools.service.lwm2m;
 
-public interface GatewayAPITest {
+import lombok.Data;
+import org.thingsboard.tools.service.shared.DeviceClient;
 
-    void createDevices() throws Exception;
+import java.util.Objects;
 
-    void createGateways() throws Exception;
+@Data
+public class LwM2MDeviceClient extends DeviceClient {
 
-    void removeDevices() throws Exception;
+    private LwM2MClient client;
 
-    void removeGateways() throws Exception;
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        LwM2MDeviceClient that = (LwM2MDeviceClient) o;
+        return deviceName.equals(that.deviceName);
+    }
 
-    void connectGateways() throws InterruptedException;
-
-    void warmUpDevices() throws InterruptedException;
-
-    void runApiTests() throws InterruptedException;
+    @Override
+    public int hashCode() {
+        return Objects.hash(deviceName);
+    }
 }
