@@ -24,9 +24,23 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.util.CollectionUtils;
 import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.mqtt.MqttClientConfig;
 import org.thingsboard.mqtt.MqttConnectResult;
+import org.thingsboard.server.common.data.Device;
+import org.thingsboard.server.common.data.DeviceProfile;
+import org.thingsboard.server.common.data.DeviceProfileInfo;
+import org.thingsboard.server.common.data.DeviceProfileProvisionType;
+import org.thingsboard.server.common.data.DeviceProfileType;
+import org.thingsboard.server.common.data.DeviceTransportType;
+import org.thingsboard.server.common.data.device.profile.DefaultDeviceProfileConfiguration;
+import org.thingsboard.server.common.data.device.profile.DefaultDeviceProfileTransportConfiguration;
+import org.thingsboard.server.common.data.device.profile.DeviceProfileData;
+import org.thingsboard.server.common.data.device.profile.DisabledDeviceProfileProvisionConfiguration;
+import org.thingsboard.server.common.data.id.CustomerId;
+import org.thingsboard.server.common.data.id.DeviceProfileId;
+import org.thingsboard.server.common.data.page.PageLink;
 import org.thingsboard.tools.service.mqtt.MqttDeviceClient;
 import org.thingsboard.tools.service.msg.Msg;
 
@@ -40,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -145,6 +160,108 @@ public abstract class AbstractMqttAPITest extends AbstractAPITest {
                     }
             );
         }
+    }
+
+    @Override
+    protected List<Device> createEntities(int startIdx, int endIdx, boolean isGateway, boolean setCredentials) throws InterruptedException {
+        List<Device> result;
+        if (isGateway) {
+            result = Collections.synchronizedList(new ArrayList<>(1024));
+        } else {
+            result = Collections.synchronizedList(new ArrayList<>(1024 * 1024));
+        }
+        int entityCount = endIdx - startIdx;
+        log.info("Creating {} {}...", entityCount, isGateway ? "gateways" : "devices");
+        CountDownLatch latch = new CountDownLatch(entityCount);
+        AtomicInteger count = new AtomicInteger();
+        List<CustomerId> customerIds = customerManager.getCustomerIds();
+
+        if (isGateway) {
+            createDeviceProfile("gateway");
+        } else {
+            createDeviceProfile("device");
+        }
+
+        for (int i = startIdx; i < endIdx; i++) {
+            final int tokenNumber = i;
+            restClientService.getHttpExecutor().submit(() -> {
+                Device entity = new Device();
+                try {
+                    String token = getToken(isGateway, tokenNumber);
+                    if (isGateway) {
+                        entity.setName(token);
+                        entity.setType("gateway");
+                        entity.setAdditionalInfo(mapper.createObjectNode().putObject("additionalInfo").put("gateway", true));
+                    } else {
+                        entity.setName(token);
+                        entity.setType("device");
+                    }
+
+                    if (!customerIds.isEmpty()) {
+                        int entityIdx = tokenNumber - startIdx;
+                        int customerIdx = entityIdx % customerIds.size();
+                        CustomerId customerId = customerIds.get(customerIdx);
+                        entity.setOwnerId(customerId);
+                    }
+                    if (setCredentials) {
+                        entity = restClientService.getRestClient().saveDevice(entity, token);
+                    } else {
+                        entity = restClientService.getRestClient().saveDevice(entity);
+                    }
+
+                    result.add(entity);
+
+                    count.getAndIncrement();
+                } catch (Exception e) {
+                    log.error("Error while creating entity", e);
+                    if (entity != null && entity.getId() != null) {
+                        restClientService.getRestClient().deleteDevice(entity.getId());
+                    }
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+
+        ScheduledFuture<?> logScheduleFuture = restClientService.getLogScheduler().scheduleAtFixedRate(() -> {
+            try {
+                log.info("{} {} have been created so far...", count.get(), isGateway ? "gateways" : "devices");
+            } catch (Exception ignored) {
+            }
+        }, 0, DefaultRestClientService.LOG_PAUSE, TimeUnit.SECONDS);
+
+        latch.await();
+        logScheduleFuture.cancel(true);
+
+        log.info("{} {} have been created successfully!", result.size(), isGateway ? "gateways" : "devices");
+
+        return result;
+    }
+
+    @Override
+    protected DeviceProfileId createDeviceProfile(String name) {
+        List<DeviceProfileInfo> data = restClientService.getRestClient().getDeviceProfileInfos(
+                new PageLink(1, 0, name), DeviceTransportType.DEFAULT).getData();
+        if (!CollectionUtils.isEmpty(data)) {
+            return (DeviceProfileId) data.get(0).getId();
+        }
+
+        DeviceProfile deviceProfile = new DeviceProfile();
+        deviceProfile.setDefault(false);
+        deviceProfile.setName(name);
+        deviceProfile.setType(DeviceProfileType.DEFAULT);
+        deviceProfile.setTransportType(DeviceTransportType.DEFAULT);
+        deviceProfile.setProvisionType(DeviceProfileProvisionType.DISABLED);
+        deviceProfile.setDescription(name + " device profile");
+        DeviceProfileData deviceProfileData = new DeviceProfileData();
+        DefaultDeviceProfileConfiguration configuration = new DefaultDeviceProfileConfiguration();
+        DefaultDeviceProfileTransportConfiguration transportConfiguration = new DefaultDeviceProfileTransportConfiguration();
+        DisabledDeviceProfileProvisionConfiguration provisionConfiguration = new DisabledDeviceProfileProvisionConfiguration(null);
+        deviceProfileData.setConfiguration(configuration);
+        deviceProfileData.setTransportConfiguration(transportConfiguration);
+        deviceProfileData.setProvisionConfiguration(provisionConfiguration);
+        deviceProfile.setProfileData(deviceProfileData);
+        return restClientService.getRestClient().saveDeviceProfile(deviceProfile).getId();
     }
 
     protected void connectDevices(List<String> pack, AtomicInteger totalConnectedCount, boolean isGateway) throws InterruptedException {

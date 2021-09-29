@@ -16,6 +16,7 @@
 package org.thingsboard.tools.service.device;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.server.common.data.Device;
@@ -34,6 +35,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
+@ConditionalOnProperty(prefix = "device", value = "api", havingValue = "MQTT")
 public class MqttDeviceAPITest extends AbstractMqttAPITest implements DeviceAPITest {
 
     static String dataAsStr = "{\"t1\":73}";
@@ -53,11 +55,6 @@ public class MqttDeviceAPITest extends AbstractMqttAPITest implements DeviceAPIT
     public void runApiTests() throws InterruptedException {
         super.runApiTests(mqttClients.size());
     }
-
-//    @Override
-//    protected String getWarmUpTopic() {
-//        return "v1/devices/me/telemetry";
-//    }
 
     @Override
     protected byte[] getData(String deviceName) {

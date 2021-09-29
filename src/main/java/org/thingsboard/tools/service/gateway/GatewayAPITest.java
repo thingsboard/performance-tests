@@ -27,7 +27,5 @@ public interface GatewayAPITest {
 
     void connectGateways() throws InterruptedException;
 
-    void warmUpDevices() throws InterruptedException;
-
     void runApiTests() throws InterruptedException;
 }

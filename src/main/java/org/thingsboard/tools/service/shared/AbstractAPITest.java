@@ -18,6 +18,7 @@ package org.thingsboard.tools.service.shared;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
+import org.eclipse.leshan.core.model.InvalidDDFFileException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.util.CollectionUtils;
@@ -42,6 +43,7 @@ import org.thingsboard.tools.service.msg.RandomTelemetryGenerator;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -58,7 +60,7 @@ import java.util.regex.Pattern;
 @Slf4j
 public abstract class AbstractAPITest {
 
-    private static ObjectMapper mapper = new ObjectMapper();
+    public static ObjectMapper mapper = new ObjectMapper();
 
     protected ScheduledFuture<?> reportScheduledFuture;
 
@@ -159,53 +161,6 @@ public abstract class AbstractAPITest {
         devices = Collections.synchronizedList(entities);
     }
 
-    public void warmUpDevices() throws InterruptedException {
-//        log.info("Warming up {} devices...", deviceClients.size());
-//        AtomicInteger totalWarmedUpCount = new AtomicInteger();
-//        List<MqttDeviceClient> pack = null;
-//        for (MqttDeviceClient device : deviceClients) {
-//            if (pack == null) {
-//                pack = new ArrayList<>(warmUpPackSize);
-//            }
-//            pack.add(device);
-//            if (pack.size() == warmUpPackSize) {
-//                sendAndWaitPack(pack, totalWarmedUpCount);
-//                pack = null;
-//            }
-//        }
-//        if (pack != null && !pack.isEmpty()) {
-//            sendAndWaitPack(pack, totalWarmedUpCount);
-//        }
-//        log.info("{} devices have been warmed up successfully!", deviceClients.size());
-    }
-
-//    private void sendAndWaitPack(List<DeviceClient> pack, AtomicInteger totalWarmedUpCount) throws InterruptedException {
-//        CountDownLatch packLatch = new CountDownLatch(pack.size());
-//        for (DeviceClient deviceClient : pack) {
-//            restClientService.getScheduler().submit(() -> {
-//                deviceClient.getMqttClient().publish(getWarmUpTopic(), Unpooled.wrappedBuffer(getData(deviceClient.getDeviceName())), MqttQoS.AT_LEAST_ONCE)
-//                        .addListener(future -> {
-//                                    if (future.isSuccess()) {
-//                                        log.debug("Warm up Message was successfully published to device: {}", deviceClient.getDeviceName());
-//                                    } else {
-//                                        log.error("Error while publishing warm up message to device: {}", deviceClient.getDeviceName());
-//                                    }
-//                                    packLatch.countDown();
-//                                    totalWarmedUpCount.getAndIncrement();
-//                                }
-//                        );
-//            });
-//        }
-//        boolean succeeded = packLatch.await(10, TimeUnit.SECONDS);
-//        if (succeeded) {
-//            log.info("[{}] devices have been warmed up!", totalWarmedUpCount.get());
-//        } else {
-//            log.error("[{}] devices warmed up failed: {}!", totalWarmedUpCount.get(), packLatch.getCount());
-//        }
-//    }
-
-//    protected abstract String getWarmUpTopic();
-
     protected abstract byte[] getData(String deviceName);
 
     protected void runApiTests(int deviceCount) throws InterruptedException {
@@ -268,105 +223,9 @@ public abstract class AbstractAPITest {
         return client;
     }
 
-    protected List<Device> createEntities(int startIdx, int endIdx, boolean isGateway, boolean setCredentials) throws InterruptedException {
-        List<Device> result;
-        if (isGateway) {
-            result = Collections.synchronizedList(new ArrayList<>(1024));
-        } else {
-            result = Collections.synchronizedList(new ArrayList<>(1024 * 1024));
-        }
-        int entityCount = endIdx - startIdx;
-        log.info("Creating {} {}...", entityCount, isGateway ? "gateways" : "devices");
-        CountDownLatch latch = new CountDownLatch(entityCount);
-        AtomicInteger count = new AtomicInteger();
-        List<CustomerId> customerIds = customerManager.getCustomerIds();
+    protected abstract List<Device> createEntities(int startIdx, int endIdx, boolean isGateway, boolean setCredentials) throws InterruptedException;
 
-        if (isGateway) {
-            createDeviceProfile("gateway");
-        } else {
-            createDeviceProfile("device");
-        }
-
-        for (int i = startIdx; i < endIdx; i++) {
-            final int tokenNumber = i;
-            restClientService.getHttpExecutor().submit(() -> {
-                Device entity = new Device();
-                try {
-                    String token = getToken(isGateway, tokenNumber);
-                    if (isGateway) {
-                        entity.setName(token);
-                        entity.setType("gateway");
-                        entity.setAdditionalInfo(mapper.createObjectNode().putObject("additionalInfo").put("gateway", true));
-                    } else {
-                        entity.setName(token);
-                        entity.setType("device");
-                    }
-
-                    if (!customerIds.isEmpty()) {
-                        int entityIdx = tokenNumber - startIdx;
-                        int customerIdx = entityIdx % customerIds.size();
-                        CustomerId customerId = customerIds.get(customerIdx);
-                        entity.setOwnerId(customerId);
-                    }
-                    if (setCredentials) {
-                        entity = restClientService.getRestClient().saveDevice(entity, token);
-                    } else {
-                        entity = restClientService.getRestClient().saveDevice(entity);
-                    }
-
-                    result.add(entity);
-
-                    count.getAndIncrement();
-                } catch (Exception e) {
-                    log.error("Error while creating entity", e);
-                    if (entity != null && entity.getId() != null) {
-                        restClientService.getRestClient().deleteDevice(entity.getId());
-                    }
-                } finally {
-                    latch.countDown();
-                }
-            });
-        }
-
-        ScheduledFuture<?> logScheduleFuture = restClientService.getLogScheduler().scheduleAtFixedRate(() -> {
-            try {
-                log.info("{} {} have been created so far...", count.get(), isGateway ? "gateways" : "devices");
-            } catch (Exception ignored) {
-            }
-        }, 0, DefaultRestClientService.LOG_PAUSE, TimeUnit.SECONDS);
-
-        latch.await();
-        logScheduleFuture.cancel(true);
-
-        log.info("{} {} have been created successfully!", result.size(), isGateway ? "gateways" : "devices");
-
-        return result;
-    }
-
-    private DeviceProfileId createDeviceProfile(String name) {
-        List<DeviceProfileInfo> data = restClientService.getRestClient().getDeviceProfileInfos(
-                new PageLink(1, 0, name), DeviceTransportType.DEFAULT).getData();
-        if (!CollectionUtils.isEmpty(data)) {
-            return (DeviceProfileId) data.get(0).getId();
-        }
-
-        DeviceProfile deviceProfile = new DeviceProfile();
-        deviceProfile.setDefault(false);
-        deviceProfile.setName(name);
-        deviceProfile.setType(DeviceProfileType.DEFAULT);
-        deviceProfile.setTransportType(DeviceTransportType.DEFAULT);
-        deviceProfile.setProvisionType(DeviceProfileProvisionType.DISABLED);
-        deviceProfile.setDescription(name + " device profile");
-        DeviceProfileData deviceProfileData = new DeviceProfileData();
-        DefaultDeviceProfileConfiguration configuration = new DefaultDeviceProfileConfiguration();
-        DefaultDeviceProfileTransportConfiguration transportConfiguration = new DefaultDeviceProfileTransportConfiguration();
-        DisabledDeviceProfileProvisionConfiguration provisionConfiguration = new DisabledDeviceProfileProvisionConfiguration(null);
-        deviceProfileData.setConfiguration(configuration);
-        deviceProfileData.setTransportConfiguration(transportConfiguration);
-        deviceProfileData.setProvisionConfiguration(provisionConfiguration);
-        deviceProfile.setProfileData(deviceProfileData);
-        return restClientService.getRestClient().saveDeviceProfile(deviceProfile).getId();
-    }
+    protected abstract DeviceProfileId createDeviceProfile(String name);
 
     protected String getToken(boolean isGateway, int token) {
         return (isGateway ? "GW" : "DW") + String.format("%8d", token).replace(" ", "0");

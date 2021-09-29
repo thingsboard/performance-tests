@@ -15,22 +15,53 @@
  */
 package org.thingsboard.tools.service.shared;
 
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.eclipse.californium.core.network.CoapEndpoint;
+import org.eclipse.californium.core.network.config.NetworkConfig;
+import org.eclipse.californium.core.observe.ObservationStore;
+import org.eclipse.californium.scandium.DTLSConnector;
+import org.eclipse.californium.scandium.config.DtlsConnectorConfig;
+import org.eclipse.leshan.client.californium.LeshanClient;
+import org.eclipse.leshan.client.californium.LeshanClientBuilder;
+import org.eclipse.leshan.client.engine.DefaultRegistrationEngineFactory;
+import org.eclipse.leshan.client.object.Security;
+import org.eclipse.leshan.client.object.Server;
+import org.eclipse.leshan.client.resource.DummyInstanceEnabler;
+import org.eclipse.leshan.client.resource.ObjectsInitializer;
+import org.eclipse.leshan.core.californium.EndpointFactory;
+import org.eclipse.leshan.core.model.LwM2mModel;
+import org.eclipse.leshan.core.model.ObjectLoader;
+import org.eclipse.leshan.core.model.ObjectModel;
+import org.eclipse.leshan.core.model.StaticModel;
+import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeDecoder;
+import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeEncoder;
 import org.springframework.beans.factory.annotation.Value;
+import org.thingsboard.common.util.ThingsBoardThreadFactory;
 import org.thingsboard.tools.service.lwm2m.LwM2MClient;
 import org.thingsboard.tools.service.lwm2m.LwM2MDeviceClient;
 import org.thingsboard.tools.service.msg.Msg;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.eclipse.leshan.client.object.Security.noSec;
+import static org.eclipse.leshan.core.LwM2mId.ACCESS_CONTROL;
+import static org.eclipse.leshan.core.LwM2mId.DEVICE;
+import static org.eclipse.leshan.core.LwM2mId.SERVER;
 
 @Slf4j
 public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
+
+    private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(10, ThingsBoardThreadFactory.forName("lwm2m-scheduled"));
 
     protected final List<LwM2MClient> lwM2MClients = Collections.synchronizedList(new ArrayList<>());
 
@@ -39,11 +70,23 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
     private String mqttHost;
     @Value("${mqtt.port}")
 
+    protected static final int PORT = 5685;
+    protected static final Security SECURITY = noSec("coap://localhost:" + PORT, 123);
+    protected static final NetworkConfig COAP_CONFIG = new NetworkConfig().setString("COAP_PORT", Integer.toString(PORT));
+
     private static final int CONNECT_TIMEOUT = 5;
 
+    private List<ObjectModel> models;
+
+    @SneakyThrows
     @PostConstruct
     protected void init() {
         super.init();
+        String[] resources = new String[]{"0.xml", "1.xml", "2.xml", "3.xml", "19.xml"};
+        models = new ArrayList<>();
+        for (String resourceName : resources) {
+            models.addAll(ObjectLoader.loadDdfFile(AbstractLwM2MAPITest.class.getClassLoader().getResourceAsStream("lwm2m/" + resourceName), resourceName));
+        }
     }
 
     @Override
@@ -69,30 +112,87 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
         iterationLatch.countDown();
     }
 
-    private LwM2MClient initClient(String endpoint) throws Exception {
+    private LwM2MClient initClient(String endpoint, int i) throws Exception {
+        LwM2MClient client = new LwM2MClient();
+        client.setName(endpoint);
+        LeshanClient leshanClient;
 
-        return null;
+        LwM2mModel model = new StaticModel(models);
+        ObjectsInitializer initializer = new ObjectsInitializer(model);
+        initializer.setInstancesForObject(0, SECURITY);
+        initializer.setInstancesForObject(SERVER, new Server(123, 300));
+        initializer.setInstancesForObject(19, client);
+//        initializer.setInstancesForObject(DEVICE, new LwM2MClient());
+        initializer.setClassForObject(DEVICE, DummyInstanceEnabler.class);
+        initializer.setClassForObject(ACCESS_CONTROL, DummyInstanceEnabler.class);
+
+        DtlsConnectorConfig.Builder dtlsConfig = new DtlsConnectorConfig.Builder();
+        dtlsConfig.setRecommendedCipherSuitesOnly(true);
+        dtlsConfig.setClientOnly();
+
+        DefaultRegistrationEngineFactory engineFactory = new DefaultRegistrationEngineFactory();
+        engineFactory.setReconnectOnUpdate(false);
+        engineFactory.setResumeOnConnect(true);
+
+        EndpointFactory endpointFactory = new EndpointFactory() {
+
+            @Override
+            public CoapEndpoint createUnsecuredEndpoint(InetSocketAddress address, NetworkConfig coapConfig,
+                                                        ObservationStore store) {
+                CoapEndpoint.Builder builder = new CoapEndpoint.Builder();
+                builder.setInetSocketAddress(address);
+                builder.setNetworkConfig(coapConfig);
+                return builder.build();
+            }
+
+            @Override
+            public CoapEndpoint createSecuredEndpoint(DtlsConnectorConfig dtlsConfig, NetworkConfig coapConfig,
+                                                      ObservationStore store) {
+                CoapEndpoint.Builder builder = new CoapEndpoint.Builder();
+                DtlsConnectorConfig.Builder dtlsConfigBuilder = new DtlsConnectorConfig.Builder(dtlsConfig);
+                builder.setConnector(new DTLSConnector(dtlsConfigBuilder.build()));
+                builder.setNetworkConfig(coapConfig);
+                return builder.build();
+            }
+        };
+
+        LeshanClientBuilder builder = new LeshanClientBuilder(endpoint);
+        builder.setLocalAddress("0.0.0.0", 11000 + i);
+        builder.setObjects(initializer.createAll());
+        builder.setCoapConfig(COAP_CONFIG);
+        builder.setDtlsConfig(dtlsConfig);
+        builder.setRegistrationEngineFactory(engineFactory);
+        builder.setEndpointFactory(endpointFactory);
+        builder.setSharedExecutor(executor);
+        builder.setDecoder(new DefaultLwM2mNodeDecoder(true));
+        builder.setEncoder(new DefaultLwM2mNodeEncoder(true));
+        leshanClient = builder.build();
+
+        client.setLeshanClient(leshanClient);
+
+        leshanClient.start();
+
+
+        return client;
     }
 
     protected void connectDevices(List<String> pack, AtomicInteger totalConnectedCount, boolean isGateway) throws InterruptedException {
-        final String devicesType = isGateway ? "gateways" : "devices";
-        final String deviceType = isGateway ? "gateway" : "device";
-        log.info("Connecting {} {}...", pack.size(), devicesType);
+        log.info("Connecting {} devices...", pack.size());
         CountDownLatch connectLatch = new CountDownLatch(pack.size());
         for (String deviceName : pack) {
             restClientService.getWorkers().submit(() -> {
                 try {
-                    lwM2MClients.add(initClient(deviceName));
+                    lwM2MClients.add(initClient(deviceName, totalConnectedCount.incrementAndGet()));
                     totalConnectedCount.incrementAndGet();
                 } catch (Exception e) {
-                    log.error("Error while connect {}", deviceType, e);
+                    log.error("Error while connect {}", "device", e);
                 } finally {
                     connectLatch.countDown();
                 }
             });
         }
         connectLatch.await();
-        log.info("{} {} have been connected successfully!", totalConnectedCount.get(), devicesType);
+        log.info("{} devices have been connected successfully!", totalConnectedCount.get());
     }
 
 
@@ -102,6 +202,8 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
         for (LwM2MClient mqttClient : lwM2MClients) {
             mqttClient.destroy();
         }
+
+        executor.shutdownNow();
         super.destroy();
     }
 }

@@ -47,10 +47,6 @@ public class GatewayBaseTestExecutor extends BaseTestExecutor {
         if (testEnabled) {
             gatewayAPITest.connectGateways();
         }
-
-        if (warmupEnabled) {
-            gatewayAPITest.warmUpDevices();
-        }
     }
 
     @Override

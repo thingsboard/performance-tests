@@ -18,6 +18,7 @@ package org.thingsboard.tools.service.gateway;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.IdBased;
@@ -38,6 +39,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
+@ConditionalOnProperty(prefix = "device", value = "api", havingValue = "gateway")
 public class MqttGatewayAPITest extends AbstractMqttAPITest implements GatewayAPITest {
 
     @Value("${gateway.startIdx}")
@@ -125,12 +127,6 @@ public class MqttGatewayAPITest extends AbstractMqttAPITest implements GatewayAP
     public void runApiTests() throws InterruptedException {
         super.runApiTests(deviceClients.size());
     }
-
-//
-//    @Override
-//    protected String getWarmUpTopic() {
-//        return "v1/gateway/connect";
-//    }
 
     @Override
     protected byte[] getData(String deviceName) {
