@@ -29,7 +29,6 @@ import org.thingsboard.tools.service.msg.Msg;
 
 import javax.security.auth.Destroyable;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 @Slf4j

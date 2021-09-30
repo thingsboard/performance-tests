@@ -61,22 +61,18 @@ import static org.eclipse.leshan.core.LwM2mId.SERVER;
 @Slf4j
 public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
 
-    private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(10, ThingsBoardThreadFactory.forName("lwm2m-scheduled"));
+    private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(500, ThingsBoardThreadFactory.forName("lwm2m-scheduled"));
 
     protected final List<LwM2MClient> lwM2MClients = Collections.synchronizedList(new ArrayList<>());
 
-
-    @Value("${mqtt.host}")
-    private String mqttHost;
-    @Value("${mqtt.port}")
-
-    protected static final int PORT = 5685;
-    protected static final Security SECURITY = noSec("coap://localhost:" + PORT, 123);
-    protected static final NetworkConfig COAP_CONFIG = new NetworkConfig().setString("COAP_PORT", Integer.toString(PORT));
-
-    private static final int CONNECT_TIMEOUT = 5;
+    @Value("${lwm2m.host}")
+    private String lwm2mHost;
+    @Value("${lwm2m.port}")
+    protected int port;
 
     private List<ObjectModel> models;
+    private Security security;
+    private NetworkConfig coapConfig;
 
     @SneakyThrows
     @PostConstruct
@@ -87,6 +83,9 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
         for (String resourceName : resources) {
             models.addAll(ObjectLoader.loadDdfFile(AbstractLwM2MAPITest.class.getClassLoader().getResourceAsStream("lwm2m/" + resourceName), resourceName));
         }
+
+        security = noSec("coap://" + lwm2mHost + ":" + port, 123);
+        coapConfig = new NetworkConfig().setString("COAP_PORT", Integer.toString(port));
     }
 
     @Override
@@ -112,68 +111,70 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
         iterationLatch.countDown();
     }
 
-    private LwM2MClient initClient(String endpoint, int i) throws Exception {
-        LwM2MClient client = new LwM2MClient();
-        client.setName(endpoint);
-        LeshanClient leshanClient;
+    private LwM2MClient initClient(String endpoint, int i) throws InterruptedException {
+            LwM2MClient client = new LwM2MClient();
+            client.setName(endpoint);
+            LeshanClient leshanClient;
 
-        LwM2mModel model = new StaticModel(models);
-        ObjectsInitializer initializer = new ObjectsInitializer(model);
-        initializer.setInstancesForObject(0, SECURITY);
-        initializer.setInstancesForObject(SERVER, new Server(123, 300));
-        initializer.setInstancesForObject(19, client);
-//        initializer.setInstancesForObject(DEVICE, new LwM2MClient());
-        initializer.setClassForObject(DEVICE, DummyInstanceEnabler.class);
-        initializer.setClassForObject(ACCESS_CONTROL, DummyInstanceEnabler.class);
+            LwM2mModel model = new StaticModel(models);
+            ObjectsInitializer initializer = new ObjectsInitializer(model);
+            initializer.setInstancesForObject(0, security);
+            initializer.setInstancesForObject(SERVER, new Server(123, 300));
+            initializer.setInstancesForObject(19, client);
+            initializer.setClassForObject(DEVICE, DummyInstanceEnabler.class);
+            initializer.setClassForObject(ACCESS_CONTROL, DummyInstanceEnabler.class);
+            DtlsConnectorConfig.Builder dtlsConfig = new DtlsConnectorConfig.Builder();
+            dtlsConfig.setRecommendedCipherSuitesOnly(true);
+            dtlsConfig.setClientOnly();
 
-        DtlsConnectorConfig.Builder dtlsConfig = new DtlsConnectorConfig.Builder();
-        dtlsConfig.setRecommendedCipherSuitesOnly(true);
-        dtlsConfig.setClientOnly();
+            DefaultRegistrationEngineFactory engineFactory = new DefaultRegistrationEngineFactory();
+            engineFactory.setReconnectOnUpdate(false);
+            engineFactory.setResumeOnConnect(true);
 
-        DefaultRegistrationEngineFactory engineFactory = new DefaultRegistrationEngineFactory();
-        engineFactory.setReconnectOnUpdate(false);
-        engineFactory.setResumeOnConnect(true);
+            EndpointFactory endpointFactory = new EndpointFactory() {
 
-        EndpointFactory endpointFactory = new EndpointFactory() {
+                @Override
+                public CoapEndpoint createUnsecuredEndpoint(InetSocketAddress address, NetworkConfig coapConfig,
+                                                            ObservationStore store) {
+                    CoapEndpoint.Builder builder = new CoapEndpoint.Builder();
+                    builder.setInetSocketAddress(address);
+                    builder.setNetworkConfig(coapConfig);
+                    return builder.build();
+                }
 
-            @Override
-            public CoapEndpoint createUnsecuredEndpoint(InetSocketAddress address, NetworkConfig coapConfig,
-                                                        ObservationStore store) {
-                CoapEndpoint.Builder builder = new CoapEndpoint.Builder();
-                builder.setInetSocketAddress(address);
-                builder.setNetworkConfig(coapConfig);
-                return builder.build();
-            }
+                @Override
+                public CoapEndpoint createSecuredEndpoint(DtlsConnectorConfig dtlsConfig, NetworkConfig coapConfig,
+                                                          ObservationStore store) {
+                    CoapEndpoint.Builder builder = new CoapEndpoint.Builder();
+                    DtlsConnectorConfig.Builder dtlsConfigBuilder = new DtlsConnectorConfig.Builder(dtlsConfig);
+                    builder.setConnector(new DTLSConnector(dtlsConfigBuilder.build()));
+                    builder.setNetworkConfig(coapConfig);
+                    return builder.build();
+                }
+            };
 
-            @Override
-            public CoapEndpoint createSecuredEndpoint(DtlsConnectorConfig dtlsConfig, NetworkConfig coapConfig,
-                                                      ObservationStore store) {
-                CoapEndpoint.Builder builder = new CoapEndpoint.Builder();
-                DtlsConnectorConfig.Builder dtlsConfigBuilder = new DtlsConnectorConfig.Builder(dtlsConfig);
-                builder.setConnector(new DTLSConnector(dtlsConfigBuilder.build()));
-                builder.setNetworkConfig(coapConfig);
-                return builder.build();
-            }
-        };
+            LeshanClientBuilder builder = new LeshanClientBuilder(endpoint);
+            builder.setLocalAddress("0.0.0.0", 11000 + i);
+            builder.setObjects(initializer.createAll());
+            builder.setCoapConfig(coapConfig);
+            builder.setDtlsConfig(dtlsConfig);
+            builder.setRegistrationEngineFactory(engineFactory);
+            builder.setEndpointFactory(endpointFactory);
+            builder.setSharedExecutor(executor);
+            builder.setDecoder(new
 
-        LeshanClientBuilder builder = new LeshanClientBuilder(endpoint);
-        builder.setLocalAddress("0.0.0.0", 11000 + i);
-        builder.setObjects(initializer.createAll());
-        builder.setCoapConfig(COAP_CONFIG);
-        builder.setDtlsConfig(dtlsConfig);
-        builder.setRegistrationEngineFactory(engineFactory);
-        builder.setEndpointFactory(endpointFactory);
-        builder.setSharedExecutor(executor);
-        builder.setDecoder(new DefaultLwM2mNodeDecoder(true));
-        builder.setEncoder(new DefaultLwM2mNodeEncoder(true));
-        leshanClient = builder.build();
+                    DefaultLwM2mNodeDecoder(true));
+            builder.setEncoder(new
 
-        client.setLeshanClient(leshanClient);
+                    DefaultLwM2mNodeEncoder(true));
+            leshanClient = builder.build();
 
-        leshanClient.start();
+            client.setLeshanClient(leshanClient);
 
+            Thread.sleep(1000);
+            leshanClient.start();
 
-        return client;
+            return client;
     }
 
     protected void connectDevices(List<String> pack, AtomicInteger totalConnectedCount, boolean isGateway) throws InterruptedException {

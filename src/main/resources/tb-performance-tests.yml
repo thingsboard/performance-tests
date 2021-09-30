@@ -31,6 +31,9 @@ mqtt:
     enabled: "${MQTT_SSL_ENABLED:false}"
     key_store: "${MQTT_SSL_KEY_STORE:mqttclient.jks}"
     key_store_password: "${MQTT_SSL_KEY_STORE_PASSWORD:password}"
+lwm2m:
+  host: "${LWM2M_HOST:localhost}"
+  port: "${LWM2M_PORT:5685}"
 device:
   # Device API to use - MQTT or HTTP or LWM2M
   api: "${DEVICE_API:LWM2M}"

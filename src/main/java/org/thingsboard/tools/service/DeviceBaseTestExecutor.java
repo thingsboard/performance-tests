@@ -57,7 +57,7 @@ public class DeviceBaseTestExecutor extends BaseTestExecutor {
     }
 
     @Override
-    protected void waitOtherClients() throws Exception {
+    protected void waitOtherClients() {
         if (testEnabled) {
             while (true) {
                 try {
