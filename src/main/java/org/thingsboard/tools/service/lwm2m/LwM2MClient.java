@@ -23,7 +23,6 @@ import org.eclipse.leshan.client.californium.LeshanClient;
 import org.eclipse.leshan.client.resource.BaseInstanceEnabler;
 import org.eclipse.leshan.client.servers.ServerIdentity;
 import org.eclipse.leshan.core.model.ObjectModel;
-import org.eclipse.leshan.core.request.ContentFormat;
 import org.eclipse.leshan.core.response.ReadResponse;
 import org.thingsboard.tools.service.msg.Msg;
 
@@ -44,7 +43,7 @@ public class LwM2MClient extends BaseInstanceEnabler implements Destroyable {
 
     private static final List<Integer> supportedResources = Arrays.asList(0);
 
-    private volatile byte[] data = {};
+    private volatile byte[] data;
 
     @Override
     public ReadResponse read(ServerIdentity identity, int resourceId) {

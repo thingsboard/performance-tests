@@ -46,7 +46,7 @@
         <dockerfile.skip>true</dockerfile.skip>
         <pkg.mainClass>org.thingsboard.integration.ThingsboardRemoteIntegrationApplication</pkg.mainClass>
         <pkg.implementationTitle>ThingsBoard Remote Integration Example</pkg.implementationTitle>
-        <thingsboard.version>3.3.2PE-MG11</thingsboard.version>
+        <thingsboard.version>3.3.2PE-MG12-SNAPSHOT</thingsboard.version>
         <docker.repo>thingsboard</docker.repo>
         <tb.docker.id>magenta</tb.docker.id>
         <tb-performance-test.docker.name>tb-magenta-performance-test</tb-performance-test.docker.name>

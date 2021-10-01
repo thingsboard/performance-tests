@@ -15,7 +15,6 @@
  */
 package org.thingsboard.tools.service.gateway;
 
-import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
