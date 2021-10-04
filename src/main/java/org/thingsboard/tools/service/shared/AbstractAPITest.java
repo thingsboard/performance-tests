@@ -16,6 +16,7 @@
 package org.thingsboard.tools.service.shared;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,10 +32,8 @@ import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -74,6 +73,8 @@ public abstract class AbstractAPITest {
     protected boolean telemetryTest;
     @Value("${test.mps:1000}")
     protected int testMessagesPerSecond;
+    @Value("${test.rmps:100}")
+    protected int testRpcMessagesPerSecond;
     @Value("${test.duration:60}")
     protected int testDurationInSec;
     @Value("${test.alarms.start:0}")
@@ -191,21 +192,9 @@ public abstract class AbstractAPITest {
         log.info("{} {} have been removed successfully! {} were failed for removal!", count.get(), isGateway ? "gateways" : "devices", entityIds.size() - count.get());
     }
 
-    protected DeviceClient getDeviceClient(Set<DeviceClient> iterationDevices, int iteration, int msgOffsetIdx) {
-        DeviceClient client;
-        if (sequentialTest) {
-            int iterationOffset = (iteration * testMessagesPerSecond) % deviceClients.size();
-            int idx = (iterationOffset + msgOffsetIdx) % deviceClients.size();
-            client = deviceClients.get(idx);
-        } else {
-            while (true) {
-                client = deviceClients.get(random.nextInt(deviceClients.size()));
-                if (iterationDevices.add(client)) {
-                    break;
-                }
-            }
-        }
-        return client;
+    protected int getDeviceIndex(int iteration, int msgOffsetIdx) {
+        int iterationOffset = (iteration * testMessagesPerSecond) % deviceClients.size();
+        return (iterationOffset + msgOffsetIdx) % deviceClients.size();
     }
 
     protected abstract List<Device> createEntities(int startIdx, int endIdx, boolean isGateway, boolean setCredentials) throws InterruptedException;
@@ -221,15 +210,14 @@ public abstract class AbstractAPITest {
                                        AtomicInteger totalFailedPublishedCount,
                                        CountDownLatch testDurationLatch) {
         try {
-            Set<DeviceClient> iterationDevices = new HashSet<>();
             AtomicInteger successPublishedCount = new AtomicInteger();
             AtomicInteger failedPublishedCount = new AtomicInteger();
-            CountDownLatch iterationLatch = new CountDownLatch(testMessagesPerSecond);
+            CountDownLatch iterationLatch = new CountDownLatch(testMessagesPerSecond + testRpcMessagesPerSecond);
             boolean alarmIteration = iteration >= alarmsStartTs && iteration < alarmsEndTs;
             int alarmCount = 0;
             for (int i = 0; i < testMessagesPerSecond; i++) {
                 boolean alarmRequired = alarmIteration && (alarmCount < alarmsPerSecond);
-                DeviceClient client = getDeviceClient(iterationDevices, iteration, i);
+                DeviceClient client = deviceClients.get(getDeviceIndex(iteration, i));
                 Msg message = (telemetryTest ? tsMsgGenerator : attrMsgGenerator).getNextMessage(client.getDeviceName(), alarmRequired);
                 if (message.isTriggersAlarm()) {
                     alarmCount++;
@@ -237,6 +225,15 @@ public abstract class AbstractAPITest {
                 restClientService.getWorkers().submit(() -> {
                     send(iteration, totalSuccessPublishedCount, totalFailedPublishedCount, successPublishedCount,
                             failedPublishedCount, testDurationLatch, iterationLatch, client, message);
+                });
+            }
+
+            for (int i = 0; i < testRpcMessagesPerSecond; i++) {
+                int deviceIndex = getDeviceIndex(iteration, i);
+                DeviceClient client = deviceClients.get(deviceIndex);
+                Device device = devices.get(deviceIndex);
+                restClientService.getWorkers().submit(() -> {
+                    restClientService.getRestClient().handleTwoWayDeviceRPCRequest(device.getId(), createRpc(client));
                 });
             }
             iterationLatch.await();
@@ -256,6 +253,8 @@ public abstract class AbstractAPITest {
                                  CountDownLatch iterationLatch,
                                  DeviceClient client,
                                  Msg message);
+
+    protected abstract ObjectNode createRpc(DeviceClient client);
 
     protected abstract void logSuccessTestMessage(int iteration, DeviceClient client);
 

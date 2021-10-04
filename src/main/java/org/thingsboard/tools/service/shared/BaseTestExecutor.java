@@ -44,9 +44,6 @@ public abstract class BaseTestExecutor {
     @Value("${device.deleteOnComplete}")
     protected boolean deviceDeleteOnComplete;
 
-    @Value("${warmup.enabled:true}")
-    protected boolean warmupEnabled;
-
     @Value("${test.enabled:true}")
     protected boolean testEnabled;
 
