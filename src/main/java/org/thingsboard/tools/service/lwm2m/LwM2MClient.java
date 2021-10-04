@@ -23,8 +23,9 @@ import org.eclipse.leshan.client.californium.LeshanClient;
 import org.eclipse.leshan.client.resource.BaseInstanceEnabler;
 import org.eclipse.leshan.client.servers.ServerIdentity;
 import org.eclipse.leshan.core.model.ObjectModel;
-import org.eclipse.leshan.core.request.ContentFormat;
+import org.eclipse.leshan.core.node.LwM2mResource;
 import org.eclipse.leshan.core.response.ReadResponse;
+import org.eclipse.leshan.core.response.WriteResponse;
 import org.thingsboard.tools.service.msg.Msg;
 
 import javax.security.auth.Destroyable;
@@ -45,6 +46,7 @@ public class LwM2MClient extends BaseInstanceEnabler implements Destroyable {
     private static final List<Integer> supportedResources = Arrays.asList(0);
 
     private volatile byte[] data = {};
+    private volatile boolean writeData = false;
 
     @Override
     public ReadResponse read(ServerIdentity identity, int resourceId) {
@@ -52,6 +54,14 @@ public class LwM2MClient extends BaseInstanceEnabler implements Destroyable {
             return ReadResponse.success(resourceId, data);
         }
         return ReadResponse.notFound();
+    }
+
+    @Override
+    public WriteResponse write(ServerIdentity identity, boolean replace, int resourceId, LwM2mResource value) {
+        if (resourceId == 1) {
+            return WriteResponse.success();
+        }
+        return super.write(identity, replace, resourceId, value);
     }
 
     @Override
@@ -63,6 +73,10 @@ public class LwM2MClient extends BaseInstanceEnabler implements Destroyable {
     public void send(Msg msg) {
         data = msg.getData();
         fireResourcesChange(0);
+    }
+
+    public boolean getNextRpcValue() {
+        return !writeData;
     }
 
     @Override

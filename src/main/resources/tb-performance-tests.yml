@@ -32,6 +32,8 @@ mqtt:
     key_store: "${MQTT_SSL_KEY_STORE:mqttclient.jks}"
     key_store_password: "${MQTT_SSL_KEY_STORE_PASSWORD:password}"
 lwm2m:
+  # In sec
+  lifetime: "${LWM2M_LIFETIME:300}"
   host: "${LWM2M_HOST:localhost}"
   port: "${LWM2M_PORT:5685}"
 device:
@@ -59,8 +61,6 @@ dashboard:
   deleteIfExists: "${DASHBOARD_DELETE_IF_EXISTS:true}"
   tenant: alarms.json # please use comma separated list for multiple dashboards: dashboard1.json, dashboard2.json
   shared: "devices.json"
-warmup:
-  enabled: "${WARMUP_ENABLED:false}"
 test:
   instanceIdx: "${INSTANCE_IDX:0}"
   useInstanceIdx: "${USE_INSTANCE_IDX:false}"
@@ -83,6 +83,8 @@ test:
     end: "${ALARM_STORM_END_SECOND:0}"
     # alarms per second should be less them messages per second.
     aps: "${ALARMS_PER_SECOND:10}"
+  rpc: "${TEST_RPC:true}"
+  rmps: "${RPC_MESSAGES_PER_SECOND:100}"
   http_pool_size: "${HTTP_POOL_SIZE:100}"
 
 

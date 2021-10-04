@@ -15,6 +15,7 @@
  */
 package org.thingsboard.tools.service.shared;
 
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.californium.core.network.CoapEndpoint;
@@ -69,6 +70,8 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
     private String lwm2mHost;
     @Value("${lwm2m.port}")
     protected int port;
+    @Value("${lwm2m.lifetime}")
+    protected long lifetime;
 
     private List<ObjectModel> models;
     private Security security;
@@ -111,6 +114,20 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
         iterationLatch.countDown();
     }
 
+    @Override
+    protected ObjectNode createRpc(DeviceClient client) {
+        ObjectNode rpcRequest = mapper.createObjectNode();
+        rpcRequest.put("method", "WriteReplace");
+        ObjectNode rpcParams = mapper.createObjectNode();
+        rpcParams.put("id", "/19/0/1");
+        rpcParams.put("value", true);
+        rpcRequest.set("params", rpcParams);
+        rpcRequest.put("persistent", ((LwM2MDeviceClient)client).getClient().getNextRpcValue());
+        rpcRequest.put("timeout", 10000);
+
+        return rpcRequest;
+    }
+
     private LwM2MClient initClient(String endpoint, int i) throws InterruptedException {
             LwM2MClient client = new LwM2MClient();
             client.setName(endpoint);
@@ -119,7 +136,7 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
             LwM2mModel model = new StaticModel(models);
             ObjectsInitializer initializer = new ObjectsInitializer(model);
             initializer.setInstancesForObject(0, security);
-            initializer.setInstancesForObject(SERVER, new Server(123, 300));
+            initializer.setInstancesForObject(SERVER, new Server(123, lifetime));
             initializer.setInstancesForObject(19, client);
             initializer.setClassForObject(DEVICE, DummyInstanceEnabler.class);
             initializer.setClassForObject(ACCESS_CONTROL, DummyInstanceEnabler.class);

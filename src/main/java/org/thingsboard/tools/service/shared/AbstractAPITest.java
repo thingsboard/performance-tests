@@ -16,26 +16,13 @@
 package org.thingsboard.tools.service.shared;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.netty.util.concurrent.Future;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.leshan.core.model.InvalidDDFFileException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.util.CollectionUtils;
 import org.thingsboard.server.common.data.Device;
-import org.thingsboard.server.common.data.DeviceProfile;
-import org.thingsboard.server.common.data.DeviceProfileInfo;
-import org.thingsboard.server.common.data.DeviceProfileProvisionType;
-import org.thingsboard.server.common.data.DeviceProfileType;
-import org.thingsboard.server.common.data.DeviceTransportType;
-import org.thingsboard.server.common.data.device.profile.DefaultDeviceProfileConfiguration;
-import org.thingsboard.server.common.data.device.profile.DefaultDeviceProfileTransportConfiguration;
-import org.thingsboard.server.common.data.device.profile.DeviceProfileData;
-import org.thingsboard.server.common.data.device.profile.DisabledDeviceProfileProvisionConfiguration;
-import org.thingsboard.server.common.data.id.CustomerId;
 import org.thingsboard.server.common.data.id.DeviceId;
 import org.thingsboard.server.common.data.id.DeviceProfileId;
-import org.thingsboard.server.common.data.page.PageLink;
 import org.thingsboard.tools.service.customer.CustomerManager;
 import org.thingsboard.tools.service.msg.Msg;
 import org.thingsboard.tools.service.msg.RandomAttributesGenerator;
@@ -43,7 +30,6 @@ import org.thingsboard.tools.service.msg.RandomTelemetryGenerator;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -89,6 +75,8 @@ public abstract class AbstractAPITest {
     protected boolean telemetryTest;
     @Value("${test.mps:1000}")
     protected int testMessagesPerSecond;
+    @Value("${test.rmps:100}")
+    protected int testRpcMessagesPerSecond;
     @Value("${test.duration:60}")
     protected int testDurationInSec;
     @Value("${test.alarms.start:0}")
@@ -105,6 +93,7 @@ public abstract class AbstractAPITest {
     @Autowired
     protected RestClientService restClientService;
     @Autowired
+
     protected CustomerManager customerManager;
 
     protected List<Device> devices = Collections.synchronizedList(new ArrayList<>(1024 * 1024));
@@ -252,6 +241,9 @@ public abstract class AbstractAPITest {
                 restClientService.getWorkers().submit(() -> {
                     send(iteration, totalSuccessPublishedCount, totalFailedPublishedCount, successPublishedCount,
                             failedPublishedCount, testDurationLatch, iterationLatch, client, message);
+                    int percent = random.nextInt(100);
+//                    if (percent == 10) {
+//                        restClientService.getRestClient().handleTwoWayDeviceRPCRequest(devices.get(i).getId(), createRpc(client));                    }
                 });
             }
             iterationLatch.await();
@@ -271,6 +263,8 @@ public abstract class AbstractAPITest {
                                  CountDownLatch iterationLatch,
                                  DeviceClient client,
                                  Msg message);
+
+    protected abstract ObjectNode createRpc(DeviceClient client);
 
     protected abstract void logSuccessTestMessage(int iteration, DeviceClient client);
 
