@@ -234,6 +234,7 @@ public abstract class AbstractAPITest {
                 Device device = devices.get(deviceIndex);
                 restClientService.getWorkers().submit(() -> {
                     restClientService.getRestClient().handleTwoWayDeviceRPCRequest(device.getId(), createRpc(client));
+                    iterationLatch.countDown();
                 });
             }
             iterationLatch.await();

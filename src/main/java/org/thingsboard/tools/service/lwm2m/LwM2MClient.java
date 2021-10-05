@@ -31,6 +31,7 @@ import org.thingsboard.tools.service.msg.Msg;
 import javax.security.auth.Destroyable;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 public class LwM2MClient extends BaseInstanceEnabler implements Destroyable {
@@ -45,12 +46,13 @@ public class LwM2MClient extends BaseInstanceEnabler implements Destroyable {
 
     private static final List<Integer> supportedResources = Arrays.asList(0,1);
 
-    private volatile byte[] data;
-    private volatile boolean writeData = false;
+    private volatile byte[] data = {};
+    private volatile long writeData = 0;
+    private AtomicLong writeDataCount = new AtomicLong(0);
 
     @Override
     public ReadResponse read(ServerIdentity identity, int resourceId) {
-        if (data != null && resourceId == 0) {
+        if (resourceId == 0) {
             return ReadResponse.success(resourceId, data);
         }
         return ReadResponse.notFound();
@@ -59,13 +61,15 @@ public class LwM2MClient extends BaseInstanceEnabler implements Destroyable {
     @Override
     public WriteResponse write(ServerIdentity identity, boolean replace, int resourceId, LwM2mResource value) {
         if (resourceId == 1) {
+            WriteResponse response;
             Long v = (Long) value.getValue();
-            boolean result = v != 0;
-            if (result == writeData) {
-                return WriteResponse.badRequest("");
+            if (v == writeData + 1) {
+                response =  WriteResponse.success();
+            } else {
+                response =  WriteResponse.badRequest(String.format("Expected value: %d, but was %d", writeData + 1, v ));
             }
-            writeData = result;
-            return WriteResponse.success();
+            writeData = v;
+            return response;
         }
         return super.write(identity, replace, resourceId, value);
     }
@@ -81,8 +85,8 @@ public class LwM2MClient extends BaseInstanceEnabler implements Destroyable {
         fireResourcesChange(0);
     }
 
-    public boolean getNextRpcValue() {
-        return !writeData;
+    public long getNextRpcValue() {
+        return writeDataCount.incrementAndGet();
     }
 
     @Override

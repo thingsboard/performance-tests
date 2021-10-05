@@ -64,6 +64,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.eclipse.leshan.client.object.Security.noSec;
 import static org.eclipse.leshan.core.LwM2mId.ACCESS_CONTROL;
 import static org.eclipse.leshan.core.LwM2mId.DEVICE;
+import static org.eclipse.leshan.core.LwM2mId.SECURITY;
 import static org.eclipse.leshan.core.LwM2mId.SERVER;
 
 @Slf4j
@@ -139,11 +140,10 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
         rpcRequest.put("method", "WriteReplace");
         ObjectNode rpcParams = mapper.createObjectNode();
         rpcParams.put("id", "/19/0/1");
-        boolean nextRpcValue = ((LwM2MDeviceClient) client).getClient().getNextRpcValue();
-        rpcParams.put("value", nextRpcValue ? 1 : 0);
+        rpcParams.put("value", ((LwM2MDeviceClient) client).getClient().getNextRpcValue());
         rpcRequest.set("params", rpcParams);
         rpcRequest.put("persistent", true);
-        rpcRequest.put("timeout", 10000);
+        rpcRequest.put("timeout", 60000);
 
         return rpcRequest;
     }
@@ -155,7 +155,7 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
 
         LwM2mModel model = new StaticModel(models);
         ObjectsInitializer initializer = new ObjectsInitializer(model);
-        initializer.setInstancesForObject(0, security);
+        initializer.setInstancesForObject(SECURITY, security);
         initializer.setInstancesForObject(SERVER, new Server(123, lifetime));
         initializer.setInstancesForObject(19, client);
         initializer.setClassForObject(DEVICE, DummyInstanceEnabler.class);
