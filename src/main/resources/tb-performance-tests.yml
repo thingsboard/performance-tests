@@ -60,7 +60,7 @@ dashboard:
   deleteOnComplete: "${DASHBOARD_DELETE_ON_COMPLETE:false}"
   deleteIfExists: "${DASHBOARD_DELETE_IF_EXISTS:true}"
   tenant: alarms.json # please use comma separated list for multiple dashboards: dashboard1.json, dashboard2.json
-  shared: "devices.json"
+  shared: "statistics.json"
 test:
   instanceIdx: "${INSTANCE_IDX:0}"
   useInstanceIdx: "${USE_INSTANCE_IDX:false}"
@@ -68,7 +68,7 @@ test:
   instanceIdxRegexSource: "${INSTANCE_IDX_REGEX_SOURCE:}"
   instanceIdxRegex: "${INSTANCE_IDX_REGEX:([0-9]+)$}"
   enabled: "${TEST_ENABLED:false}"
-  updateRootRuleChain: "${UPDATE_ROOT_RULE_CHAIN:false}"
+  updateRootRuleChain: "${UPDATE_ROOT_RULE_CHAIN:true}"
   revertRootRuleChain: "${REVERT_ROOT_RULE_CHAIN:false}"
   # Test API to use - device or gateway
   api: "${TEST_API:device}"

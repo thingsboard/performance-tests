@@ -143,7 +143,8 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
         rpcParams.put("value", ((LwM2MDeviceClient) client).getClient().getNextRpcValue());
         rpcRequest.set("params", rpcParams);
         rpcRequest.put("persistent", true);
-        rpcRequest.put("timeout", 60000);
+        rpcRequest.put("retries", 3);
+        rpcRequest.put("timeout", 600000);
 
         return rpcRequest;
     }
@@ -207,7 +208,7 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
 
         client.setLeshanClient(leshanClient);
 
-        Thread.sleep(1000);
+        Thread.sleep(1500);
         leshanClient.start();
 
         return client;

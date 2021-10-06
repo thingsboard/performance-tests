@@ -213,15 +213,15 @@ public abstract class AbstractAPITest {
             AtomicInteger successPublishedCount = new AtomicInteger();
             AtomicInteger failedPublishedCount = new AtomicInteger();
             CountDownLatch iterationLatch = new CountDownLatch(testMessagesPerSecond + testRpcMessagesPerSecond);
-            boolean alarmIteration = iteration >= alarmsStartTs && iteration < alarmsEndTs;
-            int alarmCount = 0;
+//            boolean alarmIteration = iteration >= alarmsStartTs && iteration < alarmsEndTs;
+//            int alarmCount = 0;
             for (int i = 0; i < testMessagesPerSecond; i++) {
-                boolean alarmRequired = alarmIteration && (alarmCount < alarmsPerSecond);
+//                boolean alarmRequired = alarmIteration && (alarmCount < alarmsPerSecond);
                 DeviceClient client = deviceClients.get(getDeviceIndex(iteration, i));
-                Msg message = (telemetryTest ? tsMsgGenerator : attrMsgGenerator).getNextMessage(client.getDeviceName(), alarmRequired);
-                if (message.isTriggersAlarm()) {
-                    alarmCount++;
-                }
+                Msg message = (telemetryTest ? tsMsgGenerator : attrMsgGenerator).getNextMessage(client.getDeviceName(), false);
+//                if (message.isTriggersAlarm()) {
+//                    alarmCount++;
+//                }
                 restClientService.getWorkers().submit(() -> {
                     send(iteration, totalSuccessPublishedCount, totalFailedPublishedCount, successPublishedCount,
                             failedPublishedCount, testDurationLatch, iterationLatch, client, message);
@@ -238,7 +238,7 @@ public abstract class AbstractAPITest {
                 });
             }
             iterationLatch.await();
-            log.info("[{}] Completed performance iteration. Success: {}, Failed: {}, Alarms: {}", iteration, successPublishedCount.get(), failedPublishedCount.get(), alarmCount);
+            log.info("[{}] Completed performance iteration. Success: {}, Failed: {}, Alarms: {}", iteration, successPublishedCount.get(), failedPublishedCount.get(), 0);
             testDurationLatch.countDown();
         } catch (Throwable t) {
             log.warn("[{}] Failed to process iteration", iteration, t);

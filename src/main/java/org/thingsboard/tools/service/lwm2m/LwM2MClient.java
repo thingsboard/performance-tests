@@ -48,7 +48,7 @@ public class LwM2MClient extends BaseInstanceEnabler implements Destroyable {
 
     private volatile byte[] data = {};
     private volatile long writeData = 0;
-    private AtomicLong writeDataCount = new AtomicLong(0);
+    private final AtomicLong writeDataCount = new AtomicLong(0);
 
     @Override
     public ReadResponse read(ServerIdentity identity, int resourceId) {
@@ -63,7 +63,7 @@ public class LwM2MClient extends BaseInstanceEnabler implements Destroyable {
         if (resourceId == 1) {
             WriteResponse response;
             Long v = (Long) value.getValue();
-            if (v == writeData + 1) {
+            if (v == writeData || v == writeData + 1) {
                 response =  WriteResponse.success();
             } else {
                 response =  WriteResponse.badRequest(String.format("Expected value: %d, but was %d", writeData + 1, v ));
