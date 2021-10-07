@@ -109,7 +109,7 @@ public class DefaultCustomerManager implements CustomerManager {
                     customerAdmin = getRestClient().saveUser(customerAdmin, false);
                     //TODO: REST CLIENT
                     getRestClient().addEntitiesToEntityGroup(customerAdmins.getId(), Collections.singletonList(customerAdmin.getId()));
-                    getRestClient().activateUser(customerAdmin.getId(), "customer");
+                    getRestClient().activateUser(customerAdmin.getId(), "Test_customer123");
                     customerIds.add(customer.getId());
                     count.getAndIncrement();
                 } catch (Exception e) {

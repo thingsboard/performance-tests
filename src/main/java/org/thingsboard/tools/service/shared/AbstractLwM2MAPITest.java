@@ -70,7 +70,7 @@ import static org.eclipse.leshan.core.LwM2mId.SERVER;
 @Slf4j
 public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
 
-    private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(500, ThingsBoardThreadFactory.forName("lwm2m-scheduled"));
+    private ScheduledExecutorService executor;
 
     protected final List<LwM2MClient> lwM2MClients = Collections.synchronizedList(new ArrayList<>());
 
@@ -80,6 +80,8 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
     protected int port;
     @Value("${lwm2m.lifetime}")
     protected long lifetime;
+    @Value("${lwm2m.pool_size}")
+    private int lwm2mPoolSize;
 
     private List<ObjectModel> models;
     private Security security;
@@ -88,6 +90,7 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
     @SneakyThrows
     @PostConstruct
     protected void init() {
+        executor = Executors.newScheduledThreadPool(lwm2mPoolSize, ThingsBoardThreadFactory.forName("lwm2m-scheduled"));
         super.init();
         String[] resources = new String[]{"0.xml", "1.xml", "2.xml", "3.xml", "19.xml"};
         models = new ArrayList<>();
@@ -98,13 +101,17 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
         List<TbResourceInfo> models = restClientService.getRestClient().getResources(new PageLink(1)).getData();
 
         if (CollectionUtils.isEmpty(models) || !models.get(0).getResourceKey().equals("19_1.0")) {
-            TbResource lwModel = new TbResource();
-            lwModel.setResourceType(ResourceType.LWM2M_MODEL);
-            lwModel.setTitle("19.xml");
-            lwModel.setFileName("19.xml");
-            byte[] bytes = IOUtils.toByteArray(AbstractLwM2MAPITest.class.getClassLoader().getResourceAsStream("lwm2m/19.xml"));
-            lwModel.setData(Base64.getEncoder().encodeToString(bytes));
-            restClientService.getRestClient().saveResource(lwModel);
+            try {
+                TbResource lwModel = new TbResource();
+                lwModel.setResourceType(ResourceType.LWM2M_MODEL);
+                lwModel.setTitle("19.xml");
+                lwModel.setFileName("19.xml");
+                byte[] bytes = IOUtils.toByteArray(AbstractLwM2MAPITest.class.getClassLoader().getResourceAsStream("lwm2m/19.xml"));
+                lwModel.setData(Base64.getEncoder().encodeToString(bytes));
+                restClientService.getRestClient().saveResource(lwModel);
+            } catch (Exception e) {
+                log.info("Resource 19 already created");
+            }
         }
 
         security = noSec("coap://" + lwm2mHost + ":" + port, 123);
@@ -208,9 +215,8 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
 
         client.setLeshanClient(leshanClient);
 
-        Thread.sleep(1500);
         leshanClient.start();
-
+        Thread.sleep(3000);
         return client;
     }
 

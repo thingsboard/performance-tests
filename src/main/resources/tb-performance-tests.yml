@@ -36,6 +36,7 @@ lwm2m:
   lifetime: "${LWM2M_LIFETIME:300}"
   host: "${LWM2M_HOST:localhost}"
   port: "${LWM2M_PORT:5685}"
+  pool_size: "${LWM2M_POOL_SIZE:500}"
 device:
   # Device API to use - MQTT or HTTP or LWM2M
   api: "${DEVICE_API:LWM2M}"
