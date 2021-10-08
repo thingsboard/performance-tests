@@ -278,7 +278,7 @@ public class LwM2MDeviceAPITest extends AbstractLwM2MAPITest implements DeviceAP
             pack.add(device);
             if (pack.size() == warmUpPackSize) {
                 connectDevices(pack, totalConnectedCount, false);
-                Thread.sleep(100 + new Random().nextInt(100));
+                Thread.sleep(100 + new Random().nextInt(1000));
                 pack = null;
             }
         }

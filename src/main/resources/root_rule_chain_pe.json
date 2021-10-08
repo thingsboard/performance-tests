@@ -32,7 +32,7 @@
         },
         "type": "org.thingsboard.rule.engine.transform.TbChangeOriginatorNode",
         "name": "to Tenant",
-        "debugMode": true,
+        "debugMode": false,
         "configuration": {
           "originatorSource": "TENANT",
           "relationsQuery": {
@@ -56,7 +56,7 @@
         },
         "type": "org.thingsboard.rule.engine.transform.TbChangeOriginatorNode",
         "name": "to Tenant",
-        "debugMode": true,
+        "debugMode": false,
         "configuration": {
           "originatorSource": "TENANT",
           "relationsQuery": {
@@ -80,7 +80,7 @@
         },
         "type": "org.thingsboard.rule.engine.transform.TbChangeOriginatorNode",
         "name": "to Tenant",
-        "debugMode": true,
+        "debugMode": false,
         "configuration": {
           "originatorSource": "TENANT",
           "relationsQuery": {
@@ -176,7 +176,7 @@
         },
         "type": "org.thingsboard.rule.engine.transform.TbChangeOriginatorNode",
         "name": "to Tenant",
-        "debugMode": true,
+        "debugMode": false,
         "configuration": {
           "originatorSource": "TENANT",
           "relationsQuery": {
@@ -213,7 +213,7 @@
         },
         "type": "org.thingsboard.rule.engine.transform.TbChangeOriginatorNode",
         "name": "to Tenant",
-        "debugMode": true,
+        "debugMode": false,
         "configuration": {
           "originatorSource": "TENANT",
           "relationsQuery": {
@@ -237,7 +237,7 @@
         },
         "type": "org.thingsboard.rule.engine.analytics.incoming.TbSimpleAggMsgNode",
         "name": "count RPC",
-        "debugMode": true,
+        "debugMode": false,
         "configuration": {
           "inputValueKey": "method",
           "outputValueKey": "countRpc",
@@ -333,7 +333,7 @@
         },
         "type": "org.thingsboard.rule.engine.analytics.incoming.TbSimpleAggMsgNode",
         "name": "Count Delivered RPC",
-        "debugMode": true,
+        "debugMode": false,
         "configuration": {
           "inputValueKey": "id",
           "outputValueKey": "countDelivered",
@@ -365,7 +365,7 @@
         },
         "type": "org.thingsboard.rule.engine.analytics.incoming.TbSimpleAggMsgNode",
         "name": "Count Success RPC",
-        "debugMode": true,
+        "debugMode": false,
         "configuration": {
           "inputValueKey": "id",
           "outputValueKey": "countSuccess",
@@ -429,7 +429,7 @@
         },
         "type": "org.thingsboard.rule.engine.analytics.incoming.TbSimpleAggMsgNode",
         "name": "Count Sent RPC",
-        "debugMode": true,
+        "debugMode": false,
         "configuration": {
           "inputValueKey": "id",
           "outputValueKey": "countSent",
@@ -461,7 +461,7 @@
         },
         "type": "org.thingsboard.rule.engine.analytics.incoming.TbSimpleAggMsgNode",
         "name": "Count Queued RPC",
-        "debugMode": true,
+        "debugMode": false,
         "configuration": {
           "inputValueKey": "id",
           "outputValueKey": "countQueued",
@@ -493,7 +493,7 @@
         },
         "type": "org.thingsboard.rule.engine.analytics.incoming.TbSimpleAggMsgNode",
         "name": "count data",
-        "debugMode": true,
+        "debugMode": false,
         "configuration": {
           "inputValueKey": "data",
           "outputValueKey": "countData",
@@ -525,7 +525,7 @@
         },
         "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
         "name": "Data Filter",
-        "debugMode": true,
+        "debugMode": false,
         "configuration": {
           "jsScript": "if (msg.data) {\n    return true\n}\n\nreturn false;"
         }
@@ -538,7 +538,7 @@
         },
         "type": "org.thingsboard.rule.engine.transform.TbChangeOriginatorNode",
         "name": "to Tenant",
-        "debugMode": true,
+        "debugMode": false,
         "configuration": {
           "originatorSource": "TENANT",
           "relationsQuery": {
@@ -562,7 +562,7 @@
         },
         "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
         "name": "decode from Hex",
-        "debugMode": true,
+        "debugMode": false,
         "configuration": {
           "jsScript": "function hex2a(hexx) {\n    var hex = hexx.toString();//force conversion\n    var str = '';\n    for (var i = 0; i < hex.length; i += 2)\n        str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));\n    return str;\n}\n\nreturn {msg: JSON.parse(hex2a(msg.data)), metadata: metadata, msgType: msgType};"
         }
@@ -587,7 +587,7 @@
         },
         "type": "org.thingsboard.rule.engine.rpc.TbSendRPCRequestNode",
         "name": "RPC Call Request",
-        "debugMode": true,
+        "debugMode": false,
         "configuration": {
           "timeoutInSeconds": 60
         }

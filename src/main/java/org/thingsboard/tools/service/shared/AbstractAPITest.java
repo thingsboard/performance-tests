@@ -54,7 +54,7 @@ public abstract class AbstractAPITest {
     protected int deviceEndIdxConfig;
     @Value("${device.count}")
     protected int deviceCount;
-    @Value("${warmup.packSize:100}")
+    @Value("${warmup.packSize:2}")
     protected int warmUpPackSize;
     @Value("${test.instanceIdx:0}")
     protected int instanceIdxConfig;
