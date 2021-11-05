@@ -51,7 +51,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -63,6 +62,7 @@ import java.util.stream.Collectors;
 @ConditionalOnProperty(prefix = "device", value = "api", havingValue = "LWM2M")
 public class LwM2MDeviceAPITest extends AbstractLwM2MAPITest implements DeviceAPITest {
 
+    public static final int BATCH_SIZE = 5;
     protected final String TRANSPORT_CONFIGURATION = "{\n" +
             "  \"type\": \"LWM2M\",\n" +
             "  \"observeAttr\": {\n" +
@@ -261,7 +261,6 @@ public class LwM2MDeviceAPITest extends AbstractLwM2MAPITest implements DeviceAP
     @Override
     public void connectDevices() throws InterruptedException {
         AtomicInteger totalConnectedCount = new AtomicInteger();
-        List<String> pack = null;
         List<String> devicesNames;
         if (!devices.isEmpty()) {
             devicesNames = devices.stream().map(Device::getName).collect(Collectors.toList());
@@ -271,20 +270,18 @@ public class LwM2MDeviceAPITest extends AbstractLwM2MAPITest implements DeviceAP
                 devicesNames.add(getToken(false, i));
             }
         }
-        for (String device : devicesNames) {
-            if (pack == null) {
-                pack = new ArrayList<>(warmUpPackSize);
+
+        for (int i = 0; i < devicesNames.size(); i = i + BATCH_SIZE) {
+            CountDownLatch latch = new CountDownLatch(BATCH_SIZE);
+
+            for (String device : devicesNames.subList(i, i + BATCH_SIZE)) {
+                restClientService.getWorkers().submit(() -> connectDevices(device, totalConnectedCount, latch));
             }
-            pack.add(device);
-            if (pack.size() == warmUpPackSize) {
-                connectDevices(pack, totalConnectedCount, false);
-                Thread.sleep(100 + new Random().nextInt(1000));
-                pack = null;
-            }
+            latch.await();
+            Thread.sleep(2000);
         }
-        if (pack != null && !pack.isEmpty()) {
-            connectDevices(pack, totalConnectedCount, false);
-        }
+        log.info("ALL DEVICES CONNECTED!!! [{}]", totalConnectedCount.get());
+        Thread.sleep(200000);
         mapDevicesToDeviceClientConnections();
     }
 

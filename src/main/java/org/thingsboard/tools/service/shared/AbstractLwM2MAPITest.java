@@ -156,7 +156,7 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
         return rpcRequest;
     }
 
-    private LwM2MClient initClient(String endpoint, int i) throws InterruptedException {
+    private LwM2MClient initClient(String endpoint) throws InterruptedException {
         LwM2MClient client = new LwM2MClient();
         client.setName(endpoint);
         LeshanClient leshanClient;
@@ -216,35 +216,27 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
         client.setLeshanClient(leshanClient);
 
         leshanClient.start();
-        Thread.sleep(3000);
+
         return client;
     }
 
-    protected void connectDevices(List<String> pack, AtomicInteger totalConnectedCount, boolean isGateway) throws InterruptedException {
-        log.info("Connecting {} devices...", pack.size());
-        CountDownLatch connectLatch = new CountDownLatch(pack.size());
-        for (String deviceName : pack) {
-            restClientService.getWorkers().submit(() -> {
-                try {
-                    lwM2MClients.add(initClient(deviceName, totalConnectedCount.incrementAndGet()));
-                    totalConnectedCount.incrementAndGet();
-                } catch (Exception e) {
-                    log.error("Error while connect {}", "device", e);
-                } finally {
-                    connectLatch.countDown();
-                }
-            });
-        }
-        connectLatch.await();
-        log.info("{} devices have been connected successfully!", totalConnectedCount.get());
-    }
 
+    protected void connectDevices(String deviceName, AtomicInteger totalConnectedCount, CountDownLatch latch) {
+        try {
+            log.info("Connecting {} ", deviceName);
+            lwM2MClients.add(initClient(deviceName));
+            totalConnectedCount.incrementAndGet();
+        } catch (Exception e) {
+            log.error("Failed to connect client!");
+        }
+        latch.countDown();
+    }
 
     @Override
     @PreDestroy
     public void destroy() {
-        for (LwM2MClient mqttClient : lwM2MClients) {
-            mqttClient.destroy();
+        for (LwM2MClient client : lwM2MClients) {
+            client.destroy();
         }
 
         executor.shutdownNow();

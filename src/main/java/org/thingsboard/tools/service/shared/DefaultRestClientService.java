@@ -21,6 +21,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.thingsboard.common.util.ThingsBoardThreadFactory;
 import org.thingsboard.rest.client.RestClient;
 
 import javax.annotation.PostConstruct;
@@ -42,7 +43,7 @@ public class DefaultRestClientService implements RestClientService {
     private ExecutorService httpExecutor;
     private final ScheduledExecutorService logScheduler = Executors.newScheduledThreadPool(10);
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(10);
-    private final ExecutorService workers = Executors.newFixedThreadPool(10);
+    private final ExecutorService workers = Executors.newFixedThreadPool(10, ThingsBoardThreadFactory.forName("workers"));
 
     @Value("${rest.url}")
     private String restUrl;

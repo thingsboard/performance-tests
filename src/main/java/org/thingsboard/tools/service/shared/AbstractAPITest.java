@@ -54,7 +54,7 @@ public abstract class AbstractAPITest {
     protected int deviceEndIdxConfig;
     @Value("${device.count}")
     protected int deviceCount;
-    @Value("${warmup.packSize:2}")
+    @Value("${warmup.packSize:10}")
     protected int warmUpPackSize;
     @Value("${test.instanceIdx:0}")
     protected int instanceIdxConfig;
@@ -213,15 +213,9 @@ public abstract class AbstractAPITest {
             AtomicInteger successPublishedCount = new AtomicInteger();
             AtomicInteger failedPublishedCount = new AtomicInteger();
             CountDownLatch iterationLatch = new CountDownLatch(testMessagesPerSecond + testRpcMessagesPerSecond);
-//            boolean alarmIteration = iteration >= alarmsStartTs && iteration < alarmsEndTs;
-//            int alarmCount = 0;
             for (int i = 0; i < testMessagesPerSecond; i++) {
-//                boolean alarmRequired = alarmIteration && (alarmCount < alarmsPerSecond);
                 DeviceClient client = deviceClients.get(getDeviceIndex(iteration, i));
-                Msg message = (telemetryTest ? tsMsgGenerator : attrMsgGenerator).getNextMessage(client.getDeviceName(), false);
-//                if (message.isTriggersAlarm()) {
-//                    alarmCount++;
-//                }
+                Msg message = tsMsgGenerator.getNextMessage(client.getDeviceName(), false);
                 restClientService.getWorkers().submit(() -> {
                     send(iteration, totalSuccessPublishedCount, totalFailedPublishedCount, successPublishedCount,
                             failedPublishedCount, testDurationLatch, iterationLatch, client, message);
