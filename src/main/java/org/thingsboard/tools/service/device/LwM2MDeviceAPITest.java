@@ -243,12 +243,6 @@ public class LwM2MDeviceAPITest extends AbstractLwM2MAPITest implements DeviceAP
     }
 
     @Override
-    protected void runApiTestIteration(int iteration, AtomicInteger totalSuccessPublishedCount, AtomicInteger totalFailedPublishedCount, CountDownLatch testDurationLatch) {
-        log.info("[{}] Starting performance iteration for {} {}...", iteration, lwM2MClients.size(), "devices");
-        super.runApiTestIteration(iteration, totalSuccessPublishedCount, totalFailedPublishedCount, testDurationLatch);
-    }
-
-    @Override
     protected void logSuccessTestMessage(int iteration, DeviceClient client) {
         log.debug("[{}] Message was successfully published to device: {}", iteration, client.getDeviceName());
     }
@@ -278,10 +272,10 @@ public class LwM2MDeviceAPITest extends AbstractLwM2MAPITest implements DeviceAP
                 restClientService.getWorkers().submit(() -> connectDevices(device, totalConnectedCount, latch));
             }
             latch.await();
-            Thread.sleep(2000);
+            Thread.sleep(1000);
         }
         log.info("ALL DEVICES CONNECTED!!! [{}]", totalConnectedCount.get());
-        Thread.sleep(200000);
+        Thread.sleep(30000);
         mapDevicesToDeviceClientConnections();
     }
 

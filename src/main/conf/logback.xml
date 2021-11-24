@@ -26,7 +26,7 @@
 
     <logger name="org.thingsboard" level="INFO"/>
 
-    <logger name="org.eclipse.californium.core.network.Exchange" level="OFF"/>
+    <logger name="org.eclipse" level="OFF"/>
 
     <root level="INFO">
         <appender-ref ref="STDOUT"/>

@@ -153,10 +153,11 @@ public abstract class AbstractAPITest {
         log.info("Starting performance test for {} devices...", deviceCount);
         AtomicInteger totalSuccessCount = new AtomicInteger();
         AtomicInteger totalFailedCount = new AtomicInteger();
-        testDurationLatch = new CountDownLatch(testDurationInSec);
+        testDurationLatch = new CountDownLatch(testDurationInSec * 2);
         for (int i = 0; i < testDurationInSec; i++) {
             int iterationNumber = i;
-            restClientService.getScheduler().schedule(() -> runApiTestIteration(iterationNumber, totalSuccessCount, totalFailedCount, testDurationLatch), i, TimeUnit.SECONDS);
+            restClientService.getScheduler().schedule(() -> runApiTestIterationMsg(iterationNumber, totalSuccessCount, totalFailedCount, testDurationLatch), i, TimeUnit.SECONDS);
+            restClientService.getScheduler().schedule(() -> runApiTestIterationRpc(iterationNumber, testDurationLatch), i, TimeUnit.SECONDS);
         }
         testDurationLatch.await((long) (testDurationInSec * 1.2), TimeUnit.SECONDS);
         log.info("Completed performance iteration. Success: {}, Failed: {}", totalSuccessCount.get(), totalFailedCount.get());
@@ -205,14 +206,14 @@ public abstract class AbstractAPITest {
         return (isGateway ? "GW" : "DW") + String.format("%8d", token).replace(" ", "0");
     }
 
-    protected void runApiTestIteration(int iteration,
+    protected void runApiTestIterationMsg(int iteration,
                                        AtomicInteger totalSuccessPublishedCount,
                                        AtomicInteger totalFailedPublishedCount,
                                        CountDownLatch testDurationLatch) {
         try {
             AtomicInteger successPublishedCount = new AtomicInteger();
             AtomicInteger failedPublishedCount = new AtomicInteger();
-            CountDownLatch iterationLatch = new CountDownLatch(testMessagesPerSecond + testRpcMessagesPerSecond);
+            CountDownLatch iterationLatch = new CountDownLatch(testMessagesPerSecond);
             for (int i = 0; i < testMessagesPerSecond; i++) {
                 DeviceClient client = deviceClients.get(getDeviceIndex(iteration, i));
                 Msg message = tsMsgGenerator.getNextMessage(client.getDeviceName(), false);
@@ -221,18 +222,31 @@ public abstract class AbstractAPITest {
                             failedPublishedCount, testDurationLatch, iterationLatch, client, message);
                 });
             }
+            iterationLatch.await();
+            log.info("[{}] Completed performance MSG iteration. Success: {}, Failed: {}", iteration, successPublishedCount.get(), failedPublishedCount.get());
+            testDurationLatch.countDown();
+        } catch (Throwable t) {
+            log.warn("[{}] Failed to process iteration", iteration, t);
+        }
+    }
 
+    protected void runApiTestIterationRpc(int iteration, CountDownLatch testDurationLatch) {
+        try {
+            AtomicInteger successPublishedCount = new AtomicInteger();
+            AtomicInteger failedPublishedCount = new AtomicInteger();
+            CountDownLatch iterationLatch = new CountDownLatch(testRpcMessagesPerSecond);
             for (int i = 0; i < testRpcMessagesPerSecond; i++) {
                 int deviceIndex = getDeviceIndex(iteration, i);
                 DeviceClient client = deviceClients.get(deviceIndex);
                 Device device = devices.get(deviceIndex);
                 restClientService.getWorkers().submit(() -> {
                     restClientService.getRestClient().handleTwoWayDeviceRPCRequest(device.getId(), createRpc(client));
+                    successPublishedCount.incrementAndGet();
                     iterationLatch.countDown();
                 });
             }
             iterationLatch.await();
-            log.info("[{}] Completed performance iteration. Success: {}, Failed: {}, Alarms: {}", iteration, successPublishedCount.get(), failedPublishedCount.get(), 0);
+            log.info("[{}] Completed performance RPC iteration. Success: {}, Failed: {}", iteration, successPublishedCount.get(), failedPublishedCount.get());
             testDurationLatch.countDown();
         } catch (Throwable t) {
             log.warn("[{}] Failed to process iteration", iteration, t);

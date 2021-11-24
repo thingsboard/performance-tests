@@ -171,6 +171,7 @@ public abstract class AbstractLwM2MAPITest extends AbstractAPITest {
         DtlsConnectorConfig.Builder dtlsConfig = new DtlsConnectorConfig.Builder();
         dtlsConfig.setRecommendedCipherSuitesOnly(true);
         dtlsConfig.setClientOnly();
+        dtlsConfig.setReceiverThreadCount(50);
 
         DefaultRegistrationEngineFactory engineFactory = new DefaultRegistrationEngineFactory();
         engineFactory.setReconnectOnUpdate(false);

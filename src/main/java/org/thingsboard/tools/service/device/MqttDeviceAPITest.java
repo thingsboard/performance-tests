@@ -63,12 +63,6 @@ public class MqttDeviceAPITest extends AbstractMqttAPITest implements DeviceAPIT
     }
 
     @Override
-    protected void runApiTestIteration(int iteration, AtomicInteger totalSuccessPublishedCount, AtomicInteger totalFailedPublishedCount, CountDownLatch testDurationLatch) {
-        log.info("[{}] Starting performance iteration for {} {}...", iteration, mqttClients.size(), "devices");
-        super.runApiTestIteration(iteration, totalSuccessPublishedCount, totalFailedPublishedCount, testDurationLatch);
-    }
-
-    @Override
     protected ObjectNode createRpc(DeviceClient client) {
         return null;
     }
