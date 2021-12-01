@@ -93,6 +93,16 @@ public class LwM2mNetworkConfig {
 
         coapConfig.setInt(NetworkConfig.Keys.MAX_RETRANSMIT, 4);
 
+        /**
+         * The EXCHANGE_LIFETIME as defined by the CoAP spec in MILLISECONDS.
+         * 247
+         * - next updateReg: Server.lifetime (default^ 300) - 247 = 53 (53000 ms)
+         */
+//        coapConfig.setLong(NetworkConfig.Keys.EXCHANGE_LIFETIME , 200);
+        coapConfig.setLong(NetworkConfig.Keys.EXCHANGE_LIFETIME , 247);
+
+
+
         return coapConfig;
     }
 }

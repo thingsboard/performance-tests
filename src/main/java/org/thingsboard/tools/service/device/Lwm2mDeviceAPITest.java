@@ -26,7 +26,7 @@ import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.IdBased;
 import org.thingsboard.server.common.data.security.DeviceCredentials;
 import org.thingsboard.server.common.data.security.DeviceCredentialsType;
-import org.thingsboard.tools.lwm2m.client.CertificateGenerator;
+import org.thingsboard.tools.lwm2m.secure.CertificateGenerator;
 import org.thingsboard.tools.lwm2m.client.LwM2MClientConfiguration;
 import org.thingsboard.tools.lwm2m.client.LwM2MClientContext;
 import org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode;

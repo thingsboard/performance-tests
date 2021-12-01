@@ -177,7 +177,7 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
 
     @Getter
     @Value("${lwm2m.x509.bootStrap.enabled:}")
-    protected boolean lwm2mX509BootStrapEnabled;
+    protected boolean lwm2mX509BootstrapEnabled;
 
     @Getter
     @Value("${lwm2m.x509.bootStrap.host:}")
@@ -188,10 +188,13 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
     private int lwm2mPortX509BootStrap;
 
     @Getter
+    private final Integer serverCnt = 2;
+
+    @Getter
     private final Integer serverShortId = 123;
 
     @Getter
-    private final Integer bootstrapShortId = 456;
+    private final Integer bootstrapShortId = 111;
 
     @Getter
     @Value("${lwm2m.client.host:}")
@@ -278,47 +281,84 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
     private final String SH_CREATED_KEY_STORE_DEFAULT = "lwM2M_credentials.sh";
 
     @Getter
-    private final String keyStoreServerFile = "lwm2mserver.jks";
+    @Value("${lwm2m.x509.create.enabled:}")
+    private boolean createNewKeyStoreJava;
 
     @Getter
-    private String keyStoreClientFile = "lwm2mclient.jks";
+    @Value("${lwm2m.x509.create.key_store_server_file:}")
+    private String keyStoreServerFile;
 
     @Getter
-    private final String keyStoreClientNoTrustFile = "lwm2mclientnotrust.jks";
+    @Value("${lwm2m.x509.create.key_store_client_file:}")
+    private String keyStoreClientFile;
 
     @Getter
-    private String clientKeyStorePwd = "client_ks_password";
+    @Value("${lwm2m.x509.create.key_store_client_no_trust_file:}")
+    private String keyStoreClientNoTrustFile;
 
     @Getter
-    private final String clientNoTrustKeyStorePwd = "client";
+    @Value("${lwm2m.x509.create.root_alias:}")
+    private String rootAlias = "rootCA";
 
     @Getter
-    private final String serverKeyStorePwd = "server_ks_password";
+    @Value("${lwm2m.x509.create.server_alias:}")
+    private String serverAlias;
 
     @Getter
-    @Value("${lwm2m.x509.prefix_client_alias:}")
+    @Value("${lwm2m.x509.create.bootstrap_alias:}")
+    private String bootstrapAlias;
+
+    @Getter
+    @Value("${lwm2m.x509.create.client_alias_no_trust:}")
+    private String clientAliasNoTrust;
+
+    @Getter
+    @Value("${lwm2m.x509.create.client_alias_private_key_no_trust:}")
+    private String clientAliasPrivateKeyNoTrust;
+
+    @Getter
+    @Value("${lwm2m.x509.create.prefix_client_alias:}")
     private String prefixClientAlias;
 
     @Getter
-    @Value("${lwm2m.x509.prefix_client:}")
-    private String prefixClient;
-
-    @Getter
-    @Value("${lwm2m.x509.endpoint_client_no_trust:}")
-    private String endpointClientNoTrust;
-
-    @Getter
-    @Value("${lwm2m.x509.prefix_client_self_alias:}")
+    @Value("${lwm2m.x509.create.prefix_client_self_alias_:}")
     private String prefixClientSelfAlias;
 
     @Getter
-    private final String rootAlias = "rootCA";
+    @Value("${lwm2m.x509.create.root_endpoint:}")
+    private String rootCN;
 
     @Getter
-    private final String bootstrapAlias = "bootstrap";
+    @Value("${lwm2m.x509.create.server_endpoint:}")
+    private String serverCN;
 
     @Getter
-    private final String serverAlias = "server";
+    @Value("${lwm2m.x509.create.bootstrap_endpoint:}")
+    private String bootstrapCN;
+
+    @Getter
+    @Value("${lwm2m.x509.create.pref_sub_endpoint:}")
+    private String prefSubCN;
+
+    @Getter
+    @Value("${lwm2m.x509.create.sub_level:}")
+    private int subLevel;
+
+    @Getter
+    @Value("${lwm2m.x509.create.client_no_trust_endpoint:}")
+    private String clientNoTrustCN;
+
+    @Getter
+    @Value("${lwm2m.x509.create.server_key_store_pwd:}")
+    private String serverKeyStorePwd;
+
+    @Getter
+    @Value("${lwm2m.x509.create.client_key_store_pwd:}")
+    private String clientKeyStorePwd;
+
+    @Getter
+    @Value("${lwm2m.x509.create.client_no_trust_key_store_pwd:}")
+    private String clientNoTrustKeyStorePwd;
 
     @Getter
     @Setter
@@ -344,16 +384,6 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
     @Value("${lwm2m.x509.create_new_key_store_sh:}")
     private boolean createNewKeyStoreSh;
 
-    @Getter
-    @Value("${lwm2m.x509.create_new_key_store_java:}")
-    private boolean createNewKeyStoreJava;
-
-    @Getter
-    @Value("${lwm2m.x509.client_alias_no_trust:}")
-    private String clientAliasNoTrust;
-    @Getter
-    @Value("${lwm2m.x509.client_alias_private_key_no_trust:}")
-    private String clientAliasPrivateKeyNoTrust;
 
     @PostConstruct
     public void init() {
@@ -371,8 +401,8 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
         } else {
             log.error(" [{}] Read Models", path.getAbsoluteFile());
         }
-        if (this.lwm2mX509Enabled || this.lwm2mX509BootStrapEnabled) {
-            if (lwm2mX509Trust) {
+        if (this.lwm2mX509Enabled || this.lwm2mX509BootstrapEnabled) {
+            if (!lwm2mX509Trust) {
                 this.keyStoreClientFile = keyStoreClientNoTrustFile;
                 this.clientKeyStorePwd = clientNoTrustKeyStorePwd;
             }
@@ -477,7 +507,7 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
 
 
     public String getEndPoint(int numberClient, LwM2MSecurityMode mode) {
-        return lwm2mX509Trust ? endpointClientNoTrust : getPrefEndPoint(mode) + String.format("%8d", numberClient).replace(" ", "0");
+        return !lwm2mX509Trust ? clientNoTrustCN : getPrefEndPoint(mode) + String.format("%8d", numberClient).replace(" ", "0");
     }
 
     private String getPrefEndPoint(LwM2MSecurityMode mode) {
@@ -492,7 +522,7 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
      * @return ClientAlias
      */
     public String getClientAlias(int numberClient, boolean isPrivate) {
-        return lwm2mX509Trust ? isPrivate ? clientAliasPrivateKeyNoTrust : clientAliasNoTrust : this.prefixClientAlias + String.format("%8d", numberClient).replace(" ", "0");
+        return !lwm2mX509Trust ? isPrivate ? clientAliasPrivateKeyNoTrust : clientAliasNoTrust : this.prefixClientAlias + String.format("%8d", numberClient).replace(" ", "0");
     }
 
     public Map<String, String> getAddAttrs(String addAttrs) {
@@ -636,7 +666,7 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
      * SubjectDN().getName: [CN=nick-Thingsboard bootstrap server LwM2M signed by root CA, OU=Thingsboard, O=Thingsboard, L=SF, ST=CA, C=US]
      */
 
-    static void getParamsX509(X509Certificate certificate, String whose, PrivateKey privateKey) {
+    static public void getParamsX509(X509Certificate certificate, String whose, PrivateKey privateKey) {
         try {
             log.info("{} uses X509 : " +
                             "\n X509 Certificate (Hex): [{}] " +

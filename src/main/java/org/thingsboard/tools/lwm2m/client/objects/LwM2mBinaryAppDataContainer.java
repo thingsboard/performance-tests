@@ -132,7 +132,7 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
 
     @Override
     public WriteResponse write(ServerIdentity identity, boolean replace, int resourceId, LwM2mResource value) {
-//        log.info("Write on Device resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceid);
+        log.info("Write on Device resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceId);
         resourceId = getSupportedResource(resourceId);
         switch (resourceId) {
             case 0:

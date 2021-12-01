@@ -103,12 +103,12 @@ public class LwM2MClientConfiguration {
         /** Create client */
 //        log.info("Starting LwM2M client... PostConstruct. BootstrapEnable: ???");
         /** Initialize model */
-        versions.put(SERVER, "1.2");
+        versions.put(SERVER, "1.1");
         versions.put(ACCESS_CONTROL, "1.0");
         versions.put(DEVICE, "1.0");
         versions.put(FIRMWARE, "1.0");
         versions.put(SOFTWARE_MANAGEMENT, "1.0");
-        versions.put(BINARY_APP_DATA_CONTAINER, "1.1");
+        versions.put(BINARY_APP_DATA_CONTAINER, "1.0");
         versions.put(TEMPERATURE_SENSOR, "1.2");
 
 

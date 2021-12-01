@@ -157,7 +157,7 @@ public class LwM2MSecurityStore {
     private void setInstancesX509(int numberClient) {
         this.getKeyCertForX509(numberClient);
         String serverSecureURI = null;
-        if (this.context.isLwm2mX509BootStrapEnabled()) {
+        if (this.context.isLwm2mX509BootstrapEnabled()) {
             serverSecureURI = this.context.coapLinkSec + this.context.getLwm2mHostX509BootStrap() + ":" + this.context.getLwm2mPortX509BootStrap();
             initializer.setInstancesForObject(SECURITY, x509Bootstrap(serverSecureURI,
                     Hex.decodeHex(this.clientPublicKey.toCharArray()),
@@ -187,7 +187,8 @@ public class LwM2MSecurityStore {
     private void getKeyCertForX509(int numberClient) {
         try {
             Certificate clientCertificate = (X509Certificate) this.context.getClientKeyStoreValue().getCertificate(this.context.getClientAlias(numberClient, false));
-            PrivateKey clientPrivKey = (PrivateKey) this.context.getClientKeyStoreValue().getKey(this.context.getClientAlias(numberClient, true), this.context.getClientKeyStorePwd().toCharArray());
+            String clientAlias = this.context.isLwm2mX509Trust() ? this.context.getClientAlias(numberClient, true) : this.context.getClientAliasNoTrust() ;
+            PrivateKey clientPrivKey = (PrivateKey) this.context.getClientKeyStoreValue().getKey(clientAlias, this.context.getClientKeyStorePwd().toCharArray());
             Certificate serverCertificate = (X509Certificate) this.context.getServerKeyStoreValue().getCertificate(this.context.getServerAlias());
             Certificate bootStrapCertificate = (X509Certificate) this.context.getServerKeyStoreValue().getCertificate(this.context.getBootstrapAlias());
             this.clientPublicKey = Hex.encodeHexString(clientCertificate.getEncoded());

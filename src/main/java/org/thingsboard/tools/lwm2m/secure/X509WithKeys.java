@@ -13,20 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.thingsboard.tools.lwm2m.client.objects;
+package org.thingsboard.tools.lwm2m.secure;
 
-import org.eclipse.leshan.client.object.Server;
-import org.eclipse.leshan.core.request.BindingMode;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 
-import java.util.EnumSet;
+import java.security.KeyPair;
+import java.security.cert.X509Certificate;
 
-public class Lwm2mServer extends Server {
-
-    public Lwm2mServer() {}
-    public Lwm2mServer(int shortServerId, long lifetime, EnumSet<BindingMode> binding, boolean notifyWhenDisable,
-                       BindingMode preferredTransport, int id) {
-        super (shortServerId, lifetime, binding, notifyWhenDisable, preferredTransport);
-        this.setId(id);
-
-    }
+@Data
+@AllArgsConstructor
+public class X509WithKeys {
+    X509Certificate certificate;
+    KeyPair certKeyPair;
 }
