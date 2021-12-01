@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2018 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -92,6 +92,16 @@ public class LwM2mNetworkConfig {
         coapConfig.setInt(NetworkConfig.Keys.MAX_MESSAGE_SIZE, 1024);
 
         coapConfig.setInt(NetworkConfig.Keys.MAX_RETRANSMIT, 4);
+
+        /**
+         * The EXCHANGE_LIFETIME as defined by the CoAP spec in MILLISECONDS.
+         * 247
+         * - next updateReg: Server.lifetime (default^ 300) - 247 = 53 (53000 ms)
+         */
+//        coapConfig.setLong(NetworkConfig.Keys.EXCHANGE_LIFETIME , 200);
+        coapConfig.setLong(NetworkConfig.Keys.EXCHANGE_LIFETIME , 247);
+
+
 
         return coapConfig;
     }

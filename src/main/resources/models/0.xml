@@ -61,7 +61,7 @@ LEGAL DISCLAIMER
   <Object ObjectType="MODefinition">
 		<Name>LWM2M Security</Name>
 		<Description1><![CDATA[This LwM2M Object provides the keying material of a LwM2M Client appropriate to access a specified LwM2M Server. One Object Instance SHOULD address a LwM2M Bootstrap-Server.
-These LwM2M Object Resources MUST only be changed by a LwM2M Bootstrap-Server or Bootstrap from Smartcard and MUST NOT be accessible by any other LwM2M Server.]]></Description1>
+These LwM2M Object Resources MUST only be changed by a Lw.addInstance();M2M Bootstrap-Server or Bootstrap from Smartcard and MUST NOT be accessible by any other LwM2M Server.]]></Description1>
 		<ObjectID>0</ObjectID>
 		<ObjectURN>urn:oma:lwm2m:oma:0:1.2</ObjectURN>
 	  	<LWM2MVersion>1.1</LWM2MVersion>

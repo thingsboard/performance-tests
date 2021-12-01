@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.thingsboard.tools.lwm2m.client;
+package org.thingsboard.tools.lwm2m.secure;
 
 import lombok.extern.slf4j.Slf4j;
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
@@ -48,6 +48,9 @@ import org.eclipse.leshan.core.util.Hex;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.thingsboard.server.common.data.StringUtils;
+import org.thingsboard.tools.lwm2m.client.LwM2MClientContext;
+import org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode;
 
 import javax.annotation.PostConstruct;
 import java.io.*;
@@ -63,6 +66,9 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Component("CertificateGenerator")
@@ -90,14 +96,14 @@ public class CertificateGenerator {
     private KeyPairGenerator keyPairGenerator;
     private Date startDate;
     private Date endDate;
-    private KeyPair rootKeyPair;
-    private X500Name rootCertIssuer;
+    private Map<String/*Alias:CN*/, X509Certificate[]/**/> certs = new HashMap<>();
+    private Map<Integer/*Level*/, X509Certificate/**/> certIssues = new HashMap<>();
+    //    private KeyPair rootKeyPair;
+//    private X500Name rootCertIssuer;
     private X509Certificate rootCert;
     private ContentSigner rootCsrContentSigner;
     private KeyStore sslKeyStoreServer;
     private KeyStore sslKeyStoreClient;
-    private static final String fileNameKeyStore = "lwm2m";
-    private static final String keyStorePrefixJks = ".jks";
 
 
 //   SERVER_STORE=serverKeyStore1.jks
@@ -148,7 +154,7 @@ public class CertificateGenerator {
      * - public_y  : [54c6135b2d498807a212e0fbee76cc035b29dbf6c73f59b224789e568d1d149c]
      * - private_s : [54c6135b2d498807a212e0fbee76cc035b29dbf6c73f59b224789e568d1d149c]
      * - Elliptic Curve parameters  : [secp256r1 [NIST P-256, X9.62 prime256v1] (1.2.840.10045.3.1.7)]
-     *
+     * <p>
      * Bootstrap:
      * Long randomBootstrapServer = -3862183349175192571L;
      * Bootstrap Server uses [X509]: serverNoSecureURI : [0.0.0.0:5687], serverSecureURI : [0.0.0.0:5688]
@@ -161,46 +167,118 @@ public class CertificateGenerator {
      * - Elliptic Curve parameters  : [secp256r1 [NIST P-256, X9.62 prime256v1] (1.2.840.10045.3.1.7)]
      */
     public void generationX509WithRootAndJks(int start, int finish) throws Exception {
-        String fileNameJks = fileNameKeyStore + this.context.getServerAlias() + keyStorePrefixJks;
-        this.generationX509RootJava();
-        this.generationX509(this.sslKeyStoreServer, this.context.getServerAlias(),
-                context.getLwm2mHostX509() + " " + this.context.getServerAlias(),
-                context.getServerKeyStorePwd());
-        this.generationX509(this.sslKeyStoreServer, this.context.getBootstrapAlias(),
-                context.getLwm2mHostX509() + " " + this.context.getBootstrapAlias(),
-                context.getServerKeyStorePwd());
-        this.infoParamsServersX509(this.sslKeyStoreServer);
-        this.exportKeyPairToKeystoreFile(this.sslKeyStoreServer, context.returnPathForCreatedNewX509().toUri().getPath() + fileNameJks, context.getServerKeyStorePwd());
-//        this.verifyKeyStore (fileNameJks, context.getServerKeyStorePwd());
+        String fileNameJks = this.context.getKeyStoreServerFile();
+        String pathOut = this.context.returnPathForCreatedNewX509().toUri().getPath();
+        this.generationX509Root();
+        X509WithKeys x509WithKeys;
+        String subjectCN;
+        X509Certificate issuedCert;
+        if (this.context.isLwm2mX509Trust()) {
+            X509WithKeys x509WithKeysServer;
+            X509WithKeys x509WithKeysBootstrap;
+            // Server: localhost
+            issuedCert = this.rootCert;
+            subjectCN = this.context.getServerCN();
+            x509WithKeysServer = this.generationX509SignedByIssue(subjectCN, issuedCert);
+            this.importX509ToKeyStore(this.sslKeyStoreServer, x509WithKeysServer, this.context.getServerAlias(),
+                    context.getServerCN(),
+                    context.getServerKeyStorePwd(),
+                    issuedCert);
 
-        for (int i = start; i < finish; i++) {
-            this.generationX509(this.sslKeyStoreClient,
-                    this.context.getClientAlias(i), this.context.getEndPoint(i, LwM2MSecurityMode.X509),
-                    context.getClientKeyStorePwd());
+            // Bootstrap: bootstrap.localhost
+            issuedCert = x509WithKeysServer.getCertificate();
+            subjectCN = this.context.getBootstrapCN() + "." + this.getValueFromSubjectNameByKey(issuedCert.getSubjectX500Principal().getName(), "CN");
+            x509WithKeysBootstrap = this.generationX509SignedByIssue(subjectCN, x509WithKeysServer.getCertificate());
+            this.importX509ToKeyStore(this.sslKeyStoreServer, x509WithKeysBootstrap, this.context.getBootstrapAlias(),
+                    context.getBootstrapCN(),
+                    context.getServerKeyStorePwd(),
+                    issuedCert
+            );
+            this.infoParamsServersX509(this.sslKeyStoreServer);
+            this.exportKeyPairToKeystoreFile(this.sslKeyStoreServer, pathOut + fileNameJks, context.getServerKeyStorePwd());
+            this.verifyKeyStore(pathOut + fileNameJks, context.getServerKeyStorePwd());
+            // import certServer and certBootstrap
+
+            /** Create certIssue sub0, sub1, sub2
+             CN: sub0.localhost signed CN: localhost
+             CN: bootstrap.localhost signed CN: localhost
+             CN: sub1.sub0.localhost signed CN: sub0.localhost
+             CN: sub2.sub1.sub0.localhost signed CN: sub1.sub0.localhost
+             */
+            int level = 0;
+            issuedCert = x509WithKeysServer.getCertificate();
+            do {
+                subjectCN = this.context.getPrefSubCN() + level + "." + this.getValueFromSubjectNameByKey(issuedCert.getSubjectX500Principal().getName(), "CN");
+                x509WithKeys = this.generationX509SignedByIssue(subjectCN, issuedCert);
+                certIssues.put(level, x509WithKeys.getCertificate());
+                issuedCert = x509WithKeys.getCertificate();
+                level++;
+            } while (level <= this.context.getSubLevel());
+
+
+            /** create and import certClients
+             Created клиентский CN: client0 signed CN: sub0.localhost
+             Created клиентский CN: client1 signed CN: sub1.sub0.local
+             Created клиентский CN: client2 signed CN: sub2.sub1.sub0.localhost
+             Created клиентский CN: client3 signed CN: bootstrap.localhost (bootstrap)
+             Created клиентский CN: client4 signed CN: localhost (server)
+             */
+            start = 0;
+            finish = 5;
+            for (int i = start; i < finish; i++) {
+                if (i < level) {
+                    issuedCert = certIssues.get(i);
+                } else if (i == 3) {
+                    issuedCert = x509WithKeysBootstrap.getCertificate();
+                } else {
+                    issuedCert = x509WithKeysServer.getCertificate();
+                }
+                subjectCN = context.getEndPoint(i, LwM2MSecurityMode.X509);
+
+                x509WithKeys = this.generationX509SignedByIssue(subjectCN, issuedCert);
+                this.importX509ToKeyStore(this.sslKeyStoreClient, x509WithKeys,
+                        this.context.getClientAlias(i, false),
+                        this.context.getEndPoint(i, LwM2MSecurityMode.X509),
+                        context.getClientKeyStorePwd(), issuedCert);
+
+            }
+            fileNameJks = this.context.getKeyStoreClientFile();
+            this.exportKeyPairToKeystoreFile(this.sslKeyStoreClient, pathOut + fileNameJks, context.getClientKeyStorePwd());
+            this.verifyKeyStore(pathOut + fileNameJks, context.getClientKeyStorePwd());
+        } else {
+            subjectCN = this.context.getClientNoTrustCN();
+            issuedCert = this.rootCert;
+            x509WithKeys = this.generationX509SignedByIssue(subjectCN, issuedCert);
+            this.importX509ToKeyStore(this.sslKeyStoreClient, x509WithKeys,
+                    this.context.getClientAliasNoTrust(),
+                    this.context.getClientNoTrustCN(),
+                    context.getClientNoTrustKeyStorePwd(),
+                    issuedCert);
+            fileNameJks = this.context.getKeyStoreClientNoTrustFile();
+            this.exportKeyPairToKeystoreFile(this.sslKeyStoreClient, pathOut + fileNameJks, context.getClientNoTrustKeyStorePwd());
+            this.verifyKeyStore(pathOut + fileNameJks, context.getClientNoTrustKeyStorePwd());
         }
-        fileNameJks = fileNameKeyStore + this.context.getPrefixClient() + keyStorePrefixJks;
-        this.exportKeyPairToKeystoreFile(this.sslKeyStoreClient, context.returnPathForCreatedNewX509().toUri().getPath() + fileNameJks, context.getClientKeyStorePwd());
-        this.verifyKeyStore(context.returnPathForCreatedNewX509().toUri().getPath() + fileNameJks, context.getClientKeyStorePwd());
     }
 
-    private void generationX509RootJava() throws NoSuchAlgorithmException, CertIOException, CertificateException, OperatorCreationException {
+    private void generationX509Root() throws NoSuchAlgorithmException, CertIOException, CertificateException, OperatorCreationException {
         // First step is to create a root certificate
         // First Generate a KeyPair,
         // then a random serial number
         // then generate a certificate using the KeyPair
-        this.rootKeyPair = keyPairGenerator.generateKeyPair();
+        KeyPair rootKeyPair = keyPairGenerator.generateKeyPair();
         BigInteger rootSerialNum = new BigInteger(Long.toString(new SecureRandom().nextLong()));
         // Issued By and Issued To same for root certificate
-        this.rootCertIssuer = new X500Name("CN=" + context.getLwm2mHostX509() + " " + context.getRootAlias() + this.NAME_CERT_GEO_SUFFIX);
-        X500Name rootCertSubject = this.rootCertIssuer;
-        ContentSigner rootCertContentSigner = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BC_PROVIDER).build(this.rootKeyPair.getPrivate());
-        X509v3CertificateBuilder rootCertBuilder = new JcaX509v3CertificateBuilder(this.rootCertIssuer, rootSerialNum, startDate, endDate, rootCertSubject, this.rootKeyPair.getPublic());
+//        this.rootCertIssuer = new X500Name("CN=" + context.getLwm2mHostX509() + " " + context.getRootAlias() + this.NAME_CERT_GEO_SUFFIX);
+        X500Name rootIssuerCN = new X500Name("CN=" + context.getRootCN() + this.NAME_CERT_GEO_SUFFIX);
+        X500Name rootSubjectCN = rootIssuerCN;
+        ContentSigner rootCertContentSigner = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BC_PROVIDER).build(rootKeyPair.getPrivate());
+        X509v3CertificateBuilder rootCertBuilder = new JcaX509v3CertificateBuilder(rootIssuerCN, rootSerialNum, startDate, endDate, rootSubjectCN, rootKeyPair.getPublic());
 
         // Add Extensions
         // A BasicConstraint to mark root certificate as CA certificate
         JcaX509ExtensionUtils rootCertExtUtils = new JcaX509ExtensionUtils();
         rootCertBuilder.addExtension(Extension.basicConstraints, true, new BasicConstraints(true));
-        rootCertBuilder.addExtension(Extension.subjectKeyIdentifier, false, rootCertExtUtils.createSubjectKeyIdentifier(this.rootKeyPair.getPublic()));
+        rootCertBuilder.addExtension(Extension.subjectKeyIdentifier, false, rootCertExtUtils.createSubjectKeyIdentifier(rootKeyPair.getPublic()));
         // Create a cert holder
         X509CertificateHolder rootCertHolder = rootCertBuilder.build(rootCertContentSigner);
         this.rootCert = new JcaX509CertificateConverter().setProvider(BC_PROVIDER).getCertificate(rootCertHolder);
@@ -210,27 +288,23 @@ public class CertificateGenerator {
 //        exportKeyPairToKeystoreFile(this.rootKeyPair, this.rootCert, "root-cert", "root-cert.pfx", "pass");
         JcaContentSignerBuilder csrBuilder = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BC_PROVIDER);
         // Sign the new KeyPair with the root cert Private Key
-        this.rootCsrContentSigner = csrBuilder.build(this.rootKeyPair.getPrivate());
+        this.rootCsrContentSigner = csrBuilder.build(rootKeyPair.getPrivate());
     }
 
-    public void generationX509(KeyStore sslKeyStore, String alias, String subjectDnNameCN, String keyStorePwd) throws Exception {
-        // Generate a new KeyPair and sign it using the Root Cert Private Key
-        // by generating a CSR (Certificate Signing Request)
-        // Creating server certificate signed by root CA...
-        X500Name certSubject = new X500Name("CN=" + subjectDnNameCN + this.NAME_CERT_GEO_SUFFIX);
+    private X509WithKeys generationX509SignedByIssue(String subjectDnNameCN, X509Certificate issuedCert) throws NoSuchAlgorithmException, CertIOException, CertificateException, NoSuchProviderException, InvalidKeyException, SignatureException {
+        X500Name certSubjectCN = new X500Name("CN=" + subjectDnNameCN + this.NAME_CERT_GEO_SUFFIX);
+        String issuerEndpoint = this.getValueFromSubjectNameByKey(issuedCert.getSubjectX500Principal().getName(), "CN");
+        X500Name certIssuerCN = new X500Name("CN=" + issuerEndpoint + this.NAME_CERT_GEO_SUFFIX);
         BigInteger certSerialNum = new BigInteger(Long.toString(new SecureRandom().nextLong()));
         KeyPair certKeyPair = keyPairGenerator.generateKeyPair();
-        PKCS10CertificationRequestBuilder p10Builder = new JcaPKCS10CertificationRequestBuilder(certSubject, certKeyPair.getPublic());
-
+        PKCS10CertificationRequestBuilder p10Builder = new JcaPKCS10CertificationRequestBuilder(certSubjectCN, certKeyPair.getPublic());
         // Sign the new KeyPair with the root cert Private Key
         PKCS10CertificationRequest certCsr = p10Builder.build(this.rootCsrContentSigner);
-
         // Use the Signed KeyPair and CSR to generate an issued Certificate
         // Here serial number is randomly generated. In general, CAs use
         // a sequence to generate Serial number and avoid collisions
-        X509v3CertificateBuilder certBuilder = new X509v3CertificateBuilder(this.rootCertIssuer, certSerialNum, this.startDate, this.endDate, certCsr.getSubject(), certCsr.getSubjectPublicKeyInfo());
+        X509v3CertificateBuilder certBuilder = new X509v3CertificateBuilder(certIssuerCN, certSerialNum, this.startDate, this.endDate, certCsr.getSubject(), certCsr.getSubjectPublicKeyInfo());
         JcaX509ExtensionUtils certExtUtils = new JcaX509ExtensionUtils();
-
         // Add Extensions
         // Use BasicConstraints to say that this Cert is not a CA
 //        issuedCertBuilder.addExtension(Extension.basicConstraints, true, new BasicConstraints(false));
@@ -250,21 +324,20 @@ public class CertificateGenerator {
 
         // Verify the issued cert signature against the root (issuer) cert
         certificate.verify(this.rootCert.getPublicKey(), BC_PROVIDER);
-        X509Certificate[] certificateChain = new X509Certificate[2];
-        certificateChain[0] = certificate;
-        certificateChain[1] = this.rootCert;
-//        byte [] privB = certKeyPair.getPrivate().getEncoded();
-//        String privS = Hex.encodeHexString(privB);
-//        byte [] privBnew = Hex.decodeHex(privS.toCharArray());
-//        PrivateKeyInfo privateKeyInfo = PrivateKeyInfo.getInstance( privB);
-//        PrivateKeyInfo privateKeyInfoNew = PrivateKeyInfo.getInstance( privBnew);
-//        if (privateKeyInfo.getPrivateKey().equals(privateKeyInfoNew.getPrivateKey())) {
-//            System.out.println("Ok");
-//        }
-//
-//        ByteString byteString =  ByteString.of(privateKeyInfo.parsePrivateKey().toASN1Primitive().getEncoded());
-        sslKeyStore.setKeyEntry(alias, certKeyPair.getPrivate(), keyStorePwd.toCharArray(), certificateChain);
+        return new X509WithKeys(certificate, certKeyPair);
     }
+
+    //    public X509Certificate generationX509(String subjectDnNameCN, X509Certificate issuedCert) throws Exception {
+    public void importX509ToKeyStore(KeyStore sslKeyStore, X509WithKeys x509WithKeys, String alias, String subjectDnNameCN,
+                                     String keyStorePwd, X509Certificate certIssue) throws Exception {
+        X509Certificate[] certificateChain = new X509Certificate[2];
+        certificateChain[0] = x509WithKeys.getCertificate();
+        certificateChain[1] = certIssue;
+        String key = alias + ":" + subjectDnNameCN;
+        certs.put(key, certificateChain);
+        sslKeyStore.setKeyEntry(alias, x509WithKeys.getCertKeyPair().getPrivate(), keyStorePwd.toCharArray(), certificateChain);
+    }
+
 
     void exportKeyPairToKeystoreFile(KeyStore sslKeyStore, String fileName, String storePass) throws Exception {
         if (new File(fileName).isFile()) {
@@ -410,49 +483,62 @@ public class CertificateGenerator {
 
     private void verifyKeyStore(String fileInput, String keyStorePwd) throws IOException, KeyStoreException, CertificateException, NoSuchAlgorithmException, UnrecoverableKeyException {
         File keyStoreFile = new File(fileInput);
-        InputStream inKeyStore = new FileInputStream(keyStoreFile);
-        KeyStore keyStoreValue = KeyStore.getInstance(KeyStore.getDefaultType());
-        keyStoreValue.load(inKeyStore, keyStorePwd.toCharArray());
-        for (Enumeration<String> aliases = keyStoreValue.aliases();
-             aliases.hasMoreElements(); ) {
-            String alias = aliases.nextElement();
-            Certificate cert = keyStoreValue.getCertificate(alias);
-            PrivateKey privateKey = (PrivateKey) keyStoreValue.getKey(alias, keyStorePwd.toCharArray());
-            if (cert != null) {
-                LwM2MClientContext.getParamsX509((X509Certificate) cert, alias, privateKey);
+        if (keyStoreFile.isFile()) {
+            InputStream inKeyStore = new FileInputStream(keyStoreFile);
+            KeyStore keyStoreValue = KeyStore.getInstance(KeyStore.getDefaultType());
+            keyStoreValue.load(inKeyStore, keyStorePwd.toCharArray());
+            for (Enumeration<String> aliases = keyStoreValue.aliases();
+                 aliases.hasMoreElements(); ) {
+                String alias = aliases.nextElement();
+                Certificate cert = keyStoreValue.getCertificate(alias);
+                PrivateKey privateKey = (PrivateKey) keyStoreValue.getKey(alias, keyStorePwd.toCharArray());
+                if (cert != null) {
+                    LwM2MClientContext.getParamsX509((X509Certificate) cert, alias, privateKey);
+                }
             }
-        }
-        keyStoreValue.aliases();
-    }
-
-    private void readParamsRootCert(String path, String storePass) {
-        try {
-            FileInputStream is = new FileInputStream(path);
-
-            this.sslKeyStoreServer = KeyStore.getInstance(KeyStore.getDefaultType());
-            this.sslKeyStoreServer.load(is, storePass.toCharArray());
-
-            String alias = this.context.getRootAlias();
-
-            Key key = this.sslKeyStoreServer.getKey(alias, storePass.toCharArray());
-            java.security.interfaces.ECPrivateKey privKey = (java.security.interfaces.ECPrivateKey) key;
-//            if (key instanceof PrivateKey) {
-            // Get certificate of public key
-            this.rootCert = (X509Certificate) this.sslKeyStoreServer.getCertificate(alias);
-
-            // Get public key
-            PublicKey publicKey = this.rootCert.getPublicKey();
-
-            // Return a key pair
-//                this.rootKeyPair = new KeyPair(publicKey, (PrivateKey) key);
-            this.rootKeyPair = keyPairGenerator.generateKeyPair();
-            JcaContentSignerBuilder csrBuilder = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BC_PROVIDER);
-            // Sign the new KeyPair with the root cert Private Key
-//                this.rootCsrContentSigner = csrBuilder.build(this.rootKeyPair.getPrivate());
-            this.rootCsrContentSigner = csrBuilder.build(this.rootKeyPair.getPrivate());
-//            }
-        } catch (KeyStoreException | IOException | NoSuchAlgorithmException | CertificateException | UnrecoverableKeyException | OperatorCreationException e) {
-            e.printStackTrace();
+            keyStoreValue.aliases();
+            log.info("Verify KeyStore [{}] is ok", fileInput);
+        } else {
+            log.error("Verify KeyStore [{}] is bad", fileInput);
         }
     }
+
+    public String getValueFromSubjectNameByKey(String subjectName, String key) {
+        String[] dns = subjectName.split(",");
+        Optional<String> cn = (Arrays.stream(dns).filter(dn -> dn.contains(key + "="))).findFirst();
+        String value = cn.isPresent() ? cn.get().replace(key + "=", "") : null;
+        return StringUtils.isNotEmpty(value) ? value : null;
+    }
+
+
+//    private void readParamsRootCert(String path, String storePass) {
+//        try {
+//            FileInputStream is = new FileInputStream(path);
+//
+//            this.sslKeyStoreServer = KeyStore.getInstance(KeyStore.getDefaultType());
+//            this.sslKeyStoreServer.load(is, storePass.toCharArray());
+//
+//            String alias = this.context.getRootAlias();
+//
+//            Key key = this.sslKeyStoreServer.getKey(alias, storePass.toCharArray());
+//            java.security.interfaces.ECPrivateKey privKey = (java.security.interfaces.ECPrivateKey) key;
+////            if (key instanceof PrivateKey) {
+//            // Get certificate of public key
+//            this.rootCert = (X509Certificate) this.sslKeyStoreServer.getCertificate(alias);
+//
+//            // Get public key
+//            PublicKey publicKey = this.rootCert.getPublicKey();
+//
+//            // Return a key pair
+////                this.rootKeyPair = new KeyPair(publicKey, (PrivateKey) key);
+//            this.rootKeyPair = keyPairGenerator.generateKeyPair();
+//            JcaContentSignerBuilder csrBuilder = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BC_PROVIDER);
+//            // Sign the new KeyPair with the root cert Private Key
+////                this.rootCsrContentSigner = csrBuilder.build(this.rootKeyPair.getPrivate());
+//            this.rootCsrContentSigner = csrBuilder.build(this.rootKeyPair.getPrivate());
+////            }
+//        } catch (KeyStoreException | IOException | NoSuchAlgorithmException | CertificateException | UnrecoverableKeyException | OperatorCreationException e) {
+//            e.printStackTrace();
+//        }
+//    }
 }

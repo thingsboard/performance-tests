@@ -17,14 +17,17 @@ package org.thingsboard.tools.lwm2m.client.objects;
 
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.leshan.client.servers.ServerIdentity;
+import org.eclipse.leshan.core.model.ResourceModel;
+import org.eclipse.leshan.core.node.LwM2mMultipleResource;
 import org.eclipse.leshan.core.node.LwM2mResource;
 import org.eclipse.leshan.core.response.ReadResponse;
 import org.eclipse.leshan.core.response.WriteResponse;
 
 import java.sql.Time;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 
 @Slf4j
@@ -58,20 +61,26 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
      * },
      */
 //    private String data = "InNlcnZpY2VJZCI6Ik1ldGVyIiwNCiJzZXJ2aWNlRGF0YSI6ew0KImN1cnJlbnRSZWFkaW5nIjoiNDYuMyIsDQoic2lnbmFsU3RyZW5ndGgiOjE2LA0KImRhaWx5QWN0aXZpdHlUaW1lIjo1NzA2DQo=";
-    private byte[] data;
+//    private byte[] data;
+    boolean dataSingle;
+    //    Map<Integer, byte[]> data = new HashMap<>();
+    private Object data;
     private Integer priority = 0;
     private Time timestamp;
     private String description;
     private String dataFormat;
     private Integer appID = -1;
-    public LwM2mBinaryAppDataContainer() { }
 
-    public LwM2mBinaryAppDataContainer(ScheduledExecutorService executorService, Integer id) {
+    public LwM2mBinaryAppDataContainer() {
+    }
+
+    public LwM2mBinaryAppDataContainer(ScheduledExecutorService executorService, Integer id, boolean dataSingle) {
         try {
             if (id != null) this.setId(id);
-            executorService.scheduleWithFixedDelay(() ->
+            this.dataSingle = dataSingle;
+//            executorService.scheduleWithFixedDelay(() ->
 //                    fireResourcesChange(0, 2), 5000, 5000, TimeUnit.MILLISECONDS);
-                    fireResourcesChange(0, 2), 1800000, 1800000, TimeUnit.MILLISECONDS); // 30 MIN
+//                    fireResourcesChange(0, 2), 1800000, 1800000, TimeUnit.MILLISECONDS); // 30 MIN
         } catch (Throwable e) {
             log.error("[{}]Throwable", e.toString());
             e.printStackTrace();
@@ -80,13 +89,29 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
 
     @Override
     public ReadResponse read(ServerIdentity identity, int resourceId) {
-//        log.info("Read on Location resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceid);
-//        try {
+        log.warn("Read on Location resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceId);
+        try {
             resourceId = getSupportedResource(resourceId);
             switch (resourceId) {
                 case 0:
-//                log.info("Read on Location resource /[{}]/[{}]/[{}], {}", getModel().id, getId(), resourceid, Hex.encodeHexString(this.data).toLowerCase());
-                    return ReadResponse.success(resourceId, getData());
+                    log.warn("Read on Location resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceId);
+                    ReadResponse response = null;
+                    if (this.dataSingle) {
+                        if (getData() == null) {
+                            if (this.id==1) {
+                                return ReadResponse.internalServerError("error");
+                            }
+                            else {
+                                setDataSingle(new byte[0]);
+                                return ReadResponse.success(resourceId, getDataSingle());
+                            }
+                        }
+                    } else {
+                        response = ReadResponse.success(resourceId, (Map<Integer, ?>) getData(), ResourceModel.Type.OPAQUE);
+                    }
+                    log.warn("Response [{}]", response);
+                    return response;
+
                 case 1:
                     return ReadResponse.success(resourceId, getPriority());
                 case 2:
@@ -100,22 +125,25 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
                 default:
                     return super.read(identity, resourceId);
             }
-//        } catch (Exception e) {
-//            return ReadResponse.badRequest(e.getMessage());
-//        }
+        } catch (Exception e) {
+            return ReadResponse.badRequest(e.getMessage());
+        }
     }
 
     @Override
-    public WriteResponse write(ServerIdentity identity, int resourceId, LwM2mResource value) {
-//        log.info("Write on Device resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceid);
-        resourceId = getSupportedResource (resourceId);
+    public WriteResponse write(ServerIdentity identity, boolean replace, int resourceId, LwM2mResource value) {
+        log.info("Write on Device resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceId);
+        resourceId = getSupportedResource(resourceId);
         switch (resourceId) {
             case 0:
-                setData((byte[]) value.getValue());
-                fireResourcesChange(resourceId);
-                return WriteResponse.success();
+                if (setDataMulti(value, replace)) {
+                    fireResourcesChange(resourceId);
+                    return WriteResponse.success();
+                } else {
+                    return WriteResponse.badRequest("Invalidate value ...");
+                }
             case 1:
-                setPriority((Integer) ( value.getValue() instanceof Long ? ((Long) value.getValue()).intValue() : value.getValue()));
+                setPriority((Integer) (value.getValue() instanceof Long ? ((Long) value.getValue()).intValue() : value.getValue()));
                 fireResourcesChange(resourceId);
                 return WriteResponse.success();
             case 2:
@@ -130,12 +158,12 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
                 setDataFormat((String) value.getValue());
                 fireResourcesChange(resourceId);
                 return WriteResponse.success();
-                case 5:
-                setAppID((Integer) value.getValue());
+            case 5:
+                setAppID((value.getValue() instanceof Long ? ((Long) value.getValue()).intValue() : (Integer) value.getValue()));
                 fireResourcesChange(resourceId);
                 return WriteResponse.success();
             default:
-                return super.write(identity, resourceId, value);
+                return super.write(identity, replace, resourceId, value);
         }
     }
 
@@ -153,7 +181,7 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
 
     private String getDataFormat() {
 //        return  this.dataFormat == null ? "base64" : this.dataFormat;
-        return  this.dataFormat == null ? "OPAQUE" : this.dataFormat;
+        return this.dataFormat == null ? "OPAQUE" : this.dataFormat;
     }
 
     private void setDescription(String value) {
@@ -161,7 +189,7 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
     }
 
     private String getDescription() {
-        return  this.description == null ? "meter reading" : this.description;
+        return this.description == null ? "meter reading" : this.description;
     }
 
     private void setTimestamp(long time) {
@@ -169,22 +197,51 @@ public class LwM2mBinaryAppDataContainer extends LwM2mBaseInstanceEnabler {
     }
 
     private Time getTimestamp() {
-        return this.timestamp != null ? this.timestamp : new Time (new Date().getTime());
+        return this.timestamp != null ? this.timestamp : new Time(new Date().getTime());
     }
 
-    private void setData(byte[] value) {
+    //    fireResourcesChange(resourceId);
+    private boolean setDataMulti(LwM2mResource value, boolean replace) {
+        try {
+            if (value instanceof LwM2mMultipleResource) {
+                if (replace || this.data == null) {
+                    this.data = new HashMap<Integer, byte[]>();
+                }
+                value.getInstances().values().forEach(v -> {
+                    ((Map) this.data).put(v.getId(), v.getValue());
+                });
+                return true;
+            } else {
+                this.data = value.getValue();
+                return true;
+            }
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+
+    private void setDataSingle(byte[] value) {
         this.data = value;
     }
 
-    private byte[] getData() {
-        return this.data;
+    private Object getData() {
+        return data;
+//        this.data.put(23, new byte[]{0, 0, 2, 3});
+
+    }
+    
+    private byte[] getDataSingle() {
+        return (byte[]) data;
+//        this.data.put(23, new byte[]{0, 0, 2, 3});
+
     }
 
     private int getPriority() {
         return this.priority;
     }
 
-    private void setPriority(int value ) {
+    private void setPriority(int value) {
         this.priority = value;
     }
 }

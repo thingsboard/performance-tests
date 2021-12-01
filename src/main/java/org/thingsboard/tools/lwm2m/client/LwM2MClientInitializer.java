@@ -140,6 +140,11 @@ public class LwM2MClientInitializer {
             public void onDeregistrationTimeout(ServerIdentity server, DeregisterRequest request) {
                 log.info("ClientObserver ->onDeregistrationTimeout...  DeregisterRequest [{}] [{}]", request.getRegistrationId(), request.getRegistrationId());
             }
+
+            @Override
+            public void onUnexpectedError(Throwable unexpectedError) {
+                log.info("ClientObserver ->unexpectedError [{}]", unexpectedError.toString());
+            }
         };
         this.client.addObserver(observer);
         /** Start the client */

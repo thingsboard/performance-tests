@@ -39,7 +39,7 @@ public class LwM2mTemperatureSensor extends LwM2mBaseInstanceEnabler {
 
     }
 
-    public LwM2mTemperatureSensor(ScheduledExecutorService executorService, List<Integer> unSupportedResources, Integer id) {
+    public LwM2mTemperatureSensor(ScheduledExecutorService executorService, Integer id) {
         try {
             if (id != null) this.setId(id);
         executorService.scheduleWithFixedDelay(this::adjustTemperature, 2000, 2000, TimeUnit.MILLISECONDS);

@@ -26,16 +26,16 @@
 
     <logger name="org.thingsboard" level="INFO"/>
 
-<!--    <logger name="org.eclipse.californium.elements.UDPConnector" level="ON" />-->
-<!--    <logger name="org.eclipse.leshan.client.californium.LeshanClient" level="ON" />-->
-<!--    <logger name="org.eclipse.leshan.client.engine.DefaultRegistrationEngine" level="ON" />-->
-<!--    <logger name="org.eclipse.leshan.client.californium.CaliforniumEndpointsManager" level="ON" />-->
-<!--    <logger name="org.eclipse.californium.core.network.CoapEndpoint" level="ON" />-->
-<!--    <logger name="org.eclipse.californium.core.network.stack.BlockwiseLayer" level="ON" />-->
-<!--    <logger name="org.eclipse.californium.core.network.stack.ReliabilityLayer" level="ON" />-->
-<!--    <logger name="org.eclipse.californium.core.network.RandomTokenGenerator" level="ON" />-->
-<!--    <logger name="org.eclipse.californium.core.network.config.NetworkConfig" level="ON" />-->
-<!--    <logger name="org.eclipse.californium.core.CoapServer" level="ON" />-->
+    <logger name="org.eclipse.californium.elements.UDPConnector" level="ON" />
+    <logger name="org.eclipse.leshan.client.californium.LeshanClient" level="ON" />
+    <logger name="org.eclipse.leshan.client.engine.DefaultRegistrationEngine" level="ON" />
+    <logger name="org.eclipse.leshan.client.californium.CaliforniumEndpointsManager" level="ON" />
+    <logger name="org.eclipse.californium.core.network.CoapEndpoint" level="ON" />
+    <logger name="org.eclipse.californium.core.network.stack.BlockwiseLayer" level="ON" />
+    <logger name="org.eclipse.californium.core.network.stack.ReliabilityLayer" level="ON" />
+    <logger name="org.eclipse.californium.core.network.RandomTokenGenerator" level="ON" />
+    <logger name="org.eclipse.californium.core.network.config.NetworkConfig" level="ON" />
+    <logger name="org.eclipse.californium.core.CoapServer" level="ON" />
 
     <root level="INFO">
         <appender-ref ref="STDOUT"/>

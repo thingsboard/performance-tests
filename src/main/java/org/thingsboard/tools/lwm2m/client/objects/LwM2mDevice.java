@@ -27,11 +27,11 @@ import org.eclipse.leshan.core.response.WriteAttributesResponse;
 import org.eclipse.leshan.core.response.WriteResponse;
 
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.TimeZone;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ScheduledExecutorService;
@@ -67,7 +67,9 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
     private Map<Integer, Long> errorCode = new HashMap<>();  // 0=No error... 32=Device specific error codes
     private Date currentTime;
     private String utcOffset = new SimpleDateFormat("X").format(Calendar.getInstance().getTime());
+
     private String timeZone = TimeZone.getDefault().getID();
+
 //    private String supportedBinding = "UQ";
     private String supportedBinding = "U";
     private String deviceType = "smart meters";
@@ -87,11 +89,11 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
 
     public LwM2mDevice() {
 //                 notify new date each 5 second
-        Timer timer = new Timer("Device-Current Time, Value bet[/1/0/3]ery, utcOffse, timeZone");
+        Timer timer = new Timer("Device-Current Time, Value bettery, utcOffse, timeZone");
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
-                fireResourcesChange(9, 13, 14, 15);
+                fireResourcesChange(9);
             }
         }, 5000, 5000);
     }
@@ -99,10 +101,12 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
     public LwM2mDevice(ScheduledExecutorService executorService, Integer id) {
         try {
             if (id != null) this.setId(id);
+            setErrorCode(1L);
             // 15 - not present
-//            this.supportedResources =  Arrays.asList(0, 1, 2, 3, 9, 10, 11, 13, 14, 16, 17, 18, 19, 20, 21);
+            this.supportedResources =  Arrays.asList(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21);
             executorService.scheduleWithFixedDelay(() ->
-                    fireResourcesChange(9, 13, 14, 15), 10000, 10000, TimeUnit.MILLISECONDS);
+//                    setBatteryStatus(), 10000, 10000, TimeUnit.MILLISECONDS);
+                    fireResourcesChange(9), 10000, 10000, TimeUnit.MILLISECONDS);
         } catch (Throwable e) {
             log.error("[{}]Throwable", e.toString());
             e.printStackTrace();
@@ -112,7 +116,7 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
 
     @Override
     public ReadResponse read(ServerIdentity identity, int resourceId) {
-//        log.info("Read on Device resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceid);
+        log.info("Read on Device resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceId);
         resourceId = getSupportedResource (resourceId);
         switch (resourceId) {
             case 0:
@@ -160,6 +164,7 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
 
     @Override
     public ExecuteResponse execute(ServerIdentity identity, int resourceId, String params) {
+        log.info("Execute on Device resource /[{}]/[{}]/[{}]", getModel().id, getId(), resourceId);
 //        String withParams = null;
 //        if (params != null && params.length() != 0)
 //            withParams = " with params " + params;
@@ -193,12 +198,14 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
     }
 
     @Override
-    public WriteResponse write(ServerIdentity identity, int resourceId, LwM2mResource value) {
-//        log.info("Write on Device resource /[{}]/[{}]/[{}] value [{}]", getModel().id, getId(), resourceid, value);
+    public WriteResponse write(ServerIdentity identity,  boolean replace, int resourceId, LwM2mResource value) {
+        log.info("Write on Device resource /[{}]/[{}]/[{}] value [{}]", getModel().id, getId(), resourceId, value);
         resourceId = getSupportedResource (resourceId);
         switch (resourceId) {
             case 13:
-                return WriteResponse.notFound();
+                setCurrentTime((Date) value.getValue());
+                fireResourcesChange(resourceId);
+                return WriteResponse.success();
             case 14:
                 setUtcOffset((String) value.getValue());
                 fireResourcesChange(resourceId);
@@ -208,7 +215,7 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
                 fireResourcesChange(resourceId);
                 return WriteResponse.success();
             default:
-                return super.write(identity, resourceId, value);
+                return super.write(identity, replace, resourceId, value);
         }
     }
 
@@ -255,7 +262,11 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
     }
 
     private Date getCurrentTime() {
-        return currentTime = new Date();
+        return currentTime == null ? currentTime = new Date() : currentTime;
+    }
+
+    private Date setCurrentTime(Date date) {
+        return currentTime = date;
     }
 
     private String getUtcOffset() {
@@ -275,11 +286,16 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
     }
 
     private int getBatteryStatus() {
-        batteryStatus = RANDOM.nextInt(7);
-        if (this.batteryStatus == 4) {
+        return this.batteryStatus;
+    }
+
+    private void setBatteryStatus() {
+        int batteryStatus = RANDOM.nextInt(7);
+        if (batteryStatus == 4) {
             setErrorCode(1L);
         }
-        return batteryStatus;
+        this.batteryStatus = batteryStatus;
+        fireResourcesChange(9);
     }
 
     private long getMemoryTotal() {

@@ -1,12 +1,12 @@
 /**
  * Copyright © 2016-2018 The Thingsboard Authors
- * <p>
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * <p>
- * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -48,6 +48,7 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
 
     private byte[] packageData;
     private String packageURI = "coaps://example.org/firmware";
+//    private String packageURI;
     private volatile int state;
     private volatile int updateResult;
 
@@ -142,7 +143,7 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
     }
 
     @Override
-    public WriteResponse write(ServerIdentity identity, int resourceId, LwM2mResource value) {
+    public WriteResponse write(ServerIdentity identity, boolean replace, int resourceId, LwM2mResource value) {
         resourceId = getSupportedResource(resourceId);
         switch (resourceId) {
             case 0:
@@ -157,7 +158,55 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
                 });
                 return WriteResponse.success();
             default:
-                return super.write(identity, resourceId, value);
+                return super.write(identity, replace, resourceId, value);
+        }
+    }
+
+    private void downloadFirmware(String firmwareURL) {
+        try {
+            CoapClient client = new CoapClient(firmwareURL);
+            Request request = new Request(CoAP.Code.GET);
+
+            OptionSet options = new OptionSet();
+            options.setContentFormat(ContentFormat.OPAQUE_CODE);
+            options.setBlock2(6, false, 0);
+            request.setOptions(options);
+            /**
+             * Gets the 3-bit SZX code for a block size as specified by RFC 7959, Section 2.2 :
+             * 	   16 bytes = 2^4 --> 0
+             * 	   ...
+             * 	   1024 bytes = 2^10 -> 6
+             *
+             * This method is tolerant towards illegal block sizes that are < 16 or > 1024 bytes in that it will return the corresponding codes for sizes 16 or 1024 respectively.
+             * Params:
+             * blockSize – The block size in bytes.
+             * Returns:
+             * The szx code for the largest number of bytes that is less than or equal to the block size.
+             */
+            client.useEarlyNegotiation(1024);
+            /**
+             * 	public static final long DEFAULT_EXCHANGE_LIFETIME = 247 * 1000;
+             */
+
+            /**
+             * Set the maximum resource body size. For incoming messages the protocol stack may set individual sizes. For outgoing requests, this limits the size of the response.
+             * Params:
+             * maxResourceBodySize – maximum resource body size. 0 or default is defined by the NetworkConfig value of NetworkConfig.Keys.MAX_RESOURCE_BODY_SIZE.
+             * DEFAULT_MAX_RESOURCE_BODY_SIZE = 8192
+             * For large packet: MAX_RESOURCE_BODY_SIZE = 256 * 1024 * 1024 !!!
+             */
+//            request.setMaxResourceBodySize(256 * 1024 * 1024);
+            request.setMaxResourceBodySize(((LeshanClient) this.getLwM2mClient()).coap().getServer().getConfig().getOptInteger("MAX_RESOURCE_BODY_SIZE"));
+            CoapResponse response = client.advanced(request);
+            if (response != null) {
+                log.info("1) Received firmware response: {} : {}", response.getCode(), response.getPayload().length);
+                this.setPackageData(response.getPayload());
+            } else {
+                log.info("2) Received firmware response: null");
+            }
+        } catch (ConnectorException | IOException e) {
+            System.err.println("Error occurred while sending request: " + e);
+            System.exit(-1);
         }
     }
 
@@ -298,7 +347,7 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
     }
 
     private String getPackageURI() {
-        return this.packageURI;
+        return this.packageURI != null ? this.packageURI : "";
     }
 
     private void setPackageURI(String value, int resourceId) {

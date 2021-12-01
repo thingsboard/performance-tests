@@ -26,7 +26,7 @@ import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.IdBased;
 import org.thingsboard.server.common.data.security.DeviceCredentials;
 import org.thingsboard.server.common.data.security.DeviceCredentialsType;
-import org.thingsboard.tools.lwm2m.client.CertificateGenerator;
+import org.thingsboard.tools.lwm2m.secure.CertificateGenerator;
 import org.thingsboard.tools.lwm2m.client.LwM2MClientConfiguration;
 import org.thingsboard.tools.lwm2m.client.LwM2MClientContext;
 import org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode;
@@ -220,9 +220,9 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
             privateKeyClient = context.getNodeConfigKeys().get(mode.name()).get("clientSecretKey").asText();
         } else if (mode == LwM2MSecurityMode.X509) {
             try {
-                X509Certificate serverCertificate = (X509Certificate) context.getClientKeyStoreValue().getCertificate(context.getClientAlias(numberClient));
+                X509Certificate serverCertificate = (X509Certificate) context.getClientKeyStoreValue().getCertificate(context.getClientAlias(numberClient, false));
                 publicKeyClient = Hex.encodeHexString(serverCertificate.getEncoded());
-                PrivateKey privateKey = (PrivateKey) context.getClientKeyStoreValue().getKey(context.getClientAlias(numberClient), context.getClientKeyStorePwd().toCharArray());
+                PrivateKey privateKey = (PrivateKey) context.getClientKeyStoreValue().getKey(context.getClientAlias(numberClient, true), context.getClientKeyStorePwd().toCharArray());
                 privateKeyClient = Hex.encodeHexString(privateKey.getEncoded());
                 log.info("Client  [{}] uses X509 : \n X509 Certificate (Hex): [{}] \n Private Key (Hex): [{}]", endPoint, publicKeyClient, privateKeyClient);
             } catch (KeyStoreException | CertificateEncodingException e) {
@@ -269,6 +269,7 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
                 restClientService.getLwm2mExecutor().submit(() -> {
                     try {
                         String endPoint = context.getEndPoint(finalI, mode);
+
 //                        LwM2MClientConfiguration clientConfiguration = new LwM2MClientConfiguration(context, locationParams, endPoint, finalNextPortNumber, mode, restClientService.getSchedulerCoapConfig(), finalI);
 //                        LwM2MClientConfiguration clientConfiguration = LwM2MClientConfiguration.getInstance();
                         LwM2MClientConfiguration clientConfiguration = new LwM2MClientConfiguration();

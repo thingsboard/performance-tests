@@ -1,12 +1,12 @@
 /**
  * Copyright © 2016-2018 The Thingsboard Authors
- * <p>
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * <p>
- * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -158,7 +158,7 @@ public class LwM2mSoftwareManagement extends LwM2mBaseInstanceEnabler {
 
 
     @Override
-    public WriteResponse write(ServerIdentity identity, int resourceId, LwM2mResource value) {
+    public WriteResponse write(ServerIdentity identity, boolean replace, int resourceId, LwM2mResource value) {
         resourceId = getSupportedResource(resourceId);
         switch (resourceId) {
             case 2:
@@ -180,7 +180,7 @@ public class LwM2mSoftwareManagement extends LwM2mBaseInstanceEnabler {
                 setPassword((String) value.getValue());
                 return WriteResponse.success();
             default:
-                return super.write(identity, resourceId, value);
+                return super.write(identity, replace, resourceId, value);
         }
     }
 

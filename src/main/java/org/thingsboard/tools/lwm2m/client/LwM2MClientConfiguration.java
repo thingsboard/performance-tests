@@ -1,12 +1,12 @@
 /**
  * Copyright © 2016-2018 The Thingsboard Authors
- * <p>
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * <p>
- * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -28,26 +28,28 @@ import org.eclipse.californium.scandium.dtls.ResumingClientHandshaker;
 import org.eclipse.californium.scandium.dtls.ResumingServerHandshaker;
 import org.eclipse.californium.scandium.dtls.ServerHandshaker;
 import org.eclipse.californium.scandium.dtls.SessionAdapter;
+import org.eclipse.californium.scandium.dtls.SessionId;
 import org.eclipse.leshan.client.californium.LeshanClient;
 import org.eclipse.leshan.client.californium.LeshanClientBuilder;
 import org.eclipse.leshan.client.engine.DefaultRegistrationEngineFactory;
-import org.eclipse.leshan.client.resource.BaseInstanceEnablerFactory;
 import org.eclipse.leshan.client.resource.LwM2mInstanceEnabler;
-import org.eclipse.leshan.client.resource.LwM2mInstanceEnablerFactory;
 import org.eclipse.leshan.client.resource.LwM2mObjectEnabler;
 import org.eclipse.leshan.client.resource.ObjectsInitializer;
 import org.eclipse.leshan.core.californium.DefaultEndpointFactory;
 import org.eclipse.leshan.core.model.LwM2mModel;
 import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.model.StaticModel;
-import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeDecoder;
-import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeEncoder;
+import org.eclipse.leshan.core.node.codec.DefaultLwM2mDecoder;
+import org.eclipse.leshan.core.node.codec.DefaultLwM2mEncoder;
+import org.thingsboard.tools.lwm2m.client.objects.ConnectivityStatistics;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2MLocationParams;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2mBinaryAppDataContainer;
+import org.thingsboard.tools.lwm2m.client.objects.LwM2mConnectivityMonitoring;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2mDevice;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2mFirmwareUpdate;
+import org.thingsboard.tools.lwm2m.client.objects.LwM2mLocation;
 import org.thingsboard.tools.lwm2m.client.objects.LwM2mSoftwareManagement;
-import org.thingsboard.tools.lwm2m.client.objects.LwObjectEnabler;
+import org.thingsboard.tools.lwm2m.client.objects.LwM2mTemperatureSensor;
 import org.thingsboard.tools.lwm2m.secure.LwM2MSecurityStore;
 
 import java.util.ArrayList;
@@ -57,12 +59,14 @@ import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
 
+import static org.eclipse.leshan.core.LwM2mId.ACCESS_CONTROL;
+import static org.eclipse.leshan.core.LwM2mId.CONNECTIVITY_MONITORING;
+import static org.eclipse.leshan.core.LwM2mId.CONNECTIVITY_STATISTICS;
 import static org.eclipse.leshan.core.LwM2mId.DEVICE;
 import static org.eclipse.leshan.core.LwM2mId.FIRMWARE;
-import static org.eclipse.leshan.core.LwM2mId.SECURITY;
+import static org.eclipse.leshan.core.LwM2mId.LOCATION;
 import static org.eclipse.leshan.core.LwM2mId.SERVER;
 import static org.eclipse.leshan.core.LwM2mId.SOFTWARE_MANAGEMENT;
-import static org.eclipse.leshan.core.request.ContentFormat.TLV;
 
 
 @Slf4j
@@ -72,6 +76,8 @@ public class LwM2MClientConfiguration {
 
     private static final int TEMPERATURE_SENSOR = 3303;
     private static final int BINARY_APP_DATA_CONTAINER = 19;
+    Map<Integer, String> versions = new HashMap();
+
     private String endPoint;
     private int clientPort;
     private int numberClient;
@@ -97,8 +103,34 @@ public class LwM2MClientConfiguration {
         /** Create client */
 //        log.info("Starting LwM2M client... PostConstruct. BootstrapEnable: ???");
         /** Initialize model */
+        versions.put(SERVER, "1.1");
+        versions.put(ACCESS_CONTROL, "1.0");
+        versions.put(DEVICE, "1.0");
+        versions.put(FIRMWARE, "1.0");
+        versions.put(SOFTWARE_MANAGEMENT, "1.0");
+        versions.put(BINARY_APP_DATA_CONTAINER, "1.0");
+        versions.put(TEMPERATURE_SENSOR, "1.2");
+
+
+
 //        List<ObjectModel> models = ObjectLoader.loadDefault();
-        List<ObjectModel> models = context.getModelsValue();
+        List<ObjectModel> modelsAll = context.getModelsValue();
+        Map<Integer, ObjectModel> objects = new HashMap();
+        for (ObjectModel model : modelsAll) {
+            ObjectModel old = objects.put(model.id, model);
+            if (old != null && !old.equals(model) && versions.containsKey(old.id)) {
+                String versionId = versions.get(old.id);
+                if (versionId != null && !versionId.isEmpty()) {
+                    List<ObjectModel> objectModel = modelsAll.stream().filter(mod -> mod.id == old.id && mod.version.equals(versionId))
+                            .collect(Collectors.toUnmodifiableList());
+
+                    if (objectModel.size()>0) {
+                        objects.put(old.id, objectModel.get(0));
+                    }
+                }
+            }
+        }
+        List<ObjectModel> models = new ArrayList<ObjectModel>(objects.values());
 
         /** Initialize object list */
         final LwM2mModel model = new StaticModel(models);
@@ -110,128 +142,56 @@ public class LwM2MClientConfiguration {
         log.info("Start LwM2M client... PostConstruct [{}] [{}] [{}]", this.endPoint, this.mode, this.numberClient);
 
         /** Initialize security object */
-        new LwM2MSecurityStore(context, initializerModel, this.endPoint, this.mode, this.numberClient);
+        //
+        List<ObjectModel> objectModels  = models.stream().filter(mod -> mod.id == SERVER)
+                .collect(Collectors.toUnmodifiableList());
+        new LwM2MSecurityStore(context, initializerModel, this.endPoint, this.mode, this.numberClient, objectModels);
 
         /** Initialize SingleOne objects */
-        List<LwM2mObjectEnabler> enablers = new ArrayList<>();
+//        List<LwM2mObjectEnabler> enablers = new ArrayList<>();
         // Device (0)
-        LwM2mObjectEnabler device = null;
-        String versionObject = "1.0";
-        String versionDevice = versionObject;
-        List<ObjectModel> objectModels = models.stream().filter(mod -> mod.id == DEVICE && mod.version.equals(versionDevice))
+        objectModels = models.stream().filter(mod -> mod.id == DEVICE)
                 .collect(Collectors.toUnmodifiableList());
         if (objectModels.size() > 0) {
-            Map<Integer, LwM2mInstanceEnabler> deviceMapInstances = new HashMap<>();
-            LwM2mDevice lwM2mDevice0 = new LwM2mDevice(executorService, 0);
-            deviceMapInstances.put(0, lwM2mDevice0);
-            LwM2mInstanceEnabler[] deviceInstances = {lwM2mDevice0};
-            initializerModel.setInstancesForObject(DEVICE, deviceInstances);
-            initializerModel.setClassForObject(DEVICE, LwM2mDevice.class);
-            LwM2mInstanceEnablerFactory factoryDevice = new BaseInstanceEnablerFactory() {
-                @Override
-                public LwM2mInstanceEnabler create() {
-                    return new LwM2mDevice();
-                }
-            };
-            device = new LwObjectEnabler(DEVICE, objectModels.get(0), deviceMapInstances, factoryDevice, TLV);
+            initializerModel.setInstancesForObject(DEVICE, new LwM2mDevice(executorService, 0));
         }
         // FirmwareUpdate (0)
-        LwM2mObjectEnabler firmwareUpdate = null;
-        versionObject = "1.0";
-        String versionFirmware = versionObject;
-        objectModels = models.stream().filter(mod -> mod.id == FIRMWARE && mod.version.equals(versionFirmware))
+        objectModels = models.stream().filter(mod -> mod.id == FIRMWARE )
                 .collect(Collectors.toUnmodifiableList());
         if (objectModels.size() > 0) {
-            Map<Integer, LwM2mInstanceEnabler> firmwareUpdateMapInstances = new HashMap<>();
             LwM2mFirmwareUpdate firmwareUpdate0 = new LwM2mFirmwareUpdate(executorService, 0);
-            firmwareUpdateMapInstances.put(0, firmwareUpdate0);
-            LwM2mInstanceEnabler[] firmwareUpdateInstances = {firmwareUpdate0};
-            initializerModel.setInstancesForObject(FIRMWARE, firmwareUpdateInstances);
-            initializerModel.setClassForObject(FIRMWARE, LwM2mFirmwareUpdate.class);
-            LwM2mInstanceEnablerFactory factoryFirmware = new BaseInstanceEnablerFactory() {
-                @Override
-                public LwM2mInstanceEnabler create() {
-                    return new LwM2mFirmwareUpdate();
-                }
-            };
-            firmwareUpdate = new LwObjectEnabler(FIRMWARE, models.stream().filter(mod -> mod.id == FIRMWARE)
-                    .collect(Collectors.toUnmodifiableList()).get(0), firmwareUpdateMapInstances, factoryFirmware, TLV);
+            initializerModel.setInstancesForObject(FIRMWARE, firmwareUpdate0);
         }
         //  LwM2mSoftwareManagement (0)
-        LwM2mObjectEnabler softwareManagement = null;
-        versionObject = "1.0";
-        String versionSoftware = versionObject;
-        objectModels = models.stream().filter(mod -> mod.id == SOFTWARE_MANAGEMENT && mod.version.equals(versionSoftware))
+        objectModels = models.stream().filter(mod -> mod.id == SOFTWARE_MANAGEMENT)
                 .collect(Collectors.toUnmodifiableList());
         if (objectModels.size() > 0) {
-            Map<Integer, LwM2mInstanceEnabler> softwareManagementMapInstances = new HashMap<>();
             LwM2mSoftwareManagement softwareUpdate0 = new LwM2mSoftwareManagement(executorService, 0);
-            softwareManagementMapInstances.put(0, softwareUpdate0);
-            LwM2mInstanceEnabler[] softwareUpdateInstances = {softwareUpdate0};
-            initializerModel.setInstancesForObject(SOFTWARE_MANAGEMENT, softwareUpdateInstances);
-            initializerModel.setClassForObject(SOFTWARE_MANAGEMENT, LwM2mSoftwareManagement.class);
-            LwM2mInstanceEnablerFactory factorySoftwareManagement = new BaseInstanceEnablerFactory() {
-                @Override
-                public LwM2mInstanceEnabler create() {
-                    return new LwM2mSoftwareManagement();
-                }
-            };
-            softwareManagement = new LwObjectEnabler(SOFTWARE_MANAGEMENT, models.stream().filter(mod -> mod.id == SOFTWARE_MANAGEMENT)
-                    .collect(Collectors.toUnmodifiableList()).get(0), softwareManagementMapInstances, factorySoftwareManagement, TLV);
+            initializerModel.setInstancesForObject(SOFTWARE_MANAGEMENT, softwareUpdate0);
         }
         /** initializeMultiInstanceObjects */
         // BinaryAppDataContainer (0, 1)
-        LwM2mObjectEnabler LwM2mBinaryAppDataContainer = null;
-        versionObject = "1.0";
-        String versionBinaryAppData = versionObject;
-        objectModels = models.stream().filter(mod -> mod.id == BINARY_APP_DATA_CONTAINER && mod.version.equals(versionBinaryAppData))
+        objectModels = models.stream().filter(mod -> mod.id == BINARY_APP_DATA_CONTAINER)
                 .collect(Collectors.toUnmodifiableList());
         if (objectModels.size() > 0) {
-            Map<Integer, LwM2mInstanceEnabler> lwM2mBinaryAppDataContainerMapInstances = new HashMap<>();
-            LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer0 = new LwM2mBinaryAppDataContainer(executorService, 0);
-            LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer1 = new LwM2mBinaryAppDataContainer(executorService, 1);
-            lwM2mBinaryAppDataContainerMapInstances.put(0, lwM2mBinaryAppDataContainer0);
-            lwM2mBinaryAppDataContainerMapInstances.put(1, lwM2mBinaryAppDataContainer1);
-            LwM2mInstanceEnabler[] lwM2mBinaryAppDataContainerInstances = {lwM2mBinaryAppDataContainer0, lwM2mBinaryAppDataContainer1};
-            initializerModel.setInstancesForObject(BINARY_APP_DATA_CONTAINER, lwM2mBinaryAppDataContainerInstances);
             initializerModel.setClassForObject(BINARY_APP_DATA_CONTAINER, LwM2mBinaryAppDataContainer.class);
-            LwM2mInstanceEnablerFactory factoryLwM2mBinaryAppDataContainer = new BaseInstanceEnablerFactory() {
-                @Override
-                public LwM2mInstanceEnabler create() {
-                    return new LwM2mBinaryAppDataContainer();
-                }
-            };
-             LwM2mBinaryAppDataContainer = new LwObjectEnabler(BINARY_APP_DATA_CONTAINER,
-                    models.stream().filter(mod -> mod.id == BINARY_APP_DATA_CONTAINER).collect(Collectors.toUnmodifiableList()).get(0),
-                    lwM2mBinaryAppDataContainerMapInstances, factoryLwM2mBinaryAppDataContainer, TLV);
-        }
-        LwM2mObjectEnabler security = initializerModel.create(SECURITY);
-        LwM2mObjectEnabler server = initializerModel.create(SERVER);
-        enablers.add(security);
-        enablers.add(server);
-        if (device != null) {
-            enablers.add(device);
-        }
-        if (firmwareUpdate != null) {
-            enablers.add(firmwareUpdate);
-        }
-        if (softwareManagement != null) {
-            enablers.add(softwareManagement);
-        }
-        if (LwM2mBinaryAppDataContainer != null) {
-            enablers.add(LwM2mBinaryAppDataContainer);
+            boolean dataSingle = !objectModels.get(0).resources.get(0).multiple;
+            LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer0 = new LwM2mBinaryAppDataContainer(executorService, 0, dataSingle);
+            LwM2mBinaryAppDataContainer lwM2mBinaryAppDataContainer1 = new LwM2mBinaryAppDataContainer(executorService, 1, dataSingle);
+            LwM2mInstanceEnabler[] instances = new LwM2mInstanceEnabler[]{lwM2mBinaryAppDataContainer0, lwM2mBinaryAppDataContainer1};
+            initializerModel.setInstancesForObject(BINARY_APP_DATA_CONTAINER, instances);
         }
 
-//        initializer.setInstancesForObject(BINARY_APP_DATA_CONTAINER, new LwM2mBinaryAppDataContainer(executorService));
-//        initializer.setInstancesForObject(CONNECTIVITY_MONITORING, new LwM2mConnectivityMonitoring(executorService));
-//        initializer.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
-//        initializer.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
+        initializerModel.setClassForObject(CONNECTIVITY_MONITORING, LwM2mConnectivityMonitoring.class);
+        initializerModel.setInstancesForObject(CONNECTIVITY_MONITORING, new LwM2mConnectivityMonitoring());
+        initializerModel.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
+        initializerModel.setInstancesForObject(LOCATION, new LwM2mLocation(locationParams.getLatitude(), locationParams.getLongitude(), locationParams.getScaleFactor()));
+
+        LwM2mInstanceEnabler[] instances = {new LwM2mTemperatureSensor(executorService, 0), new LwM2mTemperatureSensor(executorService, 1)};
+        initializerModel.setInstancesForObject(TEMPERATURE_SENSOR, instances);
+        initializerModel.setInstancesForObject(CONNECTIVITY_STATISTICS, new ConnectivityStatistics());
 //
-//        LwM2mInstanceEnabler[] instances = {new LwM2mTemperatureSensor(executorService), new LwM2mTemperatureSensor(executorService)};
-//        initializer.setInstancesForObject(TEMPERATURE_SENSOR, instances);
-//        initializer.setInstancesForObject(CONNECTIVITY_STATISTICS, new ConnectivityStatistics());
-
-//        List<LwM2mObjectEnabler> enablers = initializer.createAll();
+        List<LwM2mObjectEnabler> enablers = initializerModel.createAll();
 
 
         /** Create CoAP Config */
@@ -253,6 +213,8 @@ public class LwM2MClientConfiguration {
 
         /** Create DTLS Config */
         DtlsConnectorConfig.Builder dtlsConfig = new DtlsConnectorConfig.Builder();
+        dtlsConfig.setRecommendedCipherSuitesOnly(true);
+        dtlsConfig.setClientOnly();
 
         /** Configure Registration Engine */
         DefaultRegistrationEngineFactory engineFactory = new DefaultRegistrationEngineFactory();
@@ -263,7 +225,8 @@ public class LwM2MClientConfiguration {
         engineFactory.setResumeOnConnect(!context.getForceFullHandshake());
 
         /** Configure EndpointFactory */
-        DefaultEndpointFactory endpointFactory = new DefaultEndpointFactory(this.endPoint) {
+//        DefaultEndpointFactory endpointFactory = new DefaultEndpointFactory(this.endPoint) {
+        DefaultEndpointFactory endpointFactory = new DefaultEndpointFactory(this.endPoint, true) {
             @Override
             protected Connector createSecuredConnector(DtlsConnectorConfig dtlsConfig) {
 
@@ -272,36 +235,45 @@ public class LwM2MClientConfiguration {
                     protected void onInitializeHandshaker(Handshaker handshaker) {
                         handshaker.addSessionListener(new SessionAdapter() {
 
+                            private SessionId sessionIdentifier = null;
+
                             @Override
                             public void handshakeStarted(Handshaker handshaker) throws HandshakeException {
-                                if (handshaker instanceof ServerHandshaker) {
-                                    log.info("DTLS Full Handshake initiated by server : STARTED ...");
-                                } else if (handshaker instanceof ResumingServerHandshaker) {
+                                if (handshaker instanceof ResumingServerHandshaker) {
                                     log.info("DTLS abbreviated Handshake initiated by server : STARTED ...");
+                                } else if (handshaker instanceof ServerHandshaker) {
+                                    log.info("DTLS Full Handshake initiated by server : STARTED ...");
+                                } else if (handshaker instanceof ResumingClientHandshaker) {
+                                    sessionIdentifier = handshaker.getSession().getSessionIdentifier();
+                                    log.info("DTLS abbreviated Handshake initiated by client : STARTED ...");
                                 } else if (handshaker instanceof ClientHandshaker) {
                                     log.info("DTLS Full Handshake initiated by client : STARTED ...");
-                                } else if (handshaker instanceof ResumingClientHandshaker) {
-                                    log.info("DTLS abbreviated Handshake initiated by client : STARTED ...");
                                 }
                             }
 
                             @Override
                             public void sessionEstablished(Handshaker handshaker, DTLSSession establishedSession)
                                     throws HandshakeException {
-                                if (handshaker instanceof ServerHandshaker) {
-                                    log.info("DTLS Full Handshake initiated by server : SUCCEED, handshaker {}", handshaker);
-                                } else if (handshaker instanceof ResumingServerHandshaker) {
-                                    log.info("DTLS abbreviated Handshake initiated by server : SUCCEED, handshaker {}", handshaker);
-                                } else if (handshaker instanceof ClientHandshaker) {
-                                    log.info("DTLS Full Handshake initiated by client : SUCCEED, handshaker {}", handshaker);
+                                if (handshaker instanceof ResumingServerHandshaker) {
+                                    log.info("DTLS abbreviated Handshake initiated by server : SUCCEED");
+                                } else if (handshaker instanceof ServerHandshaker) {
+                                    log.info("DTLS Full Handshake initiated by server : SUCCEED");
                                 } else if (handshaker instanceof ResumingClientHandshaker) {
-                                    log.info("DTLS abbreviated Handshake initiated by client : SUCCEED, handshaker {}", handshaker);
+                                    if (sessionIdentifier != null && sessionIdentifier
+                                            .equals(handshaker.getSession().getSessionIdentifier())) {
+                                        log.info("DTLS abbreviated Handshake initiated by client : SUCCEED");
+                                    } else {
+                                        log.info(
+                                                "DTLS abbreviated turns into Full Handshake initiated by client : SUCCEED");
+                                    }
+                                } else if (handshaker instanceof ClientHandshaker) {
+                                    log.info("DTLS Full Handshake initiated by client : SUCCEED");
                                 }
                             }
 
                             @Override
                             public void handshakeFailed(Handshaker handshaker, Throwable error) {
-                                /** get cause */
+                                // get cause
                                 String cause;
                                 if (error != null) {
                                     if (error.getMessage() != null) {
@@ -313,14 +285,14 @@ public class LwM2MClientConfiguration {
                                     cause = "unknown cause";
                                 }
 
-                                if (handshaker instanceof ServerHandshaker) {
-                                    log.info("DTLS Full Handshake initiated by server : FAILED [{}]", cause);
-                                } else if (handshaker instanceof ResumingServerHandshaker) {
-                                    log.info("DTLS abbreviated Handshake initiated by server : FAILED [{}]", cause);
-                                } else if (handshaker instanceof ClientHandshaker) {
-                                    log.info("DTLS Full Handshake initiated by client : FAILED [{}]", cause);
+                                if (handshaker instanceof ResumingServerHandshaker) {
+                                    log.info("DTLS abbreviated Handshake initiated by server : FAILED ({})", cause);
+                                } else if (handshaker instanceof ServerHandshaker) {
+                                    log.info("DTLS Full Handshake initiated by server : FAILED ({})", cause);
                                 } else if (handshaker instanceof ResumingClientHandshaker) {
-                                    log.info("DTLS abbreviated Handshake initiated by client : FAILED [{}]", cause);
+                                    log.info("DTLS abbreviated Handshake initiated by client : FAILED ({})", cause);
+                                } else if (handshaker instanceof ClientHandshaker) {
+                                    log.info("DTLS Full Handshake initiated by client : FAILED ({})", cause);
                                 }
                             }
                         });
@@ -339,8 +311,8 @@ public class LwM2MClientConfiguration {
         builder.setEndpointFactory(endpointFactory);
         builder.setSharedExecutor(executorService);
         if (context.getSupportOldFormat()) {
-            builder.setDecoder(new DefaultLwM2mNodeDecoder(true));
-            builder.setEncoder(new DefaultLwM2mNodeEncoder(true));
+            builder.setDecoder(new DefaultLwM2mDecoder(true));
+            builder.setEncoder(new DefaultLwM2mEncoder(true));
         }
         builder.setAdditionalAttributes(context.getAddAttributes().isEmpty() ? null : context.getAddAttrs(context.getAddAttributes()));
         return builder.build();

@@ -80,11 +80,35 @@ lwm2m:
       port: "${RPK_BS_PORT:5688}"
   x509:
     enabled: "${X509_ENABLED:true}"
-    prefix_client: "${CLIENT_ALIAS:client}"
-    prefix_client_alias: "${CLIENT_ALIAS:client_alias_}"
-    prefix_client_self_alias: "${CLIENT_SELF_ALIAS:client_self_signed_}"
-    create_new_key_store_sh: "${CREATE_NEW_KET_STORE_SH:false}"
-    create_new_key_store_java: "${CREATE_NEW_KET_STORE_JAVA:false}"
+    trust: "${X509_ENABLED_TRUST:true}"
+    create:
+      enabled: "${CREATE_NEW_KEY_STORE_JAVA:false
+      }"
+      # Files jks
+      key_store_server_file: "${KEY_STORE_SERVER_FILE:lwm2mserver.jks}"
+      key_store_client_file: "${KEY_STORE_CLIENT_FILE:lwm2mclient.jks}"
+      key_store_client_no_trust_file: "${KEY_STORE_CLIENT_NO_TRUST_FILE:lwm2mclientnotrust.jks}"
+      # Alias
+      root_alias: "${ROOT_ALIAS:rootCA}"
+      server_alias: "${SERVER_ALIAS:server}"
+      bootstrap_alias: "${BOOTSTRAP_ALIAS:bootstrap}"
+      client_alias_no_trust: "${CLIENT_ALIAS_NO_TRUST:client_not_trusted}"
+      client_alias_private_key_no_trust: "${CLIENT_ALIAS_PRIVATE_KEY_NO_TRUST:client}"
+      prefix_client_alias: "${CLIENT_ALIAS:client_alias_}"
+      # CN
+      root_endpoint: "${ROOT_CN:root.com}"
+      server_endpoint: "${SERVER_CN:localhost}"
+      bootstrap_endpoint: "${BOOTSTRAP_CN:bootstrap.bootstrap}"
+      pref_sub_endpoint: "${PREF_SUB_CN:sub}"
+#      start to 0
+      sub_level: "${SUB_LEVEL:2}"
+      client_no_trust_endpoint: "${CLIENT_NO_TRUST_ENDPOINT:deviceAEndpoint}"
+      # PSW
+      server_key_store_pwd: "${SERVER_KEY_STORE_PWD:server_ks_password}"
+#      server_key_store_pwd: "${SERVER_KEY_STORE_PWD:server}"
+      client_key_store_pwd: "${CLIENT_KEY_STORE_PWD:client_ks_password}"
+      client_no_trust_key_store_pwd: "${CLIENT_NO_TRUST_KEY_STORE_PWD:client_ks_password}"
+    create_new_key_store_sh: "${CREATE_NEW_KEY_STORE_SH:false}"
     server:
       host: "${X509_HOST:localhost}"
       port: "${X509_PORT:5686}"
