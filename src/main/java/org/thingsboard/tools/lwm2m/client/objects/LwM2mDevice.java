@@ -67,8 +67,9 @@ public class LwM2mDevice extends LwM2mBaseInstanceEnabler {
     private Map<Integer, Long> errorCode = new HashMap<>();  // 0=No error... 32=Device specific error codes
     private Date currentTime;
     private String utcOffset = new SimpleDateFormat("X").format(Calendar.getInstance().getTime());
-//    private String timeZone = TimeZone.getDefault().getID();
-    private String timeZone = "Kiev09";
+
+    private String timeZone = TimeZone.getDefault().getID();
+
 //    private String supportedBinding = "UQ";
     private String supportedBinding = "U";
     private String deviceType = "smart meters";
