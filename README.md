@@ -21,7 +21,7 @@ nano .env
 
 and put next content into the text file (modify it according to your test goals):
 ```bash
-REST_URL=http://IP_ADDRESS_OF_TB_INSTANCE:9090
+REST_URL=http://IP_ADDRESS_OF_TB_INSTANCE:8080
 # IP_ADDRESS_OF_TB_INSTANCE is your local IP address if you run ThingsBoard on your dev machine in docker
 # Port should be modified as well if needed 
 REST_USERNAME=tenant@thingsboard.org
@@ -93,5 +93,5 @@ Where:
 
 Once params are configured to run test simple type from the folder where configuration file is located:
 ```bash
-docker run -it --env-file .env --name tb-perf-test thingsboard/tb-ce-performance-test:3.0.0
+docker run -it --env-file .env --name tb-perf-test thingsboard/tb-ce-performance-test:3.2.0
 ```
