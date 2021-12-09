@@ -552,6 +552,8 @@
                             <exclude>ui/**</exclude>
                             <exclude>src/browserslist</exclude>
                             <exclude>**/*.raw</exclude>
+                            <exclude>src/main/resources/models/*.xml</exclude>
+                            <exclude>src/main/resources/**/*.jks</exclude>
                         </excludes>
                         <mapping>
                             <proto>JAVADOC_STYLE</proto>
