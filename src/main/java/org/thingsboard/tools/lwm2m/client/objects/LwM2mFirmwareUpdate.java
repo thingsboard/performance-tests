@@ -210,54 +210,6 @@ public class LwM2mFirmwareUpdate extends LwM2mBaseInstanceEnabler {
         }
     }
 
-    private void downloadFirmware(String firmwareURL) {
-        try {
-            CoapClient client = new CoapClient(firmwareURL);
-            Request request = new Request(CoAP.Code.GET);
-
-            OptionSet options = new OptionSet();
-            options.setContentFormat(ContentFormat.OPAQUE_CODE);
-            options.setBlock2(6, false, 0);
-            request.setOptions(options);
-            /**
-             * Gets the 3-bit SZX code for a block size as specified by RFC 7959, Section 2.2 :
-             * 	   16 bytes = 2^4 --> 0
-             * 	   ...
-             * 	   1024 bytes = 2^10 -> 6
-             *
-             * This method is tolerant towards illegal block sizes that are < 16 or > 1024 bytes in that it will return the corresponding codes for sizes 16 or 1024 respectively.
-             * Params:
-             * blockSize – The block size in bytes.
-             * Returns:
-             * The szx code for the largest number of bytes that is less than or equal to the block size.
-             */
-            client.useEarlyNegotiation(1024);
-            /**
-             * 	public static final long DEFAULT_EXCHANGE_LIFETIME = 247 * 1000;
-             */
-
-            /**
-             * Set the maximum resource body size. For incoming messages the protocol stack may set individual sizes. For outgoing requests, this limits the size of the response.
-             * Params:
-             * maxResourceBodySize – maximum resource body size. 0 or default is defined by the NetworkConfig value of NetworkConfig.Keys.MAX_RESOURCE_BODY_SIZE.
-             * DEFAULT_MAX_RESOURCE_BODY_SIZE = 8192
-             * For large packet: MAX_RESOURCE_BODY_SIZE = 256 * 1024 * 1024 !!!
-             */
-//            request.setMaxResourceBodySize(256 * 1024 * 1024);
-            request.setMaxResourceBodySize(((LeshanClient) this.getLwM2mClient()).coap().getServer().getConfig().getOptInteger("MAX_RESOURCE_BODY_SIZE"));
-            CoapResponse response = client.advanced(request);
-            if (response != null) {
-                log.info("1) Received firmware response: {} : {}", response.getCode(), response.getPayload().length);
-                this.setPackageData(response.getPayload());
-            } else {
-                log.info("2) Received firmware response: null");
-            }
-        } catch (ConnectorException | IOException e) {
-            System.err.println("Error occurred while sending request: " + e);
-            System.exit(-1);
-        }
-    }
-
     @Override
     public ExecuteResponse execute(ServerIdentity identity, int resourceId, String params) {
         resourceId = getSupportedResource(resourceId);
