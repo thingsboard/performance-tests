@@ -45,7 +45,7 @@
         <pkg.unixLogFolder>/var/log/${pkg.name}</pkg.unixLogFolder>
         <pkg.installFolder>/usr/share/${pkg.name}</pkg.installFolder>
         <pkg.win.dist>${project.build.directory}/windows</pkg.win.dist>
-        <thingsboard.version>3.3.0-SNAPSHOT</thingsboard.version>
+        <thingsboard.version>3.3.2-SNAPSHOT</thingsboard.version>
         <docker.repo>thingsboard</docker.repo>
         <dockerfile.skip>true</dockerfile.skip>
         <docker.name>tb-ce-performance-tests</docker.name>
