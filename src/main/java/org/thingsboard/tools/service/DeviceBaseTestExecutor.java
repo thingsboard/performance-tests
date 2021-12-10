@@ -17,7 +17,7 @@ package org.thingsboard.tools.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.thingsboard.tools.service.device.DeviceAPITest;
@@ -29,6 +29,9 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @ConditionalOnProperty(prefix = "test", value = "api", havingValue = "device")
 public class DeviceBaseTestExecutor extends BaseTestExecutor {
+
+    @Value("${test.exitAfterComplete:true}")
+    boolean exitAfterComplete;
 
     @Autowired
     private DeviceAPITest deviceAPITest;
@@ -63,9 +66,9 @@ public class DeviceBaseTestExecutor extends BaseTestExecutor {
     @Override
     protected void waitOtherClients() throws Exception {
         if (testEnabled) {
-            while (true) {
+            log.info("Test completed. Waiting for other clients to complete!");
+            while (!exitAfterComplete) {
                 try {
-                    log.info("Test completed. Waiting for other clients to complete!");
                     log.info("If all clients done, please execute next command: 'kubectl delete statefulset tb-performance-run'");
                     TimeUnit.SECONDS.sleep(10);
                 } catch (InterruptedException e) {
