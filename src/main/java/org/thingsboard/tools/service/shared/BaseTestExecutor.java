@@ -56,9 +56,6 @@ public abstract class BaseTestExecutor {
     @Value("${test.revertRootRuleChain:true}")
     protected boolean revertRootRuleChain;
 
-    @Value("${device.api}")
-    private String deviceAPIType;
-
     @Autowired
     private RuleChainManager ruleChainManager;
 
