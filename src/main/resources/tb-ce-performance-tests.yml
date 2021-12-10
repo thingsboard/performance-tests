@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 
+spring.main.web-application-type: NONE
 server:
   # Server bind address
   address: "0.0.0.0"
@@ -33,9 +34,8 @@ endpoints:
     enabled: "${ENDPOINTS_SHUTDOWN_ENABLED:true}"
 
 rest:
-  connect_server: "${REST_CONNECT_SERVER:false}"
+  connect_server: "${REST_CONNECT_SERVER:true}"
   url: "${REST_URL:http://localhost:8080}"
-#  url: "${REST_URL:http://192.168.1.110:8080}"
   username: "${REST_USERNAME:tenant@thingsboard.org}"
   password: "${REST_PASSWORD:tenant}"
 mqtt:
@@ -52,7 +52,6 @@ lwm2m:
   noSec:
     enabled: "${NO_SEC_ENABLED:true}"
     server:
-#      host: "${NO_SEC_HOST:192.168.1.110}"
       host: "${NO_SEC_HOST:localhost}"
       port: "${NO_SEC_PORT:5685}"
     bootStrap:
@@ -82,8 +81,7 @@ lwm2m:
     enabled: "${X509_ENABLED:true}"
     trust: "${X509_ENABLED_TRUST:true}"
     create:
-      enabled: "${CREATE_NEW_KEY_STORE_JAVA:false
-      }"
+      enabled: "${CREATE_NEW_KEY_STORE_JAVA:false}"
       # Files jks
       key_store_server_file: "${KEY_STORE_SERVER_FILE:lwm2mserver.jks}"
       key_store_client_file: "${KEY_STORE_CLIENT_FILE:lwm2mclient.jks}"
@@ -126,12 +124,12 @@ lwm2m:
     request_timeout: "${REQUEST_TIMEOUT:}"
 device:
   # Device API to use - MQTT, HTTP or LWM2M
-  api: "${DEVICE_API:LWM2M}"
+  api: "${DEVICE_API:MQTT}"
   startIdx: "${DEVICE_START_IDX:0}"
-  endIdx: "${DEVICE_END_IDX:1}"
-  count: "${DEVICE_COUNT:1}" # count of devices to be used by clients in k8s deployment run
-  createOnStart: "${DEVICE_CREATE_ON_START:false}"
-  deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
+  endIdx: "${DEVICE_END_IDX:10}"
+  count: "${DEVICE_COUNT:10}" # count of devices to be used by clients in k8s deployment run
+  createOnStart: "${DEVICE_CREATE_ON_START:true}"
+  deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:true}"
 gateway:
   startIdx: "${GATEWAY_START_IDX:0}"
   endIdx: "${GATEWAY_END_IDX:10}"
@@ -141,16 +139,16 @@ gateway:
 customer:
   startIdx: "${CUSTOMER_START_IDX:0}"
   endIdx: "${CUSTOMER_END_IDX:0}"
-  createOnStart: "${CUSTOMER_CREATE_ON_START:false}"
-  deleteOnComplete: "${CUSTOMER_DELETE_ON_COMPLETE:false}"
+  createOnStart: "${CUSTOMER_CREATE_ON_START:true}"
+  deleteOnComplete: "${CUSTOMER_DELETE_ON_COMPLETE:true}"
 dashboard:
-  createOnStart: "${DASHBOARD_CREATE_ON_START:false}"
-  deleteOnComplete: "${DASHBOARD_DELETE_ON_COMPLETE:false}"
+  createOnStart: "${DASHBOARD_CREATE_ON_START:true}"
+  deleteOnComplete: "${DASHBOARD_DELETE_ON_COMPLETE:true}"
   deleteIfExists: "${DASHBOARD_DELETE_IF_EXISTS:false}"
   tenant: alarms.json # please use comma separated list for multiple dashboards: dashboard1.json, dashboard2.json
   shared: "devices.json"
 warmup:
-  enabled: "${WARMUP_ENABLED:false}"
+  enabled: "${WARMUP_ENABLED:true}"
 test:
   # Type of the payload to send: DEFAULT, SMART_TRACKER, SMART_METER
   # RANDOM - TODO: add description
@@ -165,9 +163,9 @@ test:
   enabled: "${TEST_ENABLED:true}"
   updateRootRuleChain: "${UPDATE_ROOT_RULE_CHAIN:false}"
   revertRootRuleChain: "${REVERT_ROOT_RULE_CHAIN:false}"
-  # Test API to use - device or gateway
+  # Test API to use - device, gateway or lwm2m
   # If Device API == LWM2M only - lwm2m
-  api: "${TEST_API:lwm2m}"
+  api: "${TEST_API:device}"
   sequential: "${TEST_SEQUENTIAL:true}"
   ruleChainName:  "${RULE_CHAIN_NAME:root_rule_chain_ce.json}"
   # messages per second.
@@ -179,5 +177,4 @@ test:
     end: "${ALARM_STORM_END_SECOND:0}"
     # alarms per second should be less them messages per second.
     aps: "${ALARMS_PER_SECOND:10}"
-
-
+  exitAfterComplete: "${EXIT_AFTER_COMPLETE:true}" # this useful for kubernetes statefulset setup
