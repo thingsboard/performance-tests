@@ -45,7 +45,7 @@
         <docker.name>tb-ce-performance-tests</docker.name>
         <tb-ce-performance-test.docker.name>tb-ce-performance-test</tb-ce-performance-test.docker.name>
 
-        <thingsboard.version>3.3.2-SNAPSHOT</thingsboard.version>
+        <thingsboard.version>3.3.2</thingsboard.version>
         <spring-boot.version>2.6.1</spring-boot.version>
         <spring.version>5.3.13</spring.version>
         <lombok.version>1.18.22</lombok.version>
