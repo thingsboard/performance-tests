@@ -75,23 +75,38 @@ RULE_CHAIN_NAME=root_rule_chain_ce.json
 
 Where: 
     
-- `REST_URL`                     - Rest URL of the TB instance
-- `REST_USERNAME`                - Login of the user 
-- `REST_PASSWORD`                - Password of the user
-- `MQTT_HOST`                    - URL of the ThingsBoard MQTT broker
-- `MQTT_PORT`                    - Port of the ThingsBoard MQTT broker
-- `DEVICE_API`                   - Use MQTT or HTTP Device API for send messages
+- `REST_URL`                     - Rest URL of the TB instance. Default: http://localhost:8080
+- `REST_USERNAME`                - Login of the user. Default: tenant@thingsboard.org  
+- `REST_PASSWORD`                - Password of the user. Default: tenant
+- `MQTT_HOST`                    - URL of the ThingsBoard MQTT broker. Default: localhost
+- `MQTT_PORT`                    - Port of the ThingsBoard MQTT broker. Default: 1883
+- `DEVICE_API`                   - Use MQTT, HTTP or LWM2M Device API for send messages. Default: MQTT
 - `DEVICE_START_IDX`             - First index of the device that is going to be used in the test. Token of the device is going to be index of this device during test
 - `DEVICE_END_IDX`               - Last index of the device that is going to be used in  the test
 - `DEVICE_CREATE_ON_START`       - Create devices before test 
 - `DEVICE_DELETE_ON_COMPLETE`    - Delete devices after test, there were created on start of the test
 - `MESSAGES_PER_SECOND`          - Number of the messages to be published per second to ThingsBoard
 - `DURATION_IN_SECONDS`          - Number of seconds run of the test
-- `MQTT_SSL_ENABLED`             - Enable/disable ssl for MQTT
+- `MQTT_SSL_ENABLED`             - Enable/disable ssl for MQTT. Default: false
 - `MQTT_SSL_KEY_STORE`           - MQTT key store file location
 - `MQTT_SSL_KEY_STORE_PASSWORD`  - MQTT key store file password
 
 Once params are configured to run test simple type from the folder where configuration file is located:
 ```bash
 docker run -it --env-file .env --name tb-perf-test thingsboard/tb-ce-performance-test:3.2.0
+```
+
+Simply run test on the same machine (service, IDE, Docker)
+```bash
+docker run -it --rm --network host --name tb-perf-test thingsboard/tb-ce-performance-test:3.3.2-SNAPSHOT
+```
+
+Simply run test somewhere else
+```bash
+docker run -it --rm --network host --name tb-perf-test \
+           --env REST_URL=https://demo.thingsboard.io \
+           --env REST_USERNAME=tenant@thingsboard.org \
+           --env REST_PASSWORD=tenant \
+           --env MQTT_HOST=demo.thingsboard.io \
+           thingsboard/tb-ce-performance-test:3.3.2-SNAPSHOT
 ```
