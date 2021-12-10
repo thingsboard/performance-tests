@@ -93,12 +93,12 @@ Where:
 
 Once params are configured to run test simple type from the folder where configuration file is located:
 ```bash
-docker run -it --env-file .env --name tb-perf-test thingsboard/tb-ce-performance-test:3.2.0
+docker run -it --env-file .env --name tb-perf-test thingsboard/tb-ce-performance-test:latest
 ```
 
 Simply run test on the same machine (service, IDE, Docker)
 ```bash
-docker run -it --rm --network host --name tb-perf-test thingsboard/tb-ce-performance-test:3.3.2-SNAPSHOT
+docker run -it --rm --network host --name tb-perf-test thingsboard/tb-ce-performance-test:latest
 ```
 
 Simply run test somewhere else
@@ -108,5 +108,5 @@ docker run -it --rm --network host --name tb-perf-test \
            --env REST_USERNAME=tenant@thingsboard.org \
            --env REST_PASSWORD=tenant \
            --env MQTT_HOST=demo.thingsboard.io \
-           thingsboard/tb-ce-performance-test:3.3.2-SNAPSHOT
+           thingsboard/tb-ce-performance-test:latest
 ```
