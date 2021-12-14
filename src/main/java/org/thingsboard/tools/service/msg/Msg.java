@@ -18,6 +18,8 @@ package org.thingsboard.tools.service.msg;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
+import java.nio.charset.StandardCharsets;
+
 @AllArgsConstructor
 public class Msg {
 
@@ -29,5 +31,10 @@ public class Msg {
     public Msg(byte[] data) {
         this.data = data;
         this.triggersAlarm = false;
+    }
+
+    @Override
+    public String toString() {
+        return "Msg(data=" + new String(this.data, StandardCharsets.UTF_8) + ", triggersAlarm=" + this.triggersAlarm + ")";
     }
 }
