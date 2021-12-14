@@ -242,7 +242,7 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
                 boolean alarmRequired = alarmIteration && (alarmCount < alarmsPerSecond);
                 int index = msgCount % deviceCount;
                 DeviceClient client = deviceClients.get(index);
-                log.info("device client index {} device {}", index, client.getDeviceName());
+                //log.info("device client index {} device {}", index, client.getDeviceName());
                 msgCount++;
                 Msg message = getNextMessage(client.getDeviceName(), alarmRequired);
                 if (message.isTriggersAlarm()) {
