@@ -27,6 +27,8 @@ import org.thingsboard.tools.service.shared.BaseMqttAPITest;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -106,7 +108,7 @@ public class MqttDeviceAPITest extends BaseMqttAPITest implements DeviceAPITest 
             pack.add(device);
             if (pack.size() == warmUpPackSize) {
                 connectDevices(pack, totalConnectedCount, false);
-                Thread.sleep(100 + new Random().nextInt(100));
+                Thread.sleep(1 + random.nextInt(100));
                 pack = null;
             }
         }
@@ -128,5 +130,10 @@ public class MqttDeviceAPITest extends BaseMqttAPITest implements DeviceAPITest 
             client.setDeviceName(mqttClient.getClientConfig().getUsername());
             deviceClients.add(client);
         }
+        log.info("Sorting device clients...");
+        deviceClients.sort(Comparator.comparing(DeviceClient::getDeviceName));
+        log.info("Shuffling device clients...");
+        Collections.shuffle(deviceClients, random);
+        log.info("Mapping devices to device client connections done");
     }
 }

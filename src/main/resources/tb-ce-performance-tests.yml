@@ -178,3 +178,4 @@ test:
     # alarms per second should be less them messages per second.
     aps: "${ALARMS_PER_SECOND:10}"
   exitAfterComplete: "${EXIT_AFTER_COMPLETE:true}" # this useful for kubernetes statefulset setup
+  seed: "${SEED:0}" # random seed to provide reproducible random order on each run

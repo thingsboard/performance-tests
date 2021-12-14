@@ -224,25 +224,26 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
         }
     }
 
-    protected void runApiTestIteration(int iteration,
+    protected void runApiTestIteration(final int iteration,
                                        AtomicInteger totalSuccessPublishedCount,
                                        AtomicInteger totalFailedPublishedCount,
                                        CountDownLatch testDurationLatch,
-                                       boolean isGateway) {
+                                       final boolean isGateway) {
         try {
-            Set<DeviceClient> iterationDevices = new HashSet<>();
             log.info("[{}] Starting performance iteration for {} {}...", iteration, mqttClients.size(), isGateway ? "gateways" : "devices");
             AtomicInteger successPublishedCount = new AtomicInteger();
             AtomicInteger failedPublishedCount = new AtomicInteger();
             CountDownLatch iterationLatch = new CountDownLatch(testMessagesPerSecond);
             boolean alarmIteration = iteration >= alarmsStartTs && iteration < alarmsEndTs;
             int alarmCount = 0;
+            int deviceCount = deviceClients.size();
+            int msgCount = iteration * testMessagesPerSecond % deviceCount;
             for (int i = 0; i < testMessagesPerSecond; i++) {
-                if (iterationDevices.size() >= deviceClients.size()) {
-                    iterationDevices = new HashSet<>();
-                }
                 boolean alarmRequired = alarmIteration && (alarmCount < alarmsPerSecond);
-                DeviceClient client = getDeviceClient(iterationDevices, iteration, i);
+                int index = msgCount % deviceCount;
+                DeviceClient client = deviceClients.get(index);
+                log.info("device client index {} device {}", index, client.getDeviceName());
+                msgCount++;
                 Msg message = getNextMessage(client.getDeviceName(), alarmRequired);
                 if (message.isTriggersAlarm()) {
                     alarmCount++;
