@@ -38,7 +38,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -63,9 +62,9 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
     @Value("${mqtt.ssl.key_store_password}")
     String mqttSslKeyStorePassword;
 
-    protected final List<MqttClient> mqttClients = Collections.synchronizedList(new ArrayList<>());
+    protected final List<MqttClient> mqttClients = Collections.synchronizedList(new ArrayList<>(1024 * 16));
 
-    protected final List<DeviceClient> deviceClients =  Collections.synchronizedList(new ArrayList<>(1024 * 1024));
+    protected final List<DeviceClient> deviceClients = Collections.synchronizedList(new ArrayList<>(1024 * 16));
 
     @PostConstruct
     protected void init() {
@@ -157,7 +156,7 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
         log.info("Connecting {} {}...", pack.size(), devicesType);
         CountDownLatch connectLatch = new CountDownLatch(pack.size());
         for (String deviceName : pack) {
-            restClientService.getWorkers().submit(() -> {
+            restClientService.getHttpExecutor().submit(() -> {
                 try {
                     mqttClients.add(initClient(deviceName));
                     totalConnectedCount.incrementAndGet();
