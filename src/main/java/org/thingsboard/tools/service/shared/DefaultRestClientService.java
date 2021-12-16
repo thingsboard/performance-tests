@@ -51,14 +51,14 @@ public class DefaultRestClientService implements RestClientService {
 
     public static final int LOG_PAUSE = 1;
 
-    private final ExecutorService httpExecutor = Executors.newFixedThreadPool(100);
-    private final ExecutorService lwm2mExecutor = Executors.newFixedThreadPool(100);
+    private final ExecutorService httpExecutor = Executors.newFixedThreadPool(50);
+    private final ExecutorService lwm2mExecutor = Executors.newFixedThreadPool(50);
 
-    private final ScheduledExecutorService logScheduler = Executors.newScheduledThreadPool(10);
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(10);
-    private final ScheduledExecutorService schedulerCoapConfig = ExecutorsUtil.newScheduledThreadPool(250,
+    private final ScheduledExecutorService logScheduler = Executors.newScheduledThreadPool(4);
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    private final ScheduledExecutorService schedulerCoapConfig = ExecutorsUtil.newScheduledThreadPool(100,
         new NamedThreadFactory("TestServer(test)#"));
-    private final ExecutorService workers = Executors.newFixedThreadPool(10);
+    private final ExecutorService workers = Executors.newFixedThreadPool(16);
 
     @Value("${rest.url}")
     private String restUrl;
