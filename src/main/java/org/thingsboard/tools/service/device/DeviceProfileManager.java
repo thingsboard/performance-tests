@@ -15,10 +15,14 @@
  */
 package org.thingsboard.tools.service.device;
 
+import org.thingsboard.server.common.data.DeviceProfile;
+
 public interface DeviceProfileManager {
 
     void createDeviceProfiles() throws Exception;
 
     void removeDeviceProfiles() throws Exception;
+
+    DeviceProfile getByName(String name);
 
 }

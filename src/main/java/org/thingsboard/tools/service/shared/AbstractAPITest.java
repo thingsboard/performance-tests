@@ -27,6 +27,7 @@ import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.CustomerId;
 import org.thingsboard.server.common.data.id.DeviceId;
 import org.thingsboard.tools.service.customer.CustomerManager;
+import org.thingsboard.tools.service.device.DeviceProfileManager;
 import org.thingsboard.tools.service.msg.MessageGenerator;
 import org.thingsboard.tools.service.msg.Msg;
 
@@ -90,6 +91,8 @@ public abstract class AbstractAPITest {
     protected int alarmsPerSecond;
     @Value("${test.seed:0}")
     protected int seed;
+    @Value("${test.payloadType:SMART_METER}")
+    protected String payloadType;
 
     @Autowired
     @Qualifier("randomTelemetryGenerator")
@@ -102,6 +105,9 @@ public abstract class AbstractAPITest {
     protected RestClientService restClientService;
     @Autowired
     protected CustomerManager customerManager;
+
+    @Autowired
+    DeviceProfileManager deviceProfileManager;
 
     protected List<Device> devices = Collections.synchronizedList(new ArrayList<>(1024 * 8));
     public Set<String> clientTryingToConnect = ConcurrentHashMap.newKeySet(1024 * 8);
@@ -229,6 +235,7 @@ public abstract class AbstractAPITest {
             restClientService.getHttpExecutor().submit(() -> {
                 Device entity = new Device();
                 try {
+                    entity.setDeviceProfileId(deviceProfileManager.getByName(payloadType).getId());
                     String token = getToken(isGateway, tokenNumber);
                     if (isGateway) {
                         entity.setName(token);
@@ -240,9 +247,9 @@ public abstract class AbstractAPITest {
                     }
 
                     if (setCredentials) {
-                        entity = restClientService.getRestClient().createDevice(entity, token);
+                        entity = restClientService.getRestClient().saveDevice(entity, token);
                     } else {
-                        entity = restClientService.getRestClient().createDevice(entity);
+                        entity = restClientService.getRestClient().saveDevice(entity);
                     }
 
                     result.add(entity);

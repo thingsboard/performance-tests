@@ -109,6 +109,15 @@ public class DeviceProfileManagerImpl implements DeviceProfileManager {
         }
     }
 
+    @Override
+    public DeviceProfile getByName(String name){
+        DeviceProfile deviceProfile = deviceProfiles.get(name);
+        if (deviceProfile == null) {
+            throw new RuntimeException("device profile not found for name " + name);
+        }
+        return deviceProfile;
+    }
+
     DeviceProfile loadDeviceProfile(String filename) {
         try {
             String content = getFile(filename);
