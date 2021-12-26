@@ -154,7 +154,7 @@ test:
   # RANDOM - TODO: add description
   # SMART_TRACKER - sample payload: {"latitude": 42.222222, "longitude": 73.333333, "speed": 55.5, "fuel": 92, "batteryLevel": 81}
   # SMART_METER - sample payload: {"pulseCounter": 1234567, "leakage": false, "batteryLevel": 81}
-  payloadType: "${TEST_PAYLOAD_TYPE:SMART_TRACKER}"
+  payloadType: "${TEST_PAYLOAD_TYPE:SMART_METER}" # device profile name
   instanceIdx: "${INSTANCE_IDX:0}"
   useInstanceIdx: "${USE_INSTANCE_IDX:false}"
   useInstanceIdxRegex: "${USE_INSTANCE_IDX_REGEX:false}"

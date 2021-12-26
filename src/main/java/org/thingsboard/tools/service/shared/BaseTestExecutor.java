@@ -20,12 +20,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.thingsboard.tools.service.customer.CustomerManager;
 import org.thingsboard.tools.service.dashboard.DefaultDashboardManager;
+import org.thingsboard.tools.service.device.DeviceProfileManager;
 import org.thingsboard.tools.service.rule.RuleChainManager;
 
 import javax.annotation.PostConstruct;
 
 @Slf4j
-public abstract class BaseTestExecutor {
+public abstract class BaseTestExecutor implements TestExecutor {
     @Value("${dashboard.createOnStart}")
     private boolean dashboardCreateOnStart;
 
@@ -65,8 +66,18 @@ public abstract class BaseTestExecutor {
     @Autowired
     private CustomerManager customerManager;
 
+    @Autowired
+    private DeviceProfileManager deviceProfileManager;
+
     @PostConstruct
     public void init() throws Exception {
+
+    }
+
+    @Override
+    public void runTest() throws Exception {
+        deviceProfileManager.createDeviceProfiles();
+
         if (dashboardCreateOnStart) {
             dashboardManager.createDashboards();
         }

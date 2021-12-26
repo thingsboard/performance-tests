@@ -46,7 +46,7 @@ public class DefaultDashboardManager implements DashboardManager {
     private String[] tenantDashboards;
     @Value("${dashboard.shared:}")
     private String sharedDashboardName;
-    @Value("${dashboard.deleteIfExists:true}")
+    @Value("${dashboard.deleteIfExists:false}")
     private boolean deleteIfExists;
 
     private List<DashboardId> tenantDashboardIds = new ArrayList<>();
