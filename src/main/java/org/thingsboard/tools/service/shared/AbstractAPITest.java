@@ -85,9 +85,9 @@ public abstract class AbstractAPITest {
     protected int testDurationInSec;
     @Value("${test.alarms.start:0}")
     protected int alarmsStartTs;
-    @Value("${test.alarms.end:0}")
+    @Value("${test.alarms.end:999999}")
     protected int alarmsEndTs;
-    @Value("${test.alarms.aps:0}")
+    @Value("${test.alarms.aps:1}")
     protected int alarmsPerSecond;
     @Value("${test.seed:0}")
     protected int seed;
