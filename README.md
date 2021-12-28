@@ -51,21 +51,21 @@ GATEWAY_END_IDX=3
 GATEWAY_CREATE_ON_START=true
 GATEWAY_DELETE_ON_COMPLETE=true
 
-WARMUP_ENABLED=false
+WARMUP_ENABLED=true
 
 # Type of the payload to send: DEFAULT, SMART_TRACKER, SMART_METER
 # RANDOM - TODO: add description
 # SMART_TRACKER - sample payload: {"latitude": 42.222222, "longitude": 73.333333, "speed": 55.5, "fuel": 92, "batteryLevel": 81}
 # SMART_METER - sample payload: {"pulseCounter": 1234567, "leakage": false, "batteryLevel": 81}
-TEST_PAYLOAD_TYPE=SMART_TRACKER
+TEST_PAYLOAD_TYPE=SMART_METER
 
 TEST_ENABLED=true
 
 # true - send data to devices by device ids, false - select random devices from the list  
-TEST_SEQUENTIAL=true
+TEST_SEQUENTIAL=false
 
 MESSAGES_PER_SECOND=1000
-DURATION_IN_SECONDS=10
+DURATION_IN_SECONDS=300
 
 UPDATE_ROOT_RULE_CHAIN=false
 REVERT_ROOT_RULE_CHAIN=false

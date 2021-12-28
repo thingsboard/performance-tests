@@ -15,7 +15,6 @@
  */
 package org.thingsboard.tools.service.msg.smartMeter;
 
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -24,25 +23,24 @@ import org.thingsboard.tools.service.msg.BaseMessageGenerator;
 import org.thingsboard.tools.service.msg.MessageGenerator;
 import org.thingsboard.tools.service.msg.Msg;
 
+import java.util.Random;
+
 @Slf4j
-@Service(value = "randomTelemetryGenerator")
+@Service(value = "randomAttributesGenerator")
 @ConditionalOnProperty(prefix = "test", value = "payloadType", havingValue = "SMART_METER")
-public class MeterMeterTelemetryGenerator extends BaseMessageGenerator implements MessageGenerator {
+public class SmartMeterAttributesGenerator extends BaseMessageGenerator implements MessageGenerator {
 
     @Override
     public Msg getNextMessage(String deviceName, boolean shouldTriggerAlarm) {
         byte[] payload;
         try {
             ObjectNode data = mapper.createObjectNode();
-            ObjectNode tsNode;
+            ObjectNode values;
             if (isGateway()) {
-                ArrayNode array = data.putArray(deviceName);
-                tsNode = array.addObject();
+                values = data.putObject(deviceName);
             } else {
-                tsNode = data;
+                values = data;
             }
-            tsNode.put("ts", System.currentTimeMillis());
-            ObjectNode values = tsNode.putObject("values");
             values.put("pulseCounter", random.nextInt(1000000));
             values.put("leakage", random.nextInt(100) > 1);  // leakage true in 1% cases
             values.put("batteryLevel", random.nextInt(100));

@@ -34,7 +34,7 @@
         <java.version>11</java.version>
 
         <pkg.implementationTitle>ThingsBoard Performance Tests</pkg.implementationTitle>
-        <pkg.mainClass>org.thingsboard.tools.PerformanceTestsApplication</pkg.mainClass>
+        <pkg.mainClass>org.thingsboard.tools.PerformanceTestApplication</pkg.mainClass>
         <pkg.name>tb-ce-performance-tests</pkg.name>
         <pkg.user>thingsboard</pkg.user>
         <pkg.unixLogFolder>/var/log/${pkg.name}</pkg.unixLogFolder>
@@ -59,6 +59,7 @@
         <californium.version>2.6.3</californium.version>
         <leshan.version>2.0.0-M4</leshan.version>
         <dockerfile-maven.version>1.4.13</dockerfile-maven.version>
+        <awaitility.version>4.1.0</awaitility.version>
     </properties>
 
     <build>
@@ -925,6 +926,24 @@
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcpkix-jdk15on</artifactId>
             <version>${bouncycastle.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <version>${spring-boot.version}</version>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.vaadin.external.google</groupId>
+                    <artifactId>android-json</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>${awaitility.version}</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

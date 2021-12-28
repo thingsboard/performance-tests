@@ -13,28 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.thingsboard.tools.service.msg;
+package org.thingsboard.tools.service.device;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
+import org.thingsboard.server.common.data.DeviceProfile;
 
-import java.nio.charset.StandardCharsets;
+public interface DeviceProfileManager {
 
-@AllArgsConstructor
-public class Msg {
+    void createDeviceProfiles() throws Exception;
 
-    @Getter
-    private final byte[] data;
-    @Getter
-    private final boolean triggersAlarm;
+    void removeDeviceProfiles() throws Exception;
 
-    public Msg(byte[] data) {
-        this.data = data;
-        this.triggersAlarm = false;
-    }
+    DeviceProfile getByName(String name);
 
-    @Override
-    public String toString() {
-        return "Msg(data=" + new String(this.data, StandardCharsets.UTF_8) + ", triggersAlarm=" + this.triggersAlarm + ")";
-    }
 }

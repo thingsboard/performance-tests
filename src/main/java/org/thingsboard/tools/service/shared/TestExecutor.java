@@ -13,28 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.thingsboard.tools.service.msg;
+package org.thingsboard.tools.service.shared;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-
-import java.nio.charset.StandardCharsets;
-
-@AllArgsConstructor
-public class Msg {
-
-    @Getter
-    private final byte[] data;
-    @Getter
-    private final boolean triggersAlarm;
-
-    public Msg(byte[] data) {
-        this.data = data;
-        this.triggersAlarm = false;
-    }
-
-    @Override
-    public String toString() {
-        return "Msg(data=" + new String(this.data, StandardCharsets.UTF_8) + ", triggersAlarm=" + this.triggersAlarm + ")";
-    }
+public interface TestExecutor {
+    void runTest() throws Exception;
 }
