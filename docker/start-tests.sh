@@ -21,10 +21,10 @@ configfile=${pkg.name}.conf
 
 source "${CONF_FOLDER}/${configfile}"
 
-echo "Starting ThingsBoard Performance Tests..."
+echo "Starting ThingsBoard Performance Test..."
 
 cd ${pkg.installFolder}/bin
 
-java -cp ${jarfile} $JAVA_OPTS -Dloader.main=org.thingsboard.tools.PerformanceTestsApplication \
+java -cp ${jarfile} $JAVA_OPTS -Dloader.main=org.thingsboard.tools.PerformanceTestApplication \
                     -Dlogging.config=${CONF_FOLDER}/logback.xml \
                     org.springframework.boot.loader.PropertiesLauncher
