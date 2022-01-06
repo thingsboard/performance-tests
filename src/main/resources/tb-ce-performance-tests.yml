@@ -149,6 +149,7 @@ dashboard:
   shared: "devices.json"
 warmup:
   enabled: "${WARMUP_ENABLED:true}"
+  packSize: "${WARMUP_PACK_SIZE:100}"
 test:
   # Type of the payload to send: DEFAULT, SMART_TRACKER, SMART_METER
   # RANDOM - TODO: add description
