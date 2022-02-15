@@ -21,7 +21,7 @@
 
     <groupId>org.thingsboard</groupId>
     <artifactId>performance-tests</artifactId>
-    <version>3.3.2-SNAPSHOT</version>
+    <version>3.3.3</version>
     <packaging>jar</packaging>
 
     <name>ThingsBoard Performance Tests</name>
@@ -44,8 +44,9 @@
         <dockerfile.skip>true</dockerfile.skip>
         <docker.name>tb-ce-performance-tests</docker.name>
         <tb-ce-performance-test.docker.name>tb-ce-performance-test</tb-ce-performance-test.docker.name>
+        <docker.push-arm-amd-image.phase>pre-integration-test</docker.push-arm-amd-image.phase>
 
-        <thingsboard.version>3.3.2</thingsboard.version>
+        <thingsboard.version>3.3.3</thingsboard.version>
         <spring-boot.version>2.6.1</spring-boot.version>
         <spring.version>5.3.13</spring.version>
         <lombok.version>1.18.22</lombok.version>
@@ -720,6 +721,67 @@
                                 <configuration>
                                     <tag>${project.version}</tag>
                                     <repository>${docker.repo}/${tb-ce-performance-test.docker.name}</repository>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>push-docker-amd-arm-images</id>
+            <activation>
+                <property>
+                    <name>push-docker-amd-arm-images</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>push-latest-docker-amd-arm-images</id>
+                                <phase>${docker.push-arm-amd-image.phase}</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>docker</executable>
+                                    <workingDirectory>${project.build.directory}/docker</workingDirectory>
+                                    <arguments>
+                                        <argument>buildx</argument>
+                                        <argument>build</argument>
+                                        <argument>-t</argument>
+                                        <argument>${docker.repo}/${tb-ce-performance-test.docker.name}:latest</argument>
+                                        <argument>--platform=linux/amd64,linux/arm64</argument>
+                                        <argument>-o</argument>
+                                        <argument>type=registry</argument>
+                                        <argument>.</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>push-version-docker-amd-arm-images</id>
+                                <phase>${docker.push-arm-amd-image.phase}</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>docker</executable>
+                                    <workingDirectory>${project.build.directory}/docker</workingDirectory>
+                                    <arguments>
+                                        <argument>buildx</argument>
+                                        <argument>build</argument>
+                                        <argument>-t</argument>
+                                        <argument>${docker.repo}/${tb-ce-performance-test.docker.name}:${project.version}</argument>
+                                        <argument>--platform=linux/amd64,linux/arm64</argument>
+                                        <argument>-o</argument>
+                                        <argument>type=registry</argument>
+                                        <argument>.</argument>
+                                    </arguments>
                                 </configuration>
                             </execution>
                         </executions>
