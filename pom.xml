@@ -47,7 +47,7 @@
         <docker.push-arm-amd-image.phase>pre-integration-test</docker.push-arm-amd-image.phase>
 
         <thingsboard.version>3.3.3</thingsboard.version>
-        <spring-boot.version>2.3.12.RELEASE</spring-boot.version>
+        <spring-boot.version>2.5.12</spring-boot.version>
         <spring.version>5.2.16.RELEASE</spring.version>
         <lombok.version>1.18.22</lombok.version>
         <commons-lang3.version>3.4</commons-lang3.version>
