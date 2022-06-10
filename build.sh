@@ -17,4 +17,8 @@
 
 echo Building project with docker image...
 mvn license:format clean install -Ddockerfile.skip=false
+
+## Build and push AMD and ARM docker images using docker buildx
+## Reference to article how to setup docker miltiplatform build environment: https://medium.com/@artur.klauser/building-multi-architecture-docker-images-with-buildx-27d80f7e2408
+# mvn clean install -Ddockerfile.skip=false -P push-docker-amd-arm-images
 echo done
