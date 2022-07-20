@@ -19,9 +19,9 @@ echo "Starting ThingsBoard Performance Test..."
 
 export REST_URL=http://127.0.0.1:8080
 export MQTT_HOST=127.0.0.1
-export DEVICE_END_IDX=200000
-export MESSAGES_PER_SECOND=201000
-export ALARMS_PER_SECOND=10
+export DEVICE_END_IDX=1111
+export MESSAGES_PER_SECOND=1000
+export ALARMS_PER_SECOND=1
 export DURATION_IN_SECONDS=86400
 export DEVICE_CREATE_ON_START=true
 

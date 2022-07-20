@@ -38,6 +38,7 @@ rest:
   url: "${REST_URL:http://localhost:8080}"
   username: "${REST_USERNAME:tenant@thingsboard.org}"
   password: "${REST_PASSWORD:tenant}"
+  pool_size: "${REST_POOL_SIZE:4}"
 mqtt:
   host: "${MQTT_HOST:localhost}"
   port: "${MQTT_PORT:1883}"

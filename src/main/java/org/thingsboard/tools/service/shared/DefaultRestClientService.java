@@ -19,14 +19,12 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.californium.core.network.config.NetworkConfig;
-import org.eclipse.californium.elements.util.DaemonThreadFactory;
 import org.eclipse.californium.elements.util.ExecutorsUtil;
 import org.eclipse.californium.elements.util.NamedThreadFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
+import org.thingsboard.common.util.ThingsBoardExecutors;
+import org.thingsboard.common.util.ThingsBoardThreadFactory;
 import org.thingsboard.rest.client.RestClient;
 
 import javax.annotation.PostConstruct;
@@ -51,14 +49,16 @@ public class DefaultRestClientService implements RestClientService {
 
     public static final int LOG_PAUSE = 1;
 
-    private final ExecutorService httpExecutor = Executors.newFixedThreadPool(50);
+    @Value("${rest.pool_size:4}")
+    private int restPoolSize;
+    private ExecutorService httpExecutor;
     private final ExecutorService lwm2mExecutor = Executors.newFixedThreadPool(50);
 
     private final ScheduledExecutorService logScheduler = Executors.newScheduledThreadPool(4);
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1, ThingsBoardThreadFactory.forName("scheduler"));
     private final ScheduledExecutorService schedulerCoapConfig = ExecutorsUtil.newScheduledThreadPool(100,
         new NamedThreadFactory("TestServer(test)#"));
-    private final ExecutorService workers = Executors.newFixedThreadPool(16);
+    private final ExecutorService workers = Executors.newFixedThreadPool(16, ThingsBoardThreadFactory.forName("worker"));
 
     @Value("${rest.url}")
     private String restUrl;
@@ -146,6 +146,7 @@ public class DefaultRestClientService implements RestClientService {
 
     @PostConstruct
     public void init() {
+        httpExecutor = ThingsBoardExecutors.newWorkStealingPool(restPoolSize, "REST");
         if (connectServer) {
             restClient = new RestClient(restUrl);
             restClient.login(username, password);
