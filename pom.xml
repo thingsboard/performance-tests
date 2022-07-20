@@ -21,7 +21,7 @@
 
     <groupId>org.thingsboard</groupId>
     <artifactId>performance-tests</artifactId>
-    <version>3.3.3</version>
+    <version>3.4.0</version>
     <packaging>jar</packaging>
 
     <name>ThingsBoard Performance Tests</name>
@@ -46,7 +46,7 @@
         <tb-ce-performance-test.docker.name>tb-ce-performance-test</tb-ce-performance-test.docker.name>
         <docker.push-arm-amd-image.phase>pre-integration-test</docker.push-arm-amd-image.phase>
 
-        <thingsboard.version>3.3.3</thingsboard.version>
+        <thingsboard.version>3.4.0</thingsboard.version>
         <spring-boot.version>2.7.0</spring-boot.version>
         <spring.version>5.3.20</spring.version>
         <lombok.version>1.18.22</lombok.version>
