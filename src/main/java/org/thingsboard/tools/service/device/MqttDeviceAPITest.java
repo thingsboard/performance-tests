@@ -85,7 +85,7 @@ public class MqttDeviceAPITest extends BaseMqttAPITest implements DeviceAPITest 
 
     @Override
     protected void logFailureTestMessage(int iteration, DeviceClient client, Future<?> future) {
-        log.error("[{}] Error while publishing message to device: {}", iteration, client.getDeviceName(), future.cause());
+        log.error("[{}] Error while publishing message to device: [{}] {}", iteration, client.getDeviceName(), future.cause().getMessage());
     }
 
     @Override
