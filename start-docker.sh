@@ -16,8 +16,10 @@
 #
 
 echo "Starting ThingsBoard Performance Test using Docker container..."
-set +x
+set -x
 docker run -it --rm --network host --name tb-perf-test \
-           --env REST_URL=http://k8s-thingsbo-tbhttplo-784e0efb43-1020620715.eu-west-1.elb.amazonaws.com:80 \
-           --env MQTT_HOST=a1435f2586389421f82397b52b690867-b454cc0b7f996e3b.elb.eu-west-1.amazonaws.com \
-           thingsboard/tb-ce-performance-test:3.3.3
+           --env REST_URL=http://127.0.0.1:8080 \
+           --env MQTT_HOST=127.0.0.1 \
+           --env DEVICE_END_IDX=1111 \
+           --env TEST_PAYLOAD_TYPE=SMART_TRACKER \
+           thingsboard/tb-ce-performance-test:latest

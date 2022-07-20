@@ -17,8 +17,8 @@
 
 echo "Starting ThingsBoard Performance Test..."
 
-export REST_URL=http://k8s-thingsbo-tbhttplo-784e0efb43-1020620715.eu-west-1.elb.amazonaws.com:80
-export MQTT_HOST=a1435f2586389421f82397b52b690867-b454cc0b7f996e3b.elb.eu-west-1.amazonaws.com
+export REST_URL=http://127.0.0.1:8080
+export MQTT_HOST=127.0.0.1
 export DEVICE_END_IDX=200000
 export MESSAGES_PER_SECOND=201000
 export ALARMS_PER_SECOND=10
