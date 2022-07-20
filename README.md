@@ -28,6 +28,7 @@ REST_URL=http://IP_ADDRESS_OF_TB_INSTANCE:8080
 # Port should be modified as well if needed 
 REST_USERNAME=tenant@thingsboard.org
 REST_PASSWORD=tenant
+REST_POOL_SIZE=4
 
 MQTT_HOST=IP_ADDRESS_OF_TB_INSTANCE
 # IP_ADDRESS_OF_TB_INSTANCE is your local IP address if you run ThingsBoard on your dev machine in docker
