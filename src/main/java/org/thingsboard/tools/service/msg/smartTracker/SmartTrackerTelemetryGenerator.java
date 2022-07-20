@@ -28,6 +28,8 @@ import org.thingsboard.tools.service.msg.Msg;
 @ConditionalOnProperty(prefix = "test", value = "payloadType", havingValue = "SMART_TRACKER")
 public class SmartTrackerTelemetryGenerator extends BaseSmartTrackerGenerator implements MessageGenerator {
 
+    static final int BATTERY_LEVEL_ALARM = 10;
+
     @Override
     public Msg getNextMessage(String deviceName, boolean shouldTriggerAlarm) {
         byte[] payload;
@@ -46,12 +48,12 @@ public class SmartTrackerTelemetryGenerator extends BaseSmartTrackerGenerator im
             values.put("longitude", latLngFormat.format(random.nextDouble() * 100));
             values.put("speed", speedFormat.format(random.nextDouble() * 100));
             values.put("fuel", random.nextInt(100));
-            values.put("batteryLevel", random.nextInt(100));
+            values.put("batteryLevel", shouldTriggerAlarm ? BATTERY_LEVEL_ALARM : random.nextInt(50) + 50);
             payload = mapper.writeValueAsBytes(data);
         } catch (Exception e) {
             log.warn("Failed to generate message", e);
             throw new RuntimeException(e);
         }
-        return new Msg(payload);
+        return new Msg(payload, shouldTriggerAlarm);
     }
 }
