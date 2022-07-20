@@ -412,8 +412,6 @@
                             <task>build</task>
                             <task>buildDeb</task>
                             <task>buildRpm</task>
-                            <task>renameDeb</task>
-                            <task>renameRpm</task>
                         </tasks>
                         <args>
                             <arg>-PpackagingDir=${basedir}</arg>
