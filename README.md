@@ -106,9 +106,9 @@ docker run -it --rm --network host --name tb-perf-test thingsboard/tb-ce-perform
 Simply run test somewhere else
 ```bash
 docker run -it --rm --network host --name tb-perf-test \
-           --env REST_URL=https://demo.thingsboard.io \
+           --env REST_URL=http://k8s-thingsbo-tbhttplo-784e0efb43-1020620715.eu-west-1.elb.amazonaws.com:80 \
+           --env MQTT_HOST=a1435f2586389421f82397b52b690867-b454cc0b7f996e3b.elb.eu-west-1.amazonaws.com \
            --env REST_USERNAME=tenant@thingsboard.org \
            --env REST_PASSWORD=tenant \
-           --env MQTT_HOST=demo.thingsboard.io \
            thingsboard/tb-ce-performance-test:latest
 ```
