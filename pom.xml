@@ -47,12 +47,12 @@
         <docker.push-arm-amd-image.phase>pre-integration-test</docker.push-arm-amd-image.phase>
 
         <thingsboard.version>3.3.3</thingsboard.version>
-        <spring-boot.version>2.3.12.RELEASE</spring-boot.version>
-        <spring.version>5.2.16.RELEASE</spring.version>
+        <spring-boot.version>2.7.0</spring-boot.version>
+        <spring.version>5.3.20</spring.version>
         <lombok.version>1.18.22</lombok.version>
         <commons-lang3.version>3.4</commons-lang3.version>
-        <netty.version>4.1.72.Final</netty.version>
-        <netty-tcnative-boringssl-static.version>2.0.46.Final</netty-tcnative-boringssl-static.version>
+        <netty.version>4.1.75.Final</netty.version>
+        <netty-tcnative-boringssl-static.version>2.0.51.Final</netty-tcnative-boringssl-static.version>
         <bouncycastle.version>1.68</bouncycastle.version>
         <winsw.version>2.0.1</winsw.version>
         <slf4j.version>1.7.32</slf4j.version>
@@ -405,7 +405,7 @@
                 <plugin>
                     <groupId>org.thingsboard</groupId>
                     <artifactId>gradle-maven-plugin</artifactId>
-                    <version>1.0.10</version>
+                    <version>1.0.11</version>
                     <configuration>
                         <gradleProjectDirectory>${basedir}</gradleProjectDirectory>
                         <tasks>
