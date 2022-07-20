@@ -17,8 +17,20 @@
 
 echo Building project with docker image...
 mvn license:format clean install -Ddockerfile.skip=false
+echo done
 
+tail "${0}" -n 14
+
+## NEXT STEPS:
 ## Build and push AMD and ARM docker images using docker buildx
 ## Reference to article how to setup docker miltiplatform build environment: https://medium.com/@artur.klauser/building-multi-architecture-docker-images-with-buildx-27d80f7e2408
-# mvn clean install -Ddockerfile.skip=false -P push-docker-amd-arm-images
-echo done
+## install docker-ce from docker repo https://docs.docker.com/engine/install/ubuntu/
+# sudo apt install -y qemu-user-static binfmt-support
+# export DOCKER_CLI_EXPERIMENTAL=enabled
+# docker version
+# docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+# docker buildx create --name mybuilder
+# docker buildx use mybuilder
+# docker buildx inspect --bootstrap
+# docker buildx ls
+# mvn clean install -P push-docker-amd-arm-images
