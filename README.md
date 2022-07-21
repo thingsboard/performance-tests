@@ -101,12 +101,13 @@ docker run -it --env-file .env --name tb-perf-test thingsboard/tb-ce-performance
 
 Simply run test on the same machine (service, IDE, Docker)
 ```bash
-docker run -it --rm --network host --name tb-perf-test thingsboard/tb-ce-performance-test:latest
+docker run -it --rm --network host --pull always --log-driver none --name tb-perf-test thingsboard/tb-ce-performance-test:latest
 ```
 
 Simply run test somewhere else
 ```bash
 docker run -it --rm --network host --name tb-perf-test \
+           --pull always --log-driver none \
            --env REST_URL=http://127.0.0.1:8080 \
            --env MQTT_HOST=127.0.0.1 \
            --env REST_USERNAME=tenant@thingsboard.org \
