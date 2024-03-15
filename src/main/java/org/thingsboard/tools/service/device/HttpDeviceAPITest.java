@@ -43,7 +43,22 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
-
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
+import org.springframework.http.client.Netty4ClientHttpRequestFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.AsyncRestTemplate;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
+import javax.net.ssl.SSLException;
+import javax.annotation.PostConstruct;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.TrustManagerFactory;
+import java.io.InputStream;
+import java.security.KeyStore;
 @Slf4j
 @Service
 @ConditionalOnProperty(prefix = "device", value = "api", havingValue = "HTTP")
@@ -57,7 +72,14 @@ public class HttpDeviceAPITest extends AbstractAPITest implements DeviceAPITest 
         super.init();
         this.deviceCount = this.deviceEndIdx - this.deviceStartIdx;
         this.eventLoopGroup = new NioEventLoopGroup();
+        SslContext sslContext = null;
+        try {
+            sslContext = SslContextBuilder.forClient().trustManager(InsecureTrustManagerFactory.INSTANCE).build();
+        } catch (SSLException e) {
+            log.error("Error while initializing SSL context", e);
+        }
         Netty4ClientHttpRequestFactory nettyFactory = new Netty4ClientHttpRequestFactory(this.eventLoopGroup);
+        nettyFactory.setSslContext(sslContext); // Set the SSL context
         this.httpClient = new AsyncRestTemplate(nettyFactory);
     }
 
