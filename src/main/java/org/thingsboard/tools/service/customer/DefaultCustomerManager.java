@@ -45,9 +45,9 @@ public class DefaultCustomerManager implements CustomerManager {
     private static final ObjectMapper mapper = new ObjectMapper();
     private final List<CustomerId> customerIds = Collections.synchronizedList(new ArrayList<>(1024));
 
-    @Value("${customer.startIdx}")
+    @Value("${customer.startIdx:0}")
     int customerStartIdx;
-    @Value("${customer.endIdx}")
+    @Value("${customer.endIdx:0}")
     int customerEndIdx;
 
     @Autowired

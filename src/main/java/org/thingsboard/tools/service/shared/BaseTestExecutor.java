@@ -27,16 +27,16 @@ import javax.annotation.PostConstruct;
 
 @Slf4j
 public abstract class BaseTestExecutor implements TestExecutor {
-    @Value("${dashboard.createOnStart}")
+    @Value("${dashboard.createOnStart:false}")
     private boolean dashboardCreateOnStart;
 
-    @Value("${dashboard.deleteOnComplete}")
+    @Value("${dashboard.deleteOnComplete:false}")
     private boolean dashboardDeleteOnComplete;
 
-    @Value("${customer.createOnStart}")
+    @Value("${customer.createOnStart:false}")
     private boolean customerCreateOnStart;
 
-    @Value("${customer.deleteOnComplete}")
+    @Value("${customer.deleteOnComplete:false}")
     private boolean customerDeleteOnComplete;
 
     @Value("${device.createOnStart}")
@@ -51,10 +51,10 @@ public abstract class BaseTestExecutor implements TestExecutor {
     @Value("${test.enabled:true}")
     protected boolean testEnabled;
 
-    @Value("${test.updateRootRuleChain:true}")
+    @Value("${test.updateRootRuleChain:false}")
     protected boolean updateRootRuleChain;
 
-    @Value("${test.revertRootRuleChain:true}")
+    @Value("${test.revertRootRuleChain:false}")
     protected boolean revertRootRuleChain;
 
     @Autowired

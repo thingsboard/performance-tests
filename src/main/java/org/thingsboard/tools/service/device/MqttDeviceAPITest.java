@@ -40,9 +40,6 @@ import java.util.stream.Collectors;
 @ConditionalOnProperty(prefix = "device", value = "api", havingValue = "MQTT")
 public class MqttDeviceAPITest extends BaseMqttAPITest implements DeviceAPITest {
 
-    static String dataAsStr = "{\"t1\":73}";
-    static byte[] data = dataAsStr.getBytes(StandardCharsets.UTF_8);
-
     @Override
     public void createDevices() throws Exception {
         createDevices(true);
@@ -50,7 +47,7 @@ public class MqttDeviceAPITest extends BaseMqttAPITest implements DeviceAPITest 
 
     @Override
     public void removeDevices() throws Exception {
-        removeEntities(devices.stream().map(IdBased::getId).collect(Collectors.toList()), "devices");
+        removeEntities(restClientService.getRestClient(), devices.stream().map(IdBased::getId).collect(Collectors.toList()), "devices");
     }
 
     @Override
@@ -61,11 +58,6 @@ public class MqttDeviceAPITest extends BaseMqttAPITest implements DeviceAPITest 
     @Override
     protected String getWarmUpTopic() {
         return "v1/devices/me/telemetry";
-    }
-
-    @Override
-    protected byte[] getData(String deviceName) {
-        return data;
     }
 
     @Override

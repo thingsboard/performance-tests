@@ -47,7 +47,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 public abstract class BaseMqttAPITest extends AbstractAPITest {
-
+    private static final String DATA_AS_STR = "{\"t1\":73}";
+    private static final byte[] DEFAULT_DATA = DATA_AS_STR.getBytes(StandardCharsets.UTF_8);
     private static final int CONNECT_TIMEOUT = 5;
     private EventLoopGroup EVENT_LOOP_GROUP;
 
@@ -55,11 +56,11 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
     private String mqttHost;
     @Value("${mqtt.port}")
     private int mqttPort;
-    @Value("${mqtt.ssl.enabled}")
+    @Value("${mqtt.ssl.enabled:false}")
     boolean mqttSslEnabled;
-    @Value("${mqtt.ssl.key_store}")
+    @Value("${mqtt.ssl.key_store:}")
     String mqttSslKeyStore;
-    @Value("${mqtt.ssl.key_store_password}")
+    @Value("${mqtt.ssl.key_store_password:}")
     String mqttSslKeyStorePassword;
 
     protected final List<MqttClient> mqttClients = Collections.synchronizedList(new ArrayList<>(1024 * 16));
@@ -131,7 +132,9 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
 
     protected abstract String getWarmUpTopic();
 
-    protected abstract byte[] getData(String deviceName);
+    protected byte[] getData(String deviceName){
+        return DEFAULT_DATA;
+    }
 
     protected DeviceClient getDeviceClient(Set<DeviceClient> iterationDevices, int iteration, int msgOffsetIdx) {
         DeviceClient client;

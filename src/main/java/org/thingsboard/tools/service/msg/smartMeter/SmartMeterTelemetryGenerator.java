@@ -24,15 +24,18 @@ import org.thingsboard.tools.service.msg.BaseMessageGenerator;
 import org.thingsboard.tools.service.msg.MessageGenerator;
 import org.thingsboard.tools.service.msg.Msg;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 @Slf4j
 @Service(value = "randomTelemetryGenerator")
 @ConditionalOnProperty(prefix = "test", value = "payloadType", havingValue = "SMART_METER")
 public class SmartMeterTelemetryGenerator extends BaseMessageGenerator implements MessageGenerator {
-
     static final int BATTERY_LEVEL_ALARM = 10;
-
+    public static long CREATE_TIME = System.currentTimeMillis();
+    static AtomicInteger COUNTER = new AtomicInteger(0);
     @Override
     public Msg getNextMessage(String deviceName, boolean shouldTriggerAlarm) {
+        COUNTER.incrementAndGet();
         byte[] payload;
         try {
             ObjectNode data = mapper.createObjectNode();
@@ -43,7 +46,7 @@ public class SmartMeterTelemetryGenerator extends BaseMessageGenerator implement
             } else {
                 tsNode = data;
             }
-            tsNode.put("ts", System.currentTimeMillis());
+            tsNode.put("ts", CREATE_TIME + COUNTER.get());
             ObjectNode values = tsNode.putObject("values");
             values.put("pulseCounter", random.nextInt(1000000));
             values.put("leakage", random.nextInt(100) > 1);  // leakage true in 1% cases

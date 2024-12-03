@@ -22,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.eclipse.californium.elements.util.ExecutorsUtil;
 import org.eclipse.californium.elements.util.NamedThreadFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Service;
 import org.thingsboard.common.util.ThingsBoardExecutors;
 import org.thingsboard.common.util.ThingsBoardThreadFactory;
@@ -45,6 +46,7 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
+@ConditionalOnExpression("'${device.api:null}'!='events_MQTT'")
 public class DefaultRestClientService implements RestClientService {
 
     public static final int LOG_PAUSE = 1;
@@ -66,7 +68,7 @@ public class DefaultRestClientService implements RestClientService {
     private String username;
     @Value("${rest.password}")
     private String password;
-    @Value("${rest.connect_server}")
+    @Value("${rest.connect_server:true}")
     private boolean connectServer;
 
     static {
@@ -110,9 +112,9 @@ public class DefaultRestClientService implements RestClientService {
     }
 
     @Getter
-    private RestClient restClient;
+    protected RestClient restClient;
     @Getter
-    private EventLoopGroup eventLoopGroup;
+    protected EventLoopGroup eventLoopGroup;
 
     @Override
     public ExecutorService getWorkers() {

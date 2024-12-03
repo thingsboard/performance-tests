@@ -161,11 +161,11 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
 
     @Override
     public void removeGateways() throws Exception {
-        removeEntities(gateways.stream().map(Device::getId).collect(Collectors.toList()), "gateways");
+        removeEntities(restClientService.getRestClient(), gateways.stream().map(Device::getId).collect(Collectors.toList()), "gateways");
     }
 
     @Override
     public void removeDevices() throws Exception {
-        removeEntities(devices.stream().map(IdBased::getId).collect(Collectors.toList()), "devices");
+        removeEntities(restClientService.getRestClient(), devices.stream().map(IdBased::getId).collect(Collectors.toList()), "devices");
     }
 }

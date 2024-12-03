@@ -23,6 +23,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
+import org.thingsboard.rest.client.RestClient;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.CustomerId;
 import org.thingsboard.server.common.data.id.DeviceId;
@@ -51,7 +52,6 @@ import java.util.regex.Pattern;
 
 @Slf4j
 public abstract class AbstractAPITest {
-
     protected static ObjectMapper mapper = new ObjectMapper();
 
     protected ScheduledFuture<?> reportScheduledFuture;
@@ -75,7 +75,7 @@ public abstract class AbstractAPITest {
     @Value("${test.instanceIdxRegex:([0-9]+)$}")
     protected String instanceIdxRegex;
 
-    @Value("${test.sequential:true}")
+    @Value("${test.sequential:false}")
     protected boolean sequentialTest;
     @Value("${test.telemetry:true}")
     protected boolean telemetryTest;
@@ -120,6 +120,8 @@ public abstract class AbstractAPITest {
     protected int deviceEndIdx;
     protected int instanceIdx;
 
+    private String suffix = "";
+
     @PostConstruct
     protected void init() {
         random = new Random(seed);
@@ -159,6 +161,10 @@ public abstract class AbstractAPITest {
         }
     }
 
+    protected void initDeviceSuffix(String suffix){
+        this.suffix = suffix;
+    }
+
     protected void createDevices(boolean setCredentials) throws Exception {
         List<Device> entities = createEntities(deviceStartIdx, deviceEndIdx, false, setCredentials);
         devices = Collections.synchronizedList(entities);
@@ -184,14 +190,14 @@ public abstract class AbstractAPITest {
 
     protected abstract void runApiTestIteration(int iteration, AtomicInteger totalSuccessPublishedCount, AtomicInteger totalFailedPublishedCount, CountDownLatch testDurationLatch);
 
-    protected void removeEntities(List<DeviceId> entityIds, String typeDevice) throws InterruptedException {
+    protected void removeEntities(RestClient restClient, List<DeviceId> entityIds, String typeDevice) throws InterruptedException {
         log.info("Removing [{}] [{}]...", typeDevice, entityIds.size());
         CountDownLatch latch = new CountDownLatch(entityIds.size());
         AtomicInteger count = new AtomicInteger();
         for (DeviceId entityId : entityIds) {
             restClientService.getHttpExecutor().submit(() -> {
                 try {
-                    restClientService.getRestClient().deleteDevice(entityId);
+                    restClient.deleteDevice(entityId);
                     count.getAndIncrement();
                 } catch (Exception e) {
                     log.error("Error while deleting [{}]", typeDevice, getHttpErrorException(e));
@@ -281,7 +287,7 @@ public abstract class AbstractAPITest {
     }
 
     protected String getToken(boolean isGateway, int token) {
-        return (isGateway ? "GW" : "DW") + String.format("%8d", token).replace(" ", "0");
+        return (isGateway ? "GW" : "DW") + String.format("%8d", token).replace(" ", "0") + suffix;
     }
 
     protected Msg getNextMessage(String deviceName, boolean alarmRequired) {
