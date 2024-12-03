@@ -35,7 +35,6 @@ public class SmartMeterTelemetryGenerator extends BaseMessageGenerator implement
     static AtomicInteger COUNTER = new AtomicInteger(0);
     @Override
     public Msg getNextMessage(String deviceName, boolean shouldTriggerAlarm) {
-        COUNTER.incrementAndGet();
         byte[] payload;
         try {
             ObjectNode data = mapper.createObjectNode();
@@ -52,6 +51,7 @@ public class SmartMeterTelemetryGenerator extends BaseMessageGenerator implement
             values.put("leakage", random.nextInt(100) > 1);  // leakage true in 1% cases
             values.put("batteryLevel", shouldTriggerAlarm ? BATTERY_LEVEL_ALARM : random.nextInt(50) + 50);
             payload = mapper.writeValueAsBytes(data);
+            COUNTER.incrementAndGet();
         } catch (Exception e) {
             log.warn("Failed to generate message", e);
             throw new RuntimeException(e);
