@@ -256,6 +256,7 @@ public class CloudEventAPITest extends BaseMqttAPITest implements DeviceAPITest 
         String key = "batteryLevel";
         long endTime = CREATE_TIME + (long) countOfAllTSMessage;
         long tsMessageByDevice = countOfAllTSMessage / devices.size();
+        long leftover = countOfAllTSMessage % devices.size();
 
         for (Device device : devices) {
             List<TsKvEntry> deviceTs = targetClient.getTimeseries(device.getId(), Collections.singletonList(key), 1000L,
@@ -263,7 +264,11 @@ public class CloudEventAPITest extends BaseMqttAPITest implements DeviceAPITest 
 
             if (deviceTs.size() == tsMessageByDevice) {
                 findTsMessage.addAndGet(deviceTs.size());
-            } else {
+            } else if(deviceTs.size() == tsMessageByDevice + 1 && leftover > 0) {
+                leftover--;
+                findTsMessage.addAndGet(deviceTs.size());
+            } else{
+                log.info("deviceTs size - {}, tsMessageByDevice - {}", deviceTs.size(), tsMessageByDevice);
                 log.info("The TS check was missed because not everyone has arrived yet.");
                 break;
             }
