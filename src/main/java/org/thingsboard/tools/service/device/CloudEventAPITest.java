@@ -268,7 +268,6 @@ public class CloudEventAPITest extends BaseMqttAPITest implements DeviceAPITest 
                 leftover--;
                 findTsMessage.addAndGet(deviceTs.size());
             } else{
-                log.info("deviceTs size - {}, tsMessageByDevice - {}", deviceTs.size(), tsMessageByDevice);
                 log.info("The TS check was missed because not everyone has arrived yet.");
                 break;
             }
