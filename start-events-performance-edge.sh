@@ -33,6 +33,6 @@ export DEVICE_DELETE_ON_COMPLETE=true
 export MESSAGES_PER_SECOND=1000
 export DURATION_IN_SECONDS=60
 export CHECK_ATTRIBUTE_DELAY=10
-export WAIT_TS_COUNTER=10
+export WAIT_TS_COUNT=100
 
 mvn spring-boot:run -Dspring-boot.run.arguments="--spring.config.name=events-performance-tests"

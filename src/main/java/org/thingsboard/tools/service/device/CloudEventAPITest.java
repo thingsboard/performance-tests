@@ -19,6 +19,7 @@ import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.mqtt.MqttQoS;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
+import org.awaitility.Awaitility;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -137,11 +138,12 @@ public class CloudEventAPITest extends BaseMqttAPITest implements DeviceAPITest 
 
     private void startPerformanceTest() throws InterruptedException {
         log.info("Starting performance test for {} devices...", deviceCount);
+        CloudEventRestClientService cloudEventRestClientService = ((CloudEventRestClientService) restClientService);
 
         for (int i = 0; i < testDurationInSec; i++) {
             int iterationNumber = i;
             restClientService.getScheduler().schedule(() -> runApiTestIteration(iterationNumber), i, TimeUnit.SECONDS);
-            scheduleChangeNameMessage(i, iterationNumber);
+            cloudEventRestClientService.getChangeNameScheduler().schedule(() -> sendCloudEventMessage(iterationNumber), i, TimeUnit.SECONDS);
         }
 
         log.info("All iterations has been scheduled. Awaiting all iteration completion...");
@@ -207,21 +209,14 @@ public class CloudEventAPITest extends BaseMqttAPITest implements DeviceAPITest 
         iterationLatch.countDown();
     }
 
-    private void scheduleChangeNameMessage(int i, int iterationNumber) {
-        CloudEventRestClientService cloudEventRestClientService = ((CloudEventRestClientService) restClientService);
-
-        if (i % checkAttributeDelay == 0) {
-            cloudEventRestClientService.getChangeNameScheduler().schedule(() -> sendCloudEventMessage(iterationNumber), i, TimeUnit.SECONDS);
-        }
-    }
-
     private void sendCloudEventMessage(int iteration) {
-        try {
-            Device deviceWithNewName = changeDeviceName(iteration);
-            checkDeviceName(deviceWithNewName);
-            changeNameDurationLatch.countDown();
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+        if (iteration % checkAttributeDelay == 0) {
+            try {
+                Device deviceWithNewName = changeDeviceName(iteration);
+                checkDeviceName(deviceWithNewName);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
@@ -234,21 +229,33 @@ public class CloudEventAPITest extends BaseMqttAPITest implements DeviceAPITest 
 
         log.info("[{}] Completed change Device name - {}", iteration, device.getName());
 
-        TimeUnit.SECONDS.sleep(checkAttributeDelay);
-
         return device;
     }
 
     private void checkDeviceName(Device deviceWithNewName) {
-        Optional<Device> cloudDevice = targetClient.getDeviceById(deviceWithNewName.getId());
+        AtomicInteger checkAttributeCount = new AtomicInteger(checkAttributeDelay);
+        Awaitility.await()
+                .pollInterval(500, TimeUnit.MILLISECONDS)
+                .atMost(checkAttributeDelay, TimeUnit.SECONDS)
+                .until(() -> {
+                    checkAttributeCount.decrementAndGet();
+                    boolean checkSuccessful = false;
+                    Optional<Device> cloudDevice = targetClient.getDeviceById(deviceWithNewName.getId());
 
-        if (cloudDevice.isPresent() && cloudDevice.get().getName().equals(deviceWithNewName.getName())) {
-            log.info("Success check Device Name - {}", cloudDevice.get().getName());
-            SUCCESS_RENAME_DEVICE_COUNTER.incrementAndGet();
-        } else {
-            log.info("Failed check Device Name - {}", deviceWithNewName.getName());
-            FAILED_RENAME_DEVICE_COUNTER.incrementAndGet();
-        }
+                    if (cloudDevice.isPresent() && cloudDevice.get().getName().equals(deviceWithNewName.getName())) {
+                        log.info("Success check Device Name - {}", cloudDevice.get().getName());
+                        SUCCESS_RENAME_DEVICE_COUNTER.incrementAndGet();
+                        changeNameDurationLatch.countDown();
+                        checkSuccessful = true;
+                    }
+                    if (checkAttributeCount.get() == 0) {
+                        log.info("Failed check Device Name - {}", deviceWithNewName.getName());
+                        FAILED_RENAME_DEVICE_COUNTER.incrementAndGet();
+                        changeNameDurationLatch.countDown();
+                        checkSuccessful = false;
+                    }
+                    return checkSuccessful;
+                });
     }
 
     private void waitTSMessage() throws InterruptedException {
@@ -264,10 +271,10 @@ public class CloudEventAPITest extends BaseMqttAPITest implements DeviceAPITest 
 
             if (deviceTs.size() == tsMessageByDevice) {
                 findTsMessage.addAndGet(deviceTs.size());
-            } else if(deviceTs.size() == tsMessageByDevice + 1 && leftover > 0) {
+            } else if (deviceTs.size() == tsMessageByDevice + 1 && leftover > 0) {
                 leftover--;
                 findTsMessage.addAndGet(deviceTs.size());
-            } else{
+            } else {
                 log.info("The TS check was missed because not everyone has arrived yet.");
                 break;
             }
