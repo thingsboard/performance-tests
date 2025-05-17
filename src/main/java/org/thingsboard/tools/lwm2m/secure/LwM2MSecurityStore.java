@@ -19,18 +19,13 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.leshan.client.object.Security;
 import org.eclipse.leshan.client.object.Server;
-import org.eclipse.leshan.client.resource.DummyInstanceEnabler;
 import org.eclipse.leshan.client.resource.LwM2mInstanceEnabler;
-import org.eclipse.leshan.client.resource.LwM2mInstanceEnablerFactory;
 import org.eclipse.leshan.client.resource.ObjectsInitializer;
-import org.eclipse.leshan.core.LwM2mId;
 import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.request.BindingMode;
 import org.eclipse.leshan.core.util.Hex;
-import org.springframework.util.Base64Utils;
 import org.thingsboard.tools.lwm2m.client.LwM2MClientContext;
 import org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode;
-import org.thingsboard.tools.lwm2m.client.objects.LwM2mBinaryAppDataContainer;
 import org.thingsboard.tools.lwm2m.client.objects.Lwm2mServer;
 
 import java.security.KeyStoreException;
@@ -40,6 +35,7 @@ import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
+import java.util.Base64;
 import java.util.EnumSet;
 import java.util.List;
 
@@ -95,8 +91,7 @@ public class LwM2MSecurityStore {
             serverURI = LwM2MClientContext.coapLink + this.context.getLwm2mHostNoSecBootStrap() + ":" + this.context.getLwm2mPortNoSecBootStrap();
             this.initializer.setInstancesForObject(SECURITY, noSecBootstap(serverURI));
             this.initializer.setInstancesForObject(SERVER, new Server(this.context.getBootstrapShortId(), this.context.getLifetime(), EnumSet.of(BindingMode.U), false, BindingMode.U));
-        }
-        else {
+        } else {
             Server serverBootstrap0 = new Lwm2mServer(this.context.getBootstrapShortId(), this.context.getLifetime(), EnumSet.of(BindingMode.U), false, BindingMode.U, 0);
             Server server1 = new Lwm2mServer(this.context.getServerShortId(), this.context.getLifetime(), EnumSet.of(BindingMode.U), false, BindingMode.U, 1);
             LwM2mInstanceEnabler[] instances = new LwM2mInstanceEnabler[]{serverBootstrap0, server1};
@@ -187,7 +182,7 @@ public class LwM2MSecurityStore {
     private void getKeyCertForX509(int numberClient) {
         try {
             Certificate clientCertificate = (X509Certificate) this.context.getClientKeyStoreValue().getCertificate(this.context.getClientAlias(numberClient, false));
-            String clientAlias = this.context.isLwm2mX509Trust() ? this.context.getClientAlias(numberClient, true) : this.context.getClientAliasNoTrust() ;
+            String clientAlias = this.context.isLwm2mX509Trust() ? this.context.getClientAlias(numberClient, true) : this.context.getClientAliasNoTrust();
             PrivateKey clientPrivKey = (PrivateKey) this.context.getClientKeyStoreValue().getKey(clientAlias, this.context.getClientKeyStorePwd().toCharArray());
             Certificate serverCertificate = (X509Certificate) this.context.getServerKeyStoreValue().getCertificate(this.context.getServerAlias());
             Certificate bootStrapCertificate = (X509Certificate) this.context.getServerKeyStoreValue().getCertificate(this.context.getBootstrapAlias());
@@ -198,7 +193,8 @@ public class LwM2MSecurityStore {
             this.getParamsInfoX509((X509Certificate) serverCertificate, "Server", null);
             this.bootstrapPublicKey = Hex.encodeHexString(bootStrapCertificate.getEncoded());
             this.getParamsInfoX509((X509Certificate) bootStrapCertificate, "Bootstrap", null);
-        } catch (KeyStoreException | UnrecoverableKeyException | NoSuchAlgorithmException | CertificateEncodingException e) {
+        } catch (KeyStoreException | UnrecoverableKeyException | NoSuchAlgorithmException |
+                 CertificateEncodingException e) {
             log.error("Unable to load key and certificates for X509: [{}]", e.getMessage());
         }
     }
@@ -218,7 +214,7 @@ public class LwM2MSecurityStore {
                     whose,
                     certificate.getSubjectDN().getName(),
                     Hex.encodeHexString(certificate.getEncoded()),
-                    Base64Utils.encodeToString(certificate.getEncoded()),
+                    Base64.getEncoder().encodeToString(certificate.getEncoded()),
                     privateKey == null ? "null" : Hex.encodeHexString(privateKey.getEncoded()),
                     certificate.getSigAlgName(),
                     certificate.getSigAlgOID(),
@@ -235,7 +231,7 @@ public class LwM2MSecurityStore {
         log.info("{} uses RPK : " +
                         "\n clientPublicKey (Hex): [{}] " +
                         "\n clientPrivate: [{}] " +
-                        "\n serverPublicKey: [{}] " ,
+                        "\n serverPublicKey: [{}] ",
                 this.endPoint,
                 this.clientPublicKey,
                 this.clientPrivateKey,
@@ -247,7 +243,7 @@ public class LwM2MSecurityStore {
         log.info("{} uses PSK : " +
                         "\n server: [{}] " +
                         "\n clientPublicKeyOrId: [{}] " +
-                        "\n clientPrivateKey (Hex): [{}] "  ,
+                        "\n clientPrivateKey (Hex): [{}] ",
                 this.endPoint,
                 server,
                 this.clientPublicKey,

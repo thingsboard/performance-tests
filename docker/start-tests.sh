@@ -27,4 +27,4 @@ cd ${pkg.installFolder}/bin
 
 java -cp ${jarfile} $JAVA_OPTS -Dloader.main=org.thingsboard.tools.PerformanceTestApplication \
                     -Dlogging.config=${CONF_FOLDER}/logback.xml \
-                    org.springframework.boot.loader.PropertiesLauncher
+                    org.springframework.boot.loader.launch.PropertiesLauncher

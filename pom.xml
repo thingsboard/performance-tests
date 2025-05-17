@@ -40,27 +40,27 @@
         <pkg.unixLogFolder>/var/log/${pkg.name}</pkg.unixLogFolder>
         <pkg.installFolder>/usr/share/${pkg.name}</pkg.installFolder>
         <pkg.win.dist>${project.build.directory}/windows</pkg.win.dist>
-        <docker.repo>thingsboard</docker.repo>
+        <docker.repo>sevlamat</docker.repo>
         <dockerfile.skip>true</dockerfile.skip>
         <docker.name>tb-ce-performance-tests</docker.name>
         <tb-ce-performance-test.docker.name>tb-ce-performance-test</tb-ce-performance-test.docker.name>
         <docker.push-arm-amd-image.phase>pre-integration-test</docker.push-arm-amd-image.phase>
 
-        <thingsboard.version>4.0.0</thingsboard.version>
-        <spring-boot.version>3.1.5</spring-boot.version>
-        <spring.version>6.0.13</spring.version>
-        <lombok.version>1.18.30</lombok.version>
-        <commons-lang3.version>3.12.0</commons-lang3.version>
-        <netty.version>4.1.100.Final</netty.version>
-        <netty-tcnative-boringssl-static.version>2.0.61.Final</netty-tcnative-boringssl-static.version>
-        <bouncycastle.version>1.76</bouncycastle.version>
-        <winsw.version>2.0.1</winsw.version>
-        <slf4j.version>2.0.9</slf4j.version>
-        <logback.version>1.4.11</logback.version>
+        <thingsboard.version>4.0.1</thingsboard.version>
+        <spring-boot.version>3.2.12</spring-boot.version>
+        <spring.version>6.1.15</spring.version>
+        <lombok.version>1.18.38</lombok.version>
+        <commons-lang3.version>3.17.0</commons-lang3.version>
+        <netty.version>4.1.121.Final</netty.version>
+        <netty-tcnative-boringssl-static.version>2.0.71.Final</netty-tcnative-boringssl-static.version>
+        <bouncycastle.version>1.80</bouncycastle.version>
+        <winsw.version>2.9.0</winsw.version>
+        <slf4j.version>2.0.17</slf4j.version>
+        <logback.version>1.5.18</logback.version>
         <californium.version>2.6.3</californium.version>
         <leshan.version>2.0.0-M4</leshan.version>
         <dockerfile-maven.version>1.4.13</dockerfile-maven.version>
-        <awaitility.version>4.2.0</awaitility.version>
+        <awaitility.version>4.3.0</awaitility.version>
     </properties>
 
     <build>
@@ -90,6 +90,12 @@
                     <version>3.11.0</version>
                     <configuration>
                         <release>17</release>
+                        <compilerArgs>
+                            <arg>-Xlint:deprecation</arg>
+                            <arg>-Xlint:removal</arg>
+                            <arg>-Xlint:unchecked</arg>
+                            <arg>-parameters</arg>
+                        </compilerArgs>
                     </configuration>
                 </plugin>
                 <plugin>
@@ -832,17 +838,6 @@
         </dependency>
         <dependency>
             <groupId>org.thingsboard</groupId>
-            <artifactId>tools</artifactId>
-            <version>${thingsboard.version}</version>
-              <exclusions>
-                <exclusion> <!-- remove transitive dependency on old hibernate-validator -->
-                    <groupId>org.apache.cassandra</groupId>
-                    <artifactId>cassandra-all</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>org.thingsboard</groupId>
             <artifactId>netty-mqtt</artifactId>
             <version>${thingsboard.version}</version>
         </dependency>
@@ -1056,9 +1051,6 @@
             <id>jenkins</id>
             <name>Jenkins Repository</name>
             <url>https://repo.jenkins-ci.org/releases</url>
-            <snapshots>
-                <enabled>false</enabled>
-            </snapshots>
         </repository>
         <repository>
             <id>bintray</id>

@@ -19,10 +19,11 @@ echo "Starting ThingsBoard Performance Test..."
 
 export REST_URL=http://127.0.0.1:8080
 export MQTT_HOST=127.0.0.1
-export DEVICE_END_IDX=1111
-export MESSAGES_PER_SECOND=1000
+export DEVICE_START_IDX=2000
+export DEVICE_END_IDX=2001
+export MESSAGES_PER_SECOND=1
 export ALARMS_PER_SECOND=1
-export DURATION_IN_SECONDS=86400
+export DURATION_IN_SECONDS=3
 export DEVICE_CREATE_ON_START=true
 
 mvn spring-boot:run
