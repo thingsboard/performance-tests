@@ -39,6 +39,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -173,12 +174,17 @@ public abstract class AbstractAPITest {
         AtomicInteger totalSuccessCount = new AtomicInteger();
         AtomicInteger totalFailedCount = new AtomicInteger();
         testDurationLatch = new CountDownLatch(testDurationInSec);
-        for (int i = 0; i < testDurationInSec; i++) {
-            int iterationNumber = i;
-            restClientService.getScheduler().schedule(() -> runApiTestIteration(iterationNumber, totalSuccessCount, totalFailedCount, testDurationLatch), i, TimeUnit.SECONDS);
-        }
-        log.info("All iterations has been scheduled. Awaiting all iteration completion...");
+        AtomicInteger iterationNumber = new AtomicInteger();
+        ScheduledFuture<?> scheduledFuture = restClientService.getScheduler().scheduleAtFixedRate(() -> {
+            try {
+                runApiTestIteration(iterationNumber.incrementAndGet(), totalSuccessCount, totalFailedCount, testDurationLatch);
+            } catch (Exception e) {
+                log.error("Failed to run performance iteration {}", iterationNumber.get(), e);
+            }
+        }, 0, 1, TimeUnit.SECONDS);
+        log.info("Awaiting all iteration completion...");
         testDurationLatch.await((long) (testDurationInSec * 1.2), TimeUnit.SECONDS);
+        scheduledFuture.cancel(true);
         log.info("Completed performance iteration. Success: {}, Failed: {}", totalSuccessCount.get(), totalFailedCount.get());
     }
 
