@@ -26,10 +26,10 @@ import org.thingsboard.tools.service.shared.BaseTestExecutor;
 @ConditionalOnProperty(prefix = "test", value = "api", havingValue = "gateway")
 public class GatewayBaseTestExecutor extends BaseTestExecutor {
 
-    @Value("${gateway.createOnStart}")
+    @Value("${gateway.createOnStart:false}")
     private boolean gatewayCreateOnStart;
 
-    @Value("${gateway.deleteOnComplete}")
+    @Value("${gateway.deleteOnComplete:false}")
     private boolean gatewayDeleteOnComplete;
 
     @Autowired

@@ -42,9 +42,9 @@ public class DefaultDashboardManager implements DashboardManager {
     @Autowired
     private RestClientService restClientService;
 
-    @Value("${dashboard.tenant:}")
+    @Value("${dashboard.tenant:alarms.json}")
     private String[] tenantDashboards;
-    @Value("${dashboard.shared:}")
+    @Value("${dashboard.shared:devices.json}")
     private String sharedDashboardName;
     @Value("${dashboard.deleteIfExists:false}")
     private boolean deleteIfExists;
