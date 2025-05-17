@@ -23,7 +23,7 @@ import org.thingsboard.tools.service.dashboard.DefaultDashboardManager;
 import org.thingsboard.tools.service.device.DeviceProfileManager;
 import org.thingsboard.tools.service.rule.RuleChainManager;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 
 @Slf4j
 public abstract class BaseTestExecutor implements TestExecutor {

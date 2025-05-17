@@ -15,28 +15,22 @@
  */
 package org.thingsboard.tools.service.device;
 
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Conditional;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.Netty4ClientHttpRequestFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.util.concurrent.ListenableFuture;
-import org.springframework.util.concurrent.ListenableFutureCallback;
-import org.springframework.web.client.AsyncRestTemplate;
 import org.springframework.web.context.request.async.DeferredResult;
+import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.web.reactive.function.client.WebClient;
 import org.thingsboard.server.common.data.id.IdBased;
 import org.thingsboard.tools.service.msg.Msg;
 import org.thingsboard.tools.service.shared.AbstractAPITest;
 
-import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -49,24 +43,20 @@ import java.util.stream.Collectors;
 @ConditionalOnProperty(prefix = "device", value = "api", havingValue = "HTTP")
 public class HttpDeviceAPITest extends AbstractAPITest implements DeviceAPITest {
 
-    private AsyncRestTemplate httpClient;
-    private EventLoopGroup eventLoopGroup;
+    private WebClient webClient;
 
     @PostConstruct
     public void init() {
         super.init();
         this.deviceCount = this.deviceEndIdx - this.deviceStartIdx;
-        this.eventLoopGroup = new NioEventLoopGroup();
-        Netty4ClientHttpRequestFactory nettyFactory = new Netty4ClientHttpRequestFactory(this.eventLoopGroup);
-        this.httpClient = new AsyncRestTemplate(nettyFactory);
+        this.webClient = WebClient.builder()
+                .baseUrl(restUrl)
+                .build();
     }
 
     @PreDestroy
     public void destroy() {
         super.destroy();
-        if (this.eventLoopGroup != null) {
-            this.eventLoopGroup.shutdownGracefully(0, 5, TimeUnit.SECONDS);
-        }
     }
 
     @Override
@@ -109,37 +99,26 @@ public class HttpDeviceAPITest extends AbstractAPITest implements DeviceAPITest 
                     alarmCount++;
                 }
                 restClientService.getWorkers().submit(() -> {
-                    ListenableFuture<ResponseEntity<DeferredResult<ResponseEntity>>> future =
-                            httpClient.exchange(
-                                    restUrl + getTestUrl(),
-                                    HttpMethod.POST,
-                                    new HttpEntity(message.getData()),
-                                    new ParameterizedTypeReference<DeferredResult<ResponseEntity>>() {},
-                                    deviceName);
-                    future.addCallback(new ListenableFutureCallback<ResponseEntity<DeferredResult<ResponseEntity>>>() {
-                        @Override
-                        public void onSuccess(ResponseEntity<DeferredResult<ResponseEntity>> responseEntity) {
-                            if (responseEntity.getStatusCode().is2xxSuccessful()) {
-                                totalSuccessPublishedCount.incrementAndGet();
-                                successPublishedCount.incrementAndGet();
-                                log.debug("[{}] Message was successfully published to device: {}", iteration, deviceName);
-                            } else {
-                                totalFailedPublishedCount.incrementAndGet();
-                                failedPublishedCount.incrementAndGet();
-                                log.error("[{}] Error while publishing message to device: {}", iteration, deviceName);
-                            }
-                            iterationLatch.countDown();
-                        }
-
-                        @Override
-                        public void onFailure(Throwable throwable) {
-                            totalFailedPublishedCount.incrementAndGet();
-                            failedPublishedCount.incrementAndGet();
-                            log.error("[{}] Error while publishing message to device: {}", iteration, deviceName, throwable.getCause());
-                            iterationLatch.countDown();
-                        }
-
-                    });
+                    webClient.post()
+                            .uri(getTestUrl(), deviceName)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .body(BodyInserters.fromValue(message.getData()))
+                            .retrieve()
+                            .toBodilessEntity()
+                            .subscribe(
+                                response -> {
+                                    totalSuccessPublishedCount.incrementAndGet();
+                                    successPublishedCount.incrementAndGet();
+                                    log.debug("[{}] Message was successfully published to device: {}", iteration, deviceName);
+                                    iterationLatch.countDown();
+                                },
+                                error -> {
+                                    totalFailedPublishedCount.incrementAndGet();
+                                    failedPublishedCount.incrementAndGet();
+                                    log.error("[{}] Error while publishing message to device: {}", iteration, deviceName, error);
+                                    iterationLatch.countDown();
+                                }
+                            );
                 });
             }
             iterationLatch.await();

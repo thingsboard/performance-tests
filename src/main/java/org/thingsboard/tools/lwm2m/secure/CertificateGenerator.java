@@ -52,7 +52,7 @@ import org.thingsboard.server.common.data.StringUtils;
 import org.thingsboard.tools.lwm2m.client.LwM2MClientContext;
 import org.thingsboard.tools.lwm2m.client.LwM2MSecurityMode;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import java.io.*;
 import java.math.BigInteger;
 import java.nio.file.FileSystemException;

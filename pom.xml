@@ -21,7 +21,7 @@
 
     <groupId>org.thingsboard</groupId>
     <artifactId>performance-tests</artifactId>
-    <version>3.4.0</version>
+    <version>4.0.0</version>
     <packaging>jar</packaging>
 
     <name>ThingsBoard Performance Tests</name>
@@ -31,7 +31,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <java.version>11</java.version>
+        <java.version>17</java.version>
 
         <pkg.implementationTitle>ThingsBoard Performance Tests</pkg.implementationTitle>
         <pkg.mainClass>org.thingsboard.tools.PerformanceTestApplication</pkg.mainClass>
@@ -46,21 +46,21 @@
         <tb-ce-performance-test.docker.name>tb-ce-performance-test</tb-ce-performance-test.docker.name>
         <docker.push-arm-amd-image.phase>pre-integration-test</docker.push-arm-amd-image.phase>
 
-        <thingsboard.version>3.4.0</thingsboard.version>
-        <spring-boot.version>2.7.0</spring-boot.version>
-        <spring.version>5.3.20</spring.version>
-        <lombok.version>1.18.22</lombok.version>
-        <commons-lang3.version>3.4</commons-lang3.version>
-        <netty.version>4.1.75.Final</netty.version>
-        <netty-tcnative-boringssl-static.version>2.0.51.Final</netty-tcnative-boringssl-static.version>
-        <bouncycastle.version>1.68</bouncycastle.version>
+        <thingsboard.version>4.0.0</thingsboard.version>
+        <spring-boot.version>3.1.5</spring-boot.version>
+        <spring.version>6.0.13</spring.version>
+        <lombok.version>1.18.30</lombok.version>
+        <commons-lang3.version>3.12.0</commons-lang3.version>
+        <netty.version>4.1.100.Final</netty.version>
+        <netty-tcnative-boringssl-static.version>2.0.61.Final</netty-tcnative-boringssl-static.version>
+        <bouncycastle.version>1.76</bouncycastle.version>
         <winsw.version>2.0.1</winsw.version>
-        <slf4j.version>1.7.32</slf4j.version>
-        <logback.version>1.2.10</logback.version>
+        <slf4j.version>2.0.9</slf4j.version>
+        <logback.version>1.4.11</logback.version>
         <californium.version>2.6.3</californium.version>
         <leshan.version>2.0.0-M4</leshan.version>
         <dockerfile-maven.version>1.4.13</dockerfile-maven.version>
-        <awaitility.version>4.1.0</awaitility.version>
+        <awaitility.version>4.2.0</awaitility.version>
     </properties>
 
     <build>
@@ -87,10 +87,10 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.8.1</version>
+                    <version>3.11.0</version>
                     <configuration>
-                        <source>11</source>
-                        <target>11</target>
+                        <source>17</source>
+                        <target>17</target>
                     </configuration>
                 </plugin>
                 <plugin>
@@ -408,6 +408,7 @@
                     <version>1.0.11</version>
                     <configuration>
                         <gradleProjectDirectory>${basedir}</gradleProjectDirectory>
+                        <gradleVersion>7.6</gradleVersion>
                         <tasks>
                             <task>build</task>
                             <task>buildDeb</task>
@@ -806,6 +807,21 @@
             <version>${spring-boot.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+            <version>${spring-boot.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <version>2.1.1</version>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+            <version>3.0.2</version>
+        </dependency>
+        <dependency>
             <groupId>org.thingsboard.common</groupId>
             <artifactId>data</artifactId>
             <version>${thingsboard.version}</version>
@@ -979,12 +995,12 @@
         </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
-            <artifactId>bcprov-jdk15on</artifactId>
+            <artifactId>bcprov-jdk18on</artifactId>
             <version>${bouncycastle.version}</version>
         </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
-            <artifactId>bcpkix-jdk15on</artifactId>
+            <artifactId>bcpkix-jdk18on</artifactId>
             <version>${bouncycastle.version}</version>
         </dependency>
         <dependency>
