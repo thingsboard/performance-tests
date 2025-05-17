@@ -14,11 +14,11 @@
 # limitations under the License.
 #
 
-FROM thingsboard/openjdk11:bullseye-slim
+FROM thingsboard/openjdk17:bullseye-slim
 
 COPY start-tests.sh ${pkg.name}.deb /tmp/
 
-RUN echo 'networkaddress.cache.ttl=60' >> /etc/java-11-openjdk/security/java.security \
+RUN pwd \
     && chmod a+x /tmp/*.sh \
     && mv /tmp/start-tests.sh /usr/bin \
     && dpkg -i /tmp/${pkg.name}.deb \

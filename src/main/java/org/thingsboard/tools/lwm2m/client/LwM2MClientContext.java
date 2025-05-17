@@ -31,10 +31,10 @@ import org.eclipse.leshan.core.util.Hex;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import org.springframework.util.Base64Utils;
+import java.util.Base64;
 import org.thingsboard.tools.service.shared.BaseLwm2mAPITest;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -679,7 +679,7 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
                             "\n SubjectDN().getName: [{}]",
                     whose,
                     Hex.encodeHexString(certificate.getEncoded()),
-                    Base64Utils.encodeToString(certificate.getEncoded()),
+                    Base64.getEncoder().encodeToString(certificate.getEncoded()),
                     Hex.encodeHexString(privateKey.getEncoded()),
                     certificate.getSigAlgName(),
                     certificate.getSigAlgOID(),
@@ -694,4 +694,3 @@ public class LwM2MClientContext extends BaseLwm2mAPITest {
         }
     }
 }
-

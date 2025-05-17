@@ -30,8 +30,8 @@ import org.thingsboard.mqtt.MqttConnectResult;
 import org.thingsboard.tools.service.mqtt.DeviceClient;
 import org.thingsboard.tools.service.msg.Msg;
 
-import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import javax.net.ssl.TrustManagerFactory;
 import java.io.FileInputStream;
 import java.nio.charset.StandardCharsets;
@@ -174,7 +174,7 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
     private MqttClient initClient(String token) throws Exception {
         MqttClientConfig config = new MqttClientConfig(getSslContext());
         config.setUsername(token);
-        MqttClient client = MqttClient.create(config, null);
+        MqttClient client = MqttClient.create(config, null, null);
         client.setEventLoop(EVENT_LOOP_GROUP);
         Future<MqttConnectResult> connectFuture = client.connect(mqttHost, mqttPort);
         MqttConnectResult result;
@@ -278,5 +278,3 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
 
     protected abstract void logFailureTestMessage(int iteration, DeviceClient client, Future<?> future);
 }
-
-

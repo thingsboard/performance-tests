@@ -35,7 +35,7 @@ import org.thingsboard.tools.service.shared.BaseLwm2mAPITest;
 import org.thingsboard.tools.service.shared.DefaultRestClientService;
 import org.thingsboard.tools.service.shared.Lwm2mProfile;
 
-import javax.annotation.PreDestroy;
+import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
