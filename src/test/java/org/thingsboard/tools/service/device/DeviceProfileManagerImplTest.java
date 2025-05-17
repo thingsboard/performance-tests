@@ -38,7 +38,7 @@ class DeviceProfileManagerImplTest {
     @Test
     void testDeviceProfileResourceFiles() throws IOException {
         List<String> files = deviceProfileManager.getFiles();
-        assertThat(files).contains("smart_meter.json", "smart_tracker.json");
+        assertThat(files).contains("smart_meter.json", "smart_tracker.json", "industrial_plc.json");
     }
 
     @Test

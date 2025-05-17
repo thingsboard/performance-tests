@@ -156,7 +156,9 @@ test:
   # RANDOM - TODO: add description
   # SMART_TRACKER - sample payload: {"latitude": 42.222222, "longitude": 73.333333, "speed": 55.5, "fuel": 92, "batteryLevel": 81}
   # SMART_METER - sample payload: {"pulseCounter": 1234567, "leakage": false, "batteryLevel": 81}
+  # INDUSTRIAL_PLC - sample payload (60 lines by default) {"line001": 1.0023, "line002": 95.440321}
   payloadType: "${TEST_PAYLOAD_TYPE:SMART_METER}" # device profile name
+  payloadDatapoints: "${TEST_PAYLOAD_DATAPOINTS:60}" # datapoints per single message (used for INDUSTRIAL_PLC)
   instanceIdx: "${INSTANCE_IDX:0}"
   useInstanceIdx: "${USE_INSTANCE_IDX:false}"
   useInstanceIdxRegex: "${USE_INSTANCE_IDX_REGEX:false}"
