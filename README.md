@@ -115,8 +115,8 @@ docker run -it --rm --network host --name tb-perf-test \
            --env MQTT_HOST=127.0.0.1 \
            --env REST_USERNAME=tenant@thingsboard.org \
            --env REST_PASSWORD=tenant \
-           --env DEVICE_END_IDX=1111 \
-           --env MESSAGES_PER_SECOND=1000 \
+           --env DEVICE_END_IDX=1000 \
+           --env MESSAGES_PER_SECOND=50 \
            --env DURATION_IN_SECONDS=86400 \
            --env ALARMS_PER_SECOND=1 \
            --env DEVICE_CREATE_ON_START=true \
