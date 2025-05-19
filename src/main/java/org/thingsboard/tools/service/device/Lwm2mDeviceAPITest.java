@@ -81,7 +81,7 @@ public class Lwm2mDeviceAPITest extends BaseLwm2mAPITest implements DeviceAPITes
 
     @Override
     public void removeDevices() throws Exception {
-        removeEntities(devices.stream().map(IdBased::getId).collect(Collectors.toList()), "lwm2m");
+        removeEntities(restClientService.getRestClient(), devices.stream().map(IdBased::getId).collect(Collectors.toList()), "lwm2m");
     }
 
     @Override
