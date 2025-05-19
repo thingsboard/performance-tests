@@ -40,7 +40,7 @@
         <pkg.unixLogFolder>/var/log/${pkg.name}</pkg.unixLogFolder>
         <pkg.installFolder>/usr/share/${pkg.name}</pkg.installFolder>
         <pkg.win.dist>${project.build.directory}/windows</pkg.win.dist>
-        <docker.repo>sevlamat</docker.repo>
+        <docker.repo>thingsboard</docker.repo>
         <dockerfile.skip>true</dockerfile.skip>
         <docker.name>tb-ce-performance-tests</docker.name>
         <tb-ce-performance-test.docker.name>tb-ce-performance-test</tb-ce-performance-test.docker.name>
