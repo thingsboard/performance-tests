@@ -60,7 +60,10 @@ WARMUP_ENABLED=true
 # RANDOM - TODO: add description
 # SMART_TRACKER - sample payload: {"latitude": 42.222222, "longitude": 73.333333, "speed": 55.5, "fuel": 92, "batteryLevel": 81}
 # SMART_METER - sample payload: {"pulseCounter": 1234567, "leakage": false, "batteryLevel": 81}
+# INDUSTRIAL_PLC - sample payload (60 lines by default) {"line001": 1.0023, "line002": 95.440321}
 TEST_PAYLOAD_TYPE=SMART_METER
+# datapoints per single message (used for INDUSTRIAL_PLC)
+TEST_PAYLOAD_DATAPOINTS=60
 
 TEST_ENABLED=true
 
