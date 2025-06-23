@@ -41,6 +41,8 @@
         <pkg.installFolder>/usr/share/${pkg.name}</pkg.installFolder>
         <pkg.win.dist>${project.build.directory}/windows</pkg.win.dist>
         <docker.repo>thingsboard</docker.repo>
+        <docker.cache>--no-cache</docker.cache>
+        <docker.pull>--pull</docker.pull>
         <dockerfile.skip>true</dockerfile.skip>
         <docker.name>tb-ce-performance-tests</docker.name>
         <tb-ce-performance-test.docker.name>tb-ce-performance-test</tb-ce-performance-test.docker.name>
@@ -758,6 +760,8 @@
                                     <arguments>
                                         <argument>buildx</argument>
                                         <argument>build</argument>
+                                        <argument>${docker.cache}</argument> <!-- this is important to stay up to date with apt repos -->
+                                        <argument>${docker.pull}</argument> <!-- this is important to stay up to date with docker repo -->
                                         <argument>-t</argument>
                                         <argument>${docker.repo}/${tb-ce-performance-test.docker.name}:latest</argument>
                                         <argument>--platform=linux/amd64,linux/arm64</argument>
