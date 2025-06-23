@@ -50,7 +50,7 @@
 
         <thingsboard.version>4.0.1</thingsboard.version>
         <spring-boot.version>3.2.12</spring-boot.version>
-        <spring.version>6.1.15</spring.version>
+        <spring.version>6.1.20</spring.version>
         <lombok.version>1.18.38</lombok.version>
         <commons-lang3.version>3.17.0</commons-lang3.version>
         <netty.version>4.1.121.Final</netty.version>
