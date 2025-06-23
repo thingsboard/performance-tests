@@ -35,16 +35,20 @@ endpoints:
 
 rest:
   connect_server: "${REST_CONNECT_SERVER:true}"
+  # Http or https. Port can be omitted. Use the same web link as you usually login with your browser
   url: "${REST_URL:http://localhost:8080}"
   username: "${REST_USERNAME:tenant@thingsboard.org}"
   password: "${REST_PASSWORD:tenant}"
   pool_size: "${REST_POOL_SIZE:4}"
 mqtt:
+  # For MQTT use hostname or IP. For MQTTS use only hostname
   host: "${MQTT_HOST:localhost}"
+  # Usually 1883 for MQTT or 8883 for MQTTS
   port: "${MQTT_PORT:1883}"
   ssl:
     enabled: "${MQTT_SSL_ENABLED:false}"
-    key_store: "${MQTT_SSL_KEY_STORE:mqttclient.jks}"
+    # Java keystore file mqttclient.jks. If not set, it will use a default trusted certs for Java like ca-certificates pre-installed. Use custom JKS truststore only to deal with self-managed certificates
+    key_store: "${MQTT_SSL_KEY_STORE:}"
     key_store_password: "${MQTT_SSL_KEY_STORE_PASSWORD:password}"
 lwm2m:
   recommended_ciphers: "${LWM2M_RECOMMENDED_CIPHERS:false}"

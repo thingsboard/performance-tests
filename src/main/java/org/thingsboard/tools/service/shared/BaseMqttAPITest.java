@@ -21,12 +21,14 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.handler.codec.mqtt.MqttQoS;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.SslProvider;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.mqtt.MqttClientConfig;
 import org.thingsboard.mqtt.MqttConnectResult;
+import org.thingsboard.server.common.data.StringUtils;
 import org.thingsboard.tools.service.mqtt.DeviceClient;
 import org.thingsboard.tools.service.msg.Msg;
 
@@ -195,19 +197,26 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
 
     private SslContext getSslContext() {
         if (mqttSslEnabled) {
-            try {
-                TrustManagerFactory trustFact = TrustManagerFactory.getInstance("SunX509");
-                KeyStore trustStore = KeyStore.getInstance("JKS");
-                FileInputStream stream = new FileInputStream(mqttSslKeyStore);
-                trustStore.load(stream, mqttSslKeyStorePassword.toCharArray());
-                trustFact.init(trustStore);
-                return SslContextBuilder.forClient().trustManager(trustFact).build();
-            } catch (Exception e) {
-                throw new RuntimeException("Exception while creating SslContext", e);
+            if (StringUtils.isNotBlank(mqttSslKeyStore)) {
+                try {
+                    TrustManagerFactory trustFact = TrustManagerFactory.getInstance("SunX509");
+                    KeyStore trustStore = KeyStore.getInstance("JKS");
+                    FileInputStream stream = new FileInputStream(mqttSslKeyStore);
+                    trustStore.load(stream, mqttSslKeyStorePassword.toCharArray());
+                    trustFact.init(trustStore);
+                    return SslContextBuilder.forClient().trustManager(trustFact).build();
+                } catch (Exception e) {
+                    log.warn("Error while initializing SSL context for keystore [{}]. Will try default SSLContext", mqttSslKeyStore, e);
+                }
             }
-        } else {
-            return null;
+
+            try {
+                return SslContextBuilder.forClient().sslProvider(SslProvider.JDK).build();
+            } catch (Exception e) {
+                throw new RuntimeException("Error while initializing default SSL context", e);
+            }
         }
+        return null;
     }
 
     protected void reportMqttClientsStats() {
