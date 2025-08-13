@@ -53,7 +53,7 @@
         <spring.version>6.1.15</spring.version>
         <lombok.version>1.18.38</lombok.version>
         <commons-lang3.version>3.17.0</commons-lang3.version>
-        <netty.version>4.1.121.Final</netty.version>
+        <netty.version>4.1.124.Final</netty.version>
         <netty-tcnative-boringssl-static.version>2.0.71.Final</netty-tcnative-boringssl-static.version>
         <bouncycastle.version>1.80</bouncycastle.version>
         <winsw.version>2.9.0</winsw.version>
