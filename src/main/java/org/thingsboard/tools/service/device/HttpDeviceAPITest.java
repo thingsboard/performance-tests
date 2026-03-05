@@ -66,7 +66,7 @@ public class HttpDeviceAPITest extends AbstractAPITest implements DeviceAPITest 
 
     @Override
     public void removeDevices() throws Exception {
-        removeEntities(devices.stream().map(IdBased::getId).collect(Collectors.toList()), "devices");
+        removeEntities(restClientService.getRestClient(), devices.stream().map(IdBased::getId).collect(Collectors.toList()), "devices");
     }
 
     @Override

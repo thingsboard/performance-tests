@@ -1,0 +1,54 @@
+#
+# Copyright © 2016-2022 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+spring.main.web-application-type: NONE
+
+rest:
+  #  true - when need to assign device to edge.
+  source_type: "${SOURCE_TYPE:EDGE}"
+  url: "${SOURCE_URL:http://localhost:18080}"
+  target_url: "${TARGET_URL:http://localhost:8080}"
+  edge_id: "${EDGE_ID:f0d0d470-b098-11ef-bf09-3fc3f309b24e}"
+  username: "${REST_USERNAME:tenant@thingsboard.org}"
+  password: "${REST_PASSWORD:tenant}"
+  pool_size: "${REST_POOL_SIZE:4}"
+  wait_ts_count: "${WAIT_TS_COUNT:10}"
+mqtt:
+  host: "${MQTT_HOST:localhost}"
+  port: "${MQTT_PORT:1883}"
+device:
+  # Device API to use - events_MQTT
+  api: "${DEVICE_API:events_MQTT}"
+  startIdx: "${DEVICE_START_IDX:0}"
+  endIdx: "${DEVICE_END_IDX:100}"
+  count: "${DEVICE_COUNT:100}" # count of devices to be used by clients in k8s deployment run
+  createOnStart: "${DEVICE_CREATE_ON_START:true}"
+  deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
+  check_attribute_delay: "${CHECK_ATTRIBUTE_DELAY:10}"
+warmup:
+  enabled: "${WARMUP_ENABLED:true}"
+  packSize: "${WARMUP_PACK_SIZE:100}"
+test:
+  # Type of the payload to send: DEFAULT, SMART_TRACKER, SMART_METER
+  # RANDOM - TODO: add description
+  # SMART_TRACKER - sample payload: {"latitude": 42.222222, "longitude": 73.333333, "speed": 55.5, "fuel": 92, "batteryLevel": 81}
+  # SMART_METER - sample payload: {"pulseCounter": 1234567, "leakage": false, "batteryLevel": 81}
+  payloadType: "${TEST_PAYLOAD_TYPE:SMART_METER}" # device profile name
+  # Test API to use - device, gateway or lwm2m
+  # If Device API == LWM2M only - lwm2m
+  api: "${TEST_API:device}"
+  mps: "${MESSAGES_PER_SECOND:1000}"
+  duration: "${DURATION_IN_SECONDS:300}"
