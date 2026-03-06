@@ -187,3 +187,12 @@ test:
     aps: "${ALARMS_PER_SECOND:1}"
   exitAfterComplete: "${EXIT_AFTER_COMPLETE:true}" # this useful for kubernetes statefulset setup
   seed: "${SEED:0}" # random seed to provide reproducible random order on each run
+ota:
+  # OTA firmware title (must be unique per test run)
+  firmwareTitle: "${OTA_FIRMWARE_TITLE:OTA_PERF_TEST}"
+  # OTA firmware version
+  firmwareVersion: "${OTA_FIRMWARE_VERSION:1.0}"
+  # Synthetic firmware size in bytes (default: 1 MB)
+  firmwareSize: "${OTA_FIRMWARE_SIZE:1048576}"
+  # Chunk size in bytes requested per MQTT message (default: 50 KB)
+  chunkSize: "${OTA_CHUNK_SIZE:51200}"
