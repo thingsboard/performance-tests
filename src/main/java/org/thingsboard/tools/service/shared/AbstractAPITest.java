@@ -108,7 +108,7 @@ public abstract class AbstractAPITest {
     protected CustomerManager customerManager;
 
     @Autowired
-    DeviceProfileManager deviceProfileManager;
+    protected DeviceProfileManager deviceProfileManager;
 
     protected List<Device> devices = Collections.synchronizedList(new ArrayList<>(1024 * 8));
     public Set<String> clientTryingToConnect = ConcurrentHashMap.newKeySet(1024 * 8);

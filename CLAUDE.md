@@ -67,6 +67,18 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `UPDATE_ROOT_RULE_CHAIN` | `false` | Replace TB root rule chain with a counter rule chain during test |
 | `ALARMS_PER_SECOND` | `1` | Alarm messages per second |
 
+### OTA firmware update test variables (used when `TEST_API=ota`)
+
+| Variable | Default | Description |
+|---|---|---|
+| `TEST_API` | `device` | Set to `ota` to run OTA test |
+| `TEST_PAYLOAD_TYPE` | `SMART_METER` | Set to `OTA_TEST` to use the OTA device profile |
+| `DURATION_IN_SECONDS` | `300` | Max wait time for all devices to complete OTA |
+| `OTA_FIRMWARE_TITLE` | `OTA_PERF_TEST` | Firmware package title uploaded to TB |
+| `OTA_FIRMWARE_VERSION` | `1.0` | Firmware version |
+| `OTA_FIRMWARE_SIZE` | `1048576` | Synthetic firmware size in bytes (default 1 MB) |
+| `OTA_CHUNK_SIZE` | `51200` | Chunk size in bytes per MQTT request (default 50 KB) |
+
 ## Architecture
 
 ### Entry Points
@@ -86,6 +98,7 @@ Concrete executors:
 - `DeviceBaseTestExecutor` → `MqttDeviceAPITest`, `HttpDeviceAPITest`, `Lwm2mDeviceAPITest`
 - `GatewayBaseTestExecutor` → `MqttGatewayAPITest`, `GatewayAPITest`
 - `LwM2MClientBaseTestExecutor` → `Lwm2mDeviceAPITest`
+- `OtaBaseTestExecutor` → `MqttOtaAPITest` (activated by `TEST_API=ota`)
 
 ### Message Generation
 `MessageGenerator` implementations in `service/msg/`:
