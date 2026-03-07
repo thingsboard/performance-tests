@@ -187,3 +187,8 @@ test:
     aps: "${ALARMS_PER_SECOND:1}"
   exitAfterComplete: "${EXIT_AFTER_COMPLETE:true}" # this useful for kubernetes statefulset setup
   seed: "${SEED:0}" # random seed to provide reproducible random order on each run
+rpc:
+  # false = one-way RPC (server sends, no response required); true = two-way RPC (server waits for device response)
+  twoWay: "${RPC_TWO_WAY:false}"
+  # RPC method name sent to devices
+  method: "${RPC_METHOD:setGpio}"
