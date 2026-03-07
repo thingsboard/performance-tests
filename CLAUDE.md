@@ -54,7 +54,7 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `MQTT_PORT` | `1883` | MQTT broker port (8883 for TLS) |
 | `MQTT_SSL_ENABLED` | `false` | Enable MQTT TLS |
 | `DEVICE_API` | `MQTT` | Device protocol: `MQTT`, `HTTP`, or `LWM2M` |
-| `TEST_API` | `device` | Test mode: `device`, `gateway`, or `lwm2m` |
+| `TEST_API` | `device` | Test mode: `device`, `gateway`, `lwm2m`, or `rpc` |
 | `DEVICE_START_IDX` | `0` | First device index |
 | `DEVICE_END_IDX` | `1000` | Last device index |
 | `DEVICE_CREATE_ON_START` | `true` | Create devices before test |
@@ -66,6 +66,15 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `WARMUP_ENABLED` | `true` | Run warmup phase before test |
 | `UPDATE_ROOT_RULE_CHAIN` | `false` | Replace TB root rule chain with a counter rule chain during test |
 | `ALARMS_PER_SECOND` | `1` | Alarm messages per second |
+
+### RPC test variables (used when `TEST_API=rpc`)
+
+| Variable | Default | Description |
+|---|---|---|
+| `RPC_TWO_WAY` | `false` | `false` = one-way (fire-and-forget); `true` = two-way (server waits for device response) |
+| `RPC_METHOD` | `setGpio` | RPC method name sent to devices |
+| `MESSAGES_PER_SECOND` | `1000` | RPC requests per second |
+| `DURATION_IN_SECONDS` | `300` | Test duration |
 
 ## Architecture
 
@@ -86,6 +95,7 @@ Concrete executors:
 - `DeviceBaseTestExecutor` → `MqttDeviceAPITest`, `HttpDeviceAPITest`, `Lwm2mDeviceAPITest`
 - `GatewayBaseTestExecutor` → `MqttGatewayAPITest`, `GatewayAPITest`
 - `LwM2MClientBaseTestExecutor` → `Lwm2mDeviceAPITest`
+- `RpcBaseTestExecutor` → `MqttRpcAPITest` (activated by `TEST_API=rpc`)
 
 ### Message Generation
 `MessageGenerator` implementations in `service/msg/`:
