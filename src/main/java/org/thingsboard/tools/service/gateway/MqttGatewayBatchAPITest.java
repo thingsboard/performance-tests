@@ -37,7 +37,7 @@ import java.util.Set;
  */
 @Slf4j
 @Service
-@ConditionalOnExpression("'${device.api}' == 'MQTT' && '${gateway.batch:false}' == 'true'")
+@ConditionalOnExpression("'${device.api}' == 'MQTT' && '${gateway.batch:false}' == 'true' && '${gateway.ephemeral.enabled:false}' != 'true'")
 public class MqttGatewayBatchAPITest extends MqttGatewayAPITest {
 
     /** logClient is a synthetic publish-target + log context (one per gateway), not a real device. */

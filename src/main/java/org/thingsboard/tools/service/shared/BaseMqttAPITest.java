@@ -53,7 +53,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public abstract class BaseMqttAPITest extends AbstractAPITest {
 
-    private static final int CONNECT_TIMEOUT = 5;
+    protected static final int CONNECT_TIMEOUT = 5;
     private EventLoopGroup EVENT_LOOP_GROUP;
 
     @Value("${mqtt.host}")
@@ -190,12 +190,23 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
         log.info("{} {} have been connected successfully!", totalConnectedCount.get(), devicesType);
     }
 
-    private MqttClient initClient(String token) throws Exception {
+    /** Builds an un-connected MQTT client bound to the shared event loop, authenticating with the given token. */
+    protected MqttClient createClient(String token) {
         MqttClientConfig config = new MqttClientConfig(getSslContext());
         config.setUsername(token);
         MqttClient client = MqttClient.create(config, null, null);
         client.setEventLoop(EVENT_LOOP_GROUP);
-        Future<MqttConnectResult> connectFuture = client.connect(mqttHost, mqttPort);
+        return client;
+    }
+
+    /** Initiates a non-blocking connect; the returned Netty Future completes with the broker result. */
+    protected Future<MqttConnectResult> connectAsync(MqttClient client) {
+        return client.connect(mqttHost, mqttPort);
+    }
+
+    private MqttClient initClient(String token) throws Exception {
+        MqttClient client = createClient(token);
+        Future<MqttConnectResult> connectFuture = connectAsync(client);
         MqttConnectResult result;
         try {
             result = connectFuture.get(CONNECT_TIMEOUT, TimeUnit.SECONDS);
@@ -212,7 +223,7 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
         return client;
     }
 
-    private SslContext getSslContext() {
+    protected SslContext getSslContext() {
         if (mqttSslEnabled) {
             if (StringUtils.isNotBlank(mqttSslKeyStore)) {
                 try {

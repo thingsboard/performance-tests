@@ -146,6 +146,13 @@ gateway:
   batch: "${GATEWAY_BATCH:false}" # true = one publish per gateway carrying all its devices; MESSAGES_PER_SECOND then counts gateway publishes
   statsReport: "${GATEWAY_STATS_REPORT:TB}" # TB = per-gateway {"msgCount":0} publish (master behavior), LOG = one aggregated local log line, NONE = disabled
   statsReportIntervalSec: "${GATEWAY_STATS_REPORT_INTERVAL_SEC:300}"
+  ephemeral:
+    enabled: "${EPHEMERAL_ENABLED:false}" # true = connect->publish batch->disconnect per cycle (requires gateway.batch=true)
+    cycleLengthSec: "${EPHEMERAL_CYCLE_SEC:900}" # per-gateway cadence
+    jitterSec: "${EPHEMERAL_JITTER_SEC:300}" # one-sided [0,jitter] added to each cycle
+    maxConcurrentConnects: "${EPHEMERAL_MAX_CONCURRENT_CONNECTS:auto}" # 'auto' = ceil(rate*CONNECT_TIMEOUT*2); positive int overrides
+    gatewayConnect: "${EPHEMERAL_GATEWAY_CONNECT:false}" # true = also publish v1/gateway/connect per cycle (default: telemetry-only)
+    schedulerThreads: "${EPHEMERAL_SCHEDULER_THREADS:2}" # dedicated timing pool size
 customer:
   startIdx: "${CUSTOMER_START_IDX:0}"
   endIdx: "${CUSTOMER_END_IDX:0}"

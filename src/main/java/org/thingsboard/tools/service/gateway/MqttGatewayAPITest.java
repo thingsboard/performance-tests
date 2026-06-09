@@ -50,8 +50,8 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
 
     private List<Device> gateways = Collections.synchronizedList(new ArrayList<>(1024));
 
-    private int gatewayStartIdx;
-    private int gatewayEndIdx;
+    protected int gatewayStartIdx;
+    protected int gatewayEndIdx;
 
 
     @PostConstruct
