@@ -24,7 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 import org.thingsboard.tools.service.msg.BaseMessageGenerator;
 import org.thingsboard.tools.service.msg.MessageGenerator;
-import org.thingsboard.tools.service.msg.Msg;
+import org.thingsboard.tools.service.msg.NodeMsg;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -41,8 +41,7 @@ public class IndustrialPLCTelemetryGenerator extends BaseMessageGenerator implem
     int payloadDatapoints;
 
     @Override
-    public Msg getNextMessage(String deviceName, boolean shouldTriggerAlarm) {
-        byte[] payload;
+    public NodeMsg getNextNodeMessage(String deviceName, boolean shouldTriggerAlarm) {
         try {
             ObjectNode data = mapper.createObjectNode();
             ObjectNode tsNode;
@@ -57,11 +56,10 @@ public class IndustrialPLCTelemetryGenerator extends BaseMessageGenerator implem
             for (int i = 0; i < payloadDatapoints; i++) {
                 values.put(String.format("line%03d", i), random.nextDouble()*100);
             }
-            payload = mapper.writeValueAsBytes(data);
+            return new NodeMsg(data, shouldTriggerAlarm);
         } catch (Exception e) {
             log.warn("Failed to generate message", e);
             throw new RuntimeException(e);
         }
-        return new Msg(payload, shouldTriggerAlarm);
     }
 }

@@ -20,7 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.thingsboard.tools.service.msg.MessageGenerator;
-import org.thingsboard.tools.service.msg.Msg;
+import org.thingsboard.tools.service.msg.NodeMsg;
 
 @Slf4j
 @Service(value = "randomAttributesGenerator")
@@ -28,8 +28,7 @@ import org.thingsboard.tools.service.msg.Msg;
 public class SmartTrackerAttributesGenerator extends BaseSmartTrackerGenerator implements MessageGenerator {
 
     @Override
-    public Msg getNextMessage(String deviceName, boolean shouldTriggerAlarm) {
-        byte[] payload;
+    public NodeMsg getNextNodeMessage(String deviceName, boolean shouldTriggerAlarm) {
         try {
             ObjectNode data = mapper.createObjectNode();
             ObjectNode values;
@@ -43,11 +42,10 @@ public class SmartTrackerAttributesGenerator extends BaseSmartTrackerGenerator i
             values.put("speed", speedFormat.format(random.nextDouble() * 100));
             values.put("fuel", random.nextInt(100));
             values.put("batteryLevel", random.nextInt(100));
-            payload = mapper.writeValueAsBytes(data);
+            return new NodeMsg(data);
         } catch (Exception e) {
             log.warn("Failed to generate message", e);
             throw new RuntimeException(e);
         }
-        return new Msg(payload);
     }
 }

@@ -135,12 +135,17 @@ device:
   count: "${DEVICE_COUNT:1000}" # count of devices to be used by clients in k8s deployment run
   createOnStart: "${DEVICE_CREATE_ON_START:true}"
   deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
+  nameFormat: "${DEVICE_NAME_FORMAT:DEFAULT}" # DEFAULT (DW%08d) or UUID (deterministic 36-char). Device names only; gateways always GW%08d
+  profile: "${DEVICE_PROFILE:}" # device profile name to assign/create; empty = use test.payloadType (master behavior)
 gateway:
   startIdx: "${GATEWAY_START_IDX:0}"
   endIdx: "${GATEWAY_END_IDX:10}"
   count: "${GATEWAY_COUNT:3}" # count of devices to be used by clients in k8s deployment run
   createOnStart: "${GATEWAY_CREATE_ON_START:false}"
   deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:false}"
+  batch: "${GATEWAY_BATCH:false}" # true = one publish per gateway carrying all its devices; MESSAGES_PER_SECOND then counts gateway publishes
+  statsReport: "${GATEWAY_STATS_REPORT:TB}" # TB = per-gateway {"msgCount":0} publish (master behavior), LOG = one aggregated local log line, NONE = disabled
+  statsReportIntervalSec: "${GATEWAY_STATS_REPORT_INTERVAL_SEC:300}"
 customer:
   startIdx: "${CUSTOMER_START_IDX:0}"
   endIdx: "${CUSTOMER_END_IDX:0}"
@@ -163,6 +168,7 @@ test:
   # INDUSTRIAL_PLC - sample payload (60 lines by default) {"line001": 1.0023, "line002": 95.440321}
   payloadType: "${TEST_PAYLOAD_TYPE:SMART_METER}" # device profile name
   payloadDatapoints: "${TEST_PAYLOAD_DATAPOINTS:60}" # datapoints per single message (used for INDUSTRIAL_PLC)
+  payloadTemplate: "${TEST_PAYLOAD_TEMPLATE:}" # filesystem path to a payload template JSON; required when payloadType=CUSTOM
   instanceIdx: "${INSTANCE_IDX:0}"
   useInstanceIdx: "${USE_INSTANCE_IDX:false}"
   useInstanceIdxRegex: "${USE_INSTANCE_IDX_REGEX:false}"

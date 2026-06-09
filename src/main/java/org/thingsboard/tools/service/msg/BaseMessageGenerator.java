@@ -15,12 +15,13 @@
  */
 package org.thingsboard.tools.service.msg;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 
 import java.util.Random;
 
-public abstract class BaseMessageGenerator {
+public abstract class BaseMessageGenerator implements MessageGenerator {
 
     protected final Random random = new Random();
     protected static final ObjectMapper mapper = new ObjectMapper();
@@ -30,5 +31,15 @@ public abstract class BaseMessageGenerator {
 
     protected boolean isGateway() {
         return "gateway".equalsIgnoreCase(testApi);
+    }
+
+    @Override
+    public Msg getNextMessage(String deviceName, boolean shouldTriggerAlarm) {
+        try {
+            NodeMsg nodeMsg = getNextNodeMessage(deviceName, shouldTriggerAlarm);
+            return new Msg(mapper.writeValueAsBytes(nodeMsg.getNode()), nodeMsg.isTriggersAlarm());
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to serialize message for device " + deviceName, e);
+        }
     }
 }

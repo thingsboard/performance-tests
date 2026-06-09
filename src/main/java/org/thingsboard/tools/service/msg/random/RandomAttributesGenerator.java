@@ -22,7 +22,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.thingsboard.tools.service.msg.BaseMessageGenerator;
 import org.thingsboard.tools.service.msg.MessageGenerator;
-import org.thingsboard.tools.service.msg.Msg;
+import org.thingsboard.tools.service.msg.NodeMsg;
 
 @Slf4j
 @Service(value = "randomAttributesGenerator")
@@ -30,20 +30,20 @@ import org.thingsboard.tools.service.msg.Msg;
 public class RandomAttributesGenerator extends BaseMessageGenerator implements MessageGenerator {
 
     @Override
-    public Msg getNextMessage(String deviceName, boolean shouldTriggerAlarm) {
+    public NodeMsg getNextNodeMessage(String deviceName, boolean shouldTriggerAlarm) {
         int percent = random.nextInt(100);
         if (percent < 29) {
-            return new Msg(getTinyRandomMessage(deviceName, shouldTriggerAlarm), true);
+            return new NodeMsg(getTinyRandomMessage(deviceName, shouldTriggerAlarm), true);
         } else if (percent < 59) {
-            return new Msg(getSmallRandomMessage(deviceName));
+            return new NodeMsg(getSmallRandomMessage(deviceName));
         } else if (percent < 99) {
-            return new Msg(getRandomMessage(deviceName));
+            return new NodeMsg(getRandomMessage(deviceName));
         } else {
-            return new Msg(getHugeRandomMessage(deviceName));
+            return new NodeMsg(getHugeRandomMessage(deviceName));
         }
     }
 
-    private byte[] getTinyRandomMessage(String deviceName, boolean shouldTriggerAlarm) {
+    private ObjectNode getTinyRandomMessage(String deviceName, boolean shouldTriggerAlarm) {
         try {
             ObjectNode data = mapper.createObjectNode();
             ObjectNode values;
@@ -57,14 +57,14 @@ public class RandomAttributesGenerator extends BaseMessageGenerator implements M
             } else {
                 values.put("a1", random.nextInt(100));
             }
-            return mapper.writeValueAsBytes(data);
+            return data;
         } catch (Exception e) {
             log.warn("Failed to generate message", e);
             throw new RuntimeException(e);
         }
     }
 
-    private byte[] getSmallRandomMessage(String deviceName) {
+    private ObjectNode getSmallRandomMessage(String deviceName) {
         try {
             ObjectNode data = mapper.createObjectNode();
             ObjectNode values;
@@ -76,14 +76,14 @@ public class RandomAttributesGenerator extends BaseMessageGenerator implements M
             for (int i = 0; i < 20; i++) {
                 values.put("a2_" + i, random.nextInt(100));
             }
-            return mapper.writeValueAsBytes(data);
+            return data;
         } catch (Exception e) {
             log.warn("Failed to generate message", e);
             throw new RuntimeException(e);
         }
     }
 
-    private byte[] getRandomMessage(String deviceName) {
+    private ObjectNode getRandomMessage(String deviceName) {
         try {
             ObjectNode data = mapper.createObjectNode();
             ObjectNode values;
@@ -93,14 +93,14 @@ public class RandomAttributesGenerator extends BaseMessageGenerator implements M
                 values = data;
             }
             values.put("a3", getValueToRandomMessage(100));
-            return mapper.writeValueAsBytes(data);
+            return data;
         } catch (Exception e) {
             log.warn("Failed to generate message", e);
             throw new RuntimeException(e);
         }
     }
 
-    private byte[] getHugeRandomMessage(String deviceName) {
+    private ObjectNode getHugeRandomMessage(String deviceName) {
         try {
             ObjectNode data = mapper.createObjectNode();
             ObjectNode values;
@@ -110,7 +110,7 @@ public class RandomAttributesGenerator extends BaseMessageGenerator implements M
                 values = data;
             }
             values.put("a4", getValueToRandomMessage(1000));
-            return mapper.writeValueAsBytes(data);
+            return data;
         } catch (Exception e) {
             log.warn("Failed to generate message", e);
             throw new RuntimeException(e);

@@ -15,10 +15,25 @@
  */
 package org.thingsboard.tools.service.msg;
 
-public interface MessageGenerator {
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
-    Msg getNextMessage(String deviceName, boolean shouldTriggerAlarm);
+/**
+ * A generated message as a live JSON tree plus its alarm flag, before serialization.
+ * The {@code node} is NOT defensively copied: the caller owns it and may mutate or merge it
+ * (gateway batch mode merges several devices' nodes into one publish). Generators must therefore
+ * return a freshly created node per call.
+ */
+@AllArgsConstructor
+public class NodeMsg {
 
-    NodeMsg getNextNodeMessage(String deviceName, boolean shouldTriggerAlarm);
+    @Getter
+    private final ObjectNode node;
+    @Getter
+    private final boolean triggersAlarm;
 
+    public NodeMsg(ObjectNode node) {
+        this(node, false);
+    }
 }

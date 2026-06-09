@@ -22,7 +22,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.thingsboard.tools.service.msg.BaseMessageGenerator;
 import org.thingsboard.tools.service.msg.MessageGenerator;
-import org.thingsboard.tools.service.msg.Msg;
+import org.thingsboard.tools.service.msg.NodeMsg;
 
 @Slf4j
 @Service(value = "randomTelemetryGenerator")
@@ -32,8 +32,7 @@ public class SmartMeterTelemetryGenerator extends BaseMessageGenerator implement
     static final int BATTERY_LEVEL_ALARM = 10;
 
     @Override
-    public Msg getNextMessage(String deviceName, boolean shouldTriggerAlarm) {
-        byte[] payload;
+    public NodeMsg getNextNodeMessage(String deviceName, boolean shouldTriggerAlarm) {
         try {
             ObjectNode data = mapper.createObjectNode();
             ObjectNode tsNode;
@@ -48,11 +47,10 @@ public class SmartMeterTelemetryGenerator extends BaseMessageGenerator implement
             values.put("pulseCounter", random.nextInt(1000000));
             values.put("leakage", random.nextInt(100) > 1);  // leakage true in 1% cases
             values.put("batteryLevel", shouldTriggerAlarm ? BATTERY_LEVEL_ALARM : random.nextInt(50) + 50);
-            payload = mapper.writeValueAsBytes(data);
+            return new NodeMsg(data, shouldTriggerAlarm);
         } catch (Exception e) {
             log.warn("Failed to generate message", e);
             throw new RuntimeException(e);
         }
-        return new Msg(payload, shouldTriggerAlarm);
     }
 }

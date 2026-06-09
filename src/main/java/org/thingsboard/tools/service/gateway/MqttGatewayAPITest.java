@@ -18,10 +18,11 @@ package org.thingsboard.tools.service.gateway;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Service;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.IdBased;
+import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.tools.service.mqtt.DeviceClient;
 import org.thingsboard.tools.service.shared.BaseMqttAPITest;
 
@@ -32,13 +33,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@ConditionalOnProperty(prefix = "device", value = "api", havingValue = "MQTT")
+@ConditionalOnExpression("'${device.api}' == 'MQTT' && '${gateway.batch:false}' != 'true'")
 public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITest {
 
     @Value("${gateway.startIdx}")
@@ -105,7 +105,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         if (pack != null && !pack.isEmpty()) {
             connectDevices(pack, totalConnectedCount, true);
         }
-        reportScheduledFuture = restClientService.getScheduler().scheduleAtFixedRate(this::reportMqttClientsStats, 300, 300, TimeUnit.SECONDS);
+        scheduleGatewayStatsReporting();
         mapDevicesToGatewayClientConnections();
     }
 
@@ -114,10 +114,11 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
             int deviceIdx = i - deviceStartIdx;
             int gatewayIdx = deviceIdx % gatewayCount;
+            MqttClient gatewayClient = mqttClients.get(gatewayIdx);
             DeviceClient client = new DeviceClient();
-            client.setMqttClient(mqttClients.get(gatewayIdx));
+            client.setMqttClient(gatewayClient);
             client.setDeviceName(getToken(false, i));
-            client.setGatewayName(getToken(true, gatewayIdx));
+            client.setGatewayName(clientNames.get(gatewayClient));
             deviceClients.add(client);
         }
     }

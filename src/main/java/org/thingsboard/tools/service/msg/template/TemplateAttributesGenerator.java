@@ -13,38 +13,46 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.thingsboard.tools.service.msg.smartMeter;
+package org.thingsboard.tools.service.msg.template;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.thingsboard.tools.service.msg.BaseMessageGenerator;
 import org.thingsboard.tools.service.msg.MessageGenerator;
 import org.thingsboard.tools.service.msg.NodeMsg;
 
+import jakarta.annotation.PostConstruct;
+import java.io.IOException;
+
 @Slf4j
 @Service(value = "randomAttributesGenerator")
-@ConditionalOnProperty(prefix = "test", value = "payloadType", havingValue = "SMART_METER")
-public class SmartMeterAttributesGenerator extends BaseMessageGenerator implements MessageGenerator {
+@ConditionalOnProperty(prefix = "test", value = "payloadType", havingValue = "CUSTOM")
+public class TemplateAttributesGenerator extends BaseMessageGenerator implements MessageGenerator {
+
+    @Value("${test.payloadTemplate:}")
+    private String templatePath;
+
+    private PayloadTemplate template;
+
+    @PostConstruct
+    void init() throws IOException {
+        template = PayloadTemplate.load(templatePath);
+        log.info("Loaded payload template from {}", templatePath);
+    }
 
     @Override
     public NodeMsg getNextNodeMessage(String deviceName, boolean shouldTriggerAlarm) {
-        try {
-            ObjectNode data = mapper.createObjectNode();
-            ObjectNode values;
-            if (isGateway()) {
-                values = data.putObject(deviceName);
-            } else {
-                values = data;
-            }
-            values.put("pulseCounter", random.nextInt(1000000));
-            values.put("leakage", random.nextInt(100) > 1);  // leakage true in 1% cases
-            values.put("batteryLevel", random.nextInt(100));
-            return new NodeMsg(data);
-        } catch (Exception e) {
-            log.warn("Failed to generate message", e);
-            throw new RuntimeException(e);
+        ObjectNode data = mapper.createObjectNode();
+        ObjectNode values;
+        if (isGateway()) {
+            values = data.putObject(deviceName);
+        } else {
+            values = data;
         }
+        template.populate(values, random);
+        return new NodeMsg(data);
     }
 }

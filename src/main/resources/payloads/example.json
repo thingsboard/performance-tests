@@ -1,0 +1,11 @@
+{
+  "static": {
+    "deviceModel": "model-x",
+    "mode": 1
+  },
+  "random": {
+    "metricA": [-6.0, 6.0],
+    "metricB": [0.0, 99999.0],
+    "statusFlag": [0, 1]
+  }
+}

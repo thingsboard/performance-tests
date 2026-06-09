@@ -30,6 +30,7 @@ import org.thingsboard.tools.service.customer.CustomerManager;
 import org.thingsboard.tools.service.device.DeviceProfileManager;
 import org.thingsboard.tools.service.msg.MessageGenerator;
 import org.thingsboard.tools.service.msg.Msg;
+import org.thingsboard.tools.service.msg.NodeMsg;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -94,6 +95,10 @@ public abstract class AbstractAPITest {
     protected int seed;
     @Value("${test.payloadType:SMART_METER}")
     protected String payloadType;
+    @Value("${device.nameFormat:DEFAULT}")
+    protected String deviceNameFormat;
+    @Value("${device.profile:}")
+    protected String deviceProfileName;
 
     @Autowired
     @Qualifier("randomTelemetryGenerator")
@@ -116,6 +121,9 @@ public abstract class AbstractAPITest {
 
     protected Random random;
     CountDownLatch testDurationLatch;
+
+    protected final AtomicInteger totalSuccessPublishedCount = new AtomicInteger();
+    protected final AtomicInteger totalFailedPublishedCount = new AtomicInteger();
 
     protected int deviceStartIdx;
     protected int deviceEndIdx;
@@ -171,13 +179,13 @@ public abstract class AbstractAPITest {
         log.info("Shuffling {} devices with random seed {}...", deviceCount, seed);
         Collections.shuffle(devices, new Random(seed));
         log.info("Starting performance test for {} devices...", deviceCount);
-        AtomicInteger totalSuccessCount = new AtomicInteger();
-        AtomicInteger totalFailedCount = new AtomicInteger();
+        totalSuccessPublishedCount.set(0);
+        totalFailedPublishedCount.set(0);
         testDurationLatch = new CountDownLatch(testDurationInSec);
         AtomicInteger iterationNumber = new AtomicInteger();
         ScheduledFuture<?> scheduledFuture = restClientService.getScheduler().scheduleAtFixedRate(() -> {
             try {
-                runApiTestIteration(iterationNumber.incrementAndGet(), totalSuccessCount, totalFailedCount, testDurationLatch);
+                runApiTestIteration(iterationNumber.incrementAndGet(), totalSuccessPublishedCount, totalFailedPublishedCount, testDurationLatch);
             } catch (Exception e) {
                 log.error("Failed to run performance iteration {}", iterationNumber.get(), e);
             }
@@ -185,7 +193,7 @@ public abstract class AbstractAPITest {
         log.info("Awaiting all iteration completion...");
         testDurationLatch.await((long) (testDurationInSec * 1.2), TimeUnit.SECONDS);
         scheduledFuture.cancel(true);
-        log.info("Completed performance iteration. Success: {}, Failed: {}", totalSuccessCount.get(), totalFailedCount.get());
+        log.info("Completed performance iteration. Success: {}, Failed: {}", totalSuccessPublishedCount.get(), totalFailedPublishedCount.get());
     }
 
     protected abstract void runApiTestIteration(int iteration, AtomicInteger totalSuccessPublishedCount, AtomicInteger totalFailedPublishedCount, CountDownLatch testDurationLatch);
@@ -241,7 +249,8 @@ public abstract class AbstractAPITest {
             restClientService.getHttpExecutor().submit(() -> {
                 Device entity = new Device();
                 try {
-                    entity.setDeviceProfileId(deviceProfileManager.getByName(payloadType).getId());
+                    String profileName = (deviceProfileName == null || deviceProfileName.isBlank()) ? payloadType : deviceProfileName;
+                    entity.setDeviceProfileId(deviceProfileManager.getByName(profileName).getId());
                     String token = getToken(isGateway, tokenNumber);
                     if (isGateway) {
                         entity.setName(token);
@@ -291,11 +300,15 @@ public abstract class AbstractAPITest {
     }
 
     protected String getToken(boolean isGateway, int token) {
-        return (isGateway ? "GW" : "DW") + String.format("%8d", token).replace(" ", "0");
+        return EntityNames.entityName(isGateway, deviceNameFormat, token);
     }
 
     protected Msg getNextMessage(String deviceName, boolean alarmRequired) {
         return (telemetryTest ? tsMsgGenerator : attrMsgGenerator).getNextMessage(deviceName, alarmRequired);
+    }
+
+    protected NodeMsg getNextNodeMessage(String deviceName, boolean alarmRequired) {
+        return (telemetryTest ? tsMsgGenerator : attrMsgGenerator).getNextNodeMessage(deviceName, alarmRequired);
     }
 
     protected String getHttpErrorException(Exception e) {

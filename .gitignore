@@ -31,3 +31,4 @@ pom.xml.versionsBackup
 **/Californium.properties
 **/.env
 **/src/main/resources/models
+/docs/

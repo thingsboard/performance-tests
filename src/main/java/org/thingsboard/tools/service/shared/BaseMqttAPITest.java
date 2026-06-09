@@ -40,8 +40,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -64,7 +67,19 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
     @Value("${mqtt.ssl.key_store_password}")
     String mqttSslKeyStorePassword;
 
+    @Value("${gateway.statsReport:TB}")
+    protected String statsReportMode;
+    @Value("${gateway.statsReportIntervalSec:300}")
+    protected int statsReportIntervalSec;
+
+    private final AtomicInteger lastReportedSuccess = new AtomicInteger();
+    private final AtomicInteger lastReportedFailed = new AtomicInteger();
+
     protected final List<MqttClient> mqttClients = Collections.synchronizedList(new ArrayList<>(1024 * 16));
+    // Maps each connected MQTT client to the name it connected with (gateway or device name).
+    // mqttClients order is non-deterministic (connects run concurrently), so this is the reliable
+    // way to label a client by its actual entity name.
+    protected final Map<MqttClient, String> clientNames = new ConcurrentHashMap<>();
 
     protected final List<DeviceClient> deviceClients = Collections.synchronizedList(new ArrayList<>(1024 * 16));
 
@@ -160,7 +175,9 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
         for (String deviceName : pack) {
             restClientService.getHttpExecutor().submit(() -> {
                 try {
-                    mqttClients.add(initClient(deviceName));
+                    MqttClient client = initClient(deviceName);
+                    mqttClients.add(client);
+                    clientNames.put(client, deviceName);
                     totalConnectedCount.incrementAndGet();
                 } catch (Exception e) {
                     log.error("Error while connect {}", deviceType, e);
@@ -232,6 +249,57 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
         }
     }
 
+    protected void scheduleGatewayStatsReporting() {
+        if (statsReportIntervalSec <= 0 || "NONE".equalsIgnoreCase(statsReportMode)) {
+            log.info("Gateway stats reporting disabled");
+            return;
+        }
+        if ("LOG".equalsIgnoreCase(statsReportMode)) {
+            // logScheduler: separate pool - never blocks the single-threaded test metronome
+            reportScheduledFuture = restClientService.getLogScheduler()
+                    .scheduleAtFixedRate(() -> log.info(gatewayStatsSummary()), statsReportIntervalSec, statsReportIntervalSec, TimeUnit.SECONDS);
+        } else {
+            reportScheduledFuture = restClientService.getScheduler()
+                    .scheduleAtFixedRate(this::reportMqttClientsStats, statsReportIntervalSec, statsReportIntervalSec, TimeUnit.SECONDS);
+        }
+    }
+
+    protected String gatewayStatsSummary() {
+        long connected = 0;
+        for (MqttClient mqttClient : mqttClients) {
+            if (mqttClient.isConnected()) {
+                connected++;
+            }
+        }
+        int success = totalSuccessPublishedCount.get();
+        int failed = totalFailedPublishedCount.get();
+        return String.format("Gateway stats: connected %d/%d, published since last report: success=%d, failed=%d",
+                connected, mqttClients.size(), success - lastReportedSuccess.getAndSet(success), failed - lastReportedFailed.getAndSet(failed));
+    }
+
+    /**
+     * One unit of publishing work: which connection, what payload, how many alarm-triggering
+     * entries it contains. The DeviceClient doubles as the logging context.
+     */
+    public record PublishTask(DeviceClient client, byte[] data, int alarmsTriggered) {
+    }
+
+    /**
+     * Per-publish decision point. Default = master behavior: sequential walk over deviceClients,
+     * one device's message per publish. This reproduces exactly the index arithmetic the master
+     * {@code runApiTestIteration} loop performed inline (msgCount = iteration * testMessagesPerSecond
+     * % deviceCount, then index = msgCount % deviceCount with a post-increment per message), which
+     * is equivalent to (iteration * testMessagesPerSecond + msgOffsetIdx) % deviceCount. Batch mode
+     * overrides this (and only this).
+     */
+    protected PublishTask nextPublishTask(int iteration, int msgOffsetIdx, boolean alarmRequired, Set<Object> iterationTargets) throws Exception {
+        int deviceCount = deviceClients.size();
+        int index = (iteration * testMessagesPerSecond + msgOffsetIdx) % deviceCount;
+        DeviceClient client = deviceClients.get(index);
+        Msg message = getNextMessage(client.getDeviceName(), alarmRequired);
+        return new PublishTask(client, message.getData(), message.isTriggersAlarm() ? 1 : 0);
+    }
+
     protected void runApiTestIteration(final int iteration,
                                        AtomicInteger totalSuccessPublishedCount,
                                        AtomicInteger totalFailedPublishedCount,
@@ -244,29 +312,22 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
             CountDownLatch iterationLatch = new CountDownLatch(testMessagesPerSecond);
             boolean alarmIteration = iteration >= alarmsStartTs && iteration < alarmsEndTs;
             int alarmCount = 0;
-            int deviceCount = deviceClients.size();
-            int msgCount = iteration * testMessagesPerSecond % deviceCount;
+            Set<Object> iterationTargets = new HashSet<>();
             for (int i = 0; i < testMessagesPerSecond; i++) {
                 boolean alarmRequired = alarmIteration && (alarmCount < alarmsPerSecond);
-                int index = msgCount % deviceCount;
-                DeviceClient client = deviceClients.get(index);
-                //log.info("device client index {} device {}", index, client.getDeviceName());
-                msgCount++;
-                Msg message = getNextMessage(client.getDeviceName(), alarmRequired);
-                if (message.isTriggersAlarm()) {
-                    alarmCount++;
-                }
+                PublishTask task = nextPublishTask(iteration, i, alarmRequired, iterationTargets);
+                alarmCount += task.alarmsTriggered();
                 restClientService.getWorkers().submit(() -> {
-                    client.getMqttClient().publish(getTestTopic(), Unpooled.wrappedBuffer(message.getData()), MqttQoS.AT_MOST_ONCE)
+                    task.client().getMqttClient().publish(getTestTopic(), Unpooled.wrappedBuffer(task.data()), MqttQoS.AT_MOST_ONCE)
                             .addListener(future -> {
                                         if (future.isSuccess()) {
                                             totalSuccessPublishedCount.incrementAndGet();
                                             successPublishedCount.incrementAndGet();
-                                            logSuccessTestMessage(iteration, client);
+                                            logSuccessTestMessage(iteration, task.client());
                                         } else {
                                             totalFailedPublishedCount.incrementAndGet();
                                             failedPublishedCount.incrementAndGet();
-                                            logFailureTestMessage(iteration, client, future);
+                                            logFailureTestMessage(iteration, task.client(), future);
                                         }
                                         iterationLatch.countDown();
                                     }

@@ -96,6 +96,12 @@ Where:
 - `MQTT_SSL_ENABLED`             - Enable/disable ssl for MQTT. Default: false
 - `MQTT_SSL_KEY_STORE`           - MQTT key store file location
 - `MQTT_SSL_KEY_STORE_PASSWORD`  - MQTT key store file password
+- `GATEWAY_BATCH`                - When `true`, each message is one publish per gateway carrying telemetry for all of its mapped devices (Gateway API multi-device batch). `MESSAGES_PER_SECOND` then counts gateway publishes; device records/sec = `MESSAGES_PER_SECOND` × devices-per-gateway. Default: false
+- `DEVICE_NAME_FORMAT`           - `DEFAULT` (DW%08d names) or `UUID` (deterministic 36-char UUID-format device names). Gateways always keep `GW%08d`. In device API mode the device name is also the access token. Default: DEFAULT
+- `DEVICE_PROFILE`               - Device profile name to assign/create. Empty falls back to `TEST_PAYLOAD_TYPE`. Lets a generic payload run against any named profile. Default: empty
+- `TEST_PAYLOAD_TYPE=CUSTOM` + `TEST_PAYLOAD_TEMPLATE` - Generic payload whose shape is defined by an external JSON template file (path in `TEST_PAYLOAD_TEMPLATE`): `{"static": {...}, "random": {"key": [min, max], ...}}` — static fields are copied verbatim, random fields are re-randomized each message (integer bounds → int, decimal bounds → double). See `src/main/resources/payloads/example.json`
+- `GATEWAY_STATS_REPORT`         - Gateway liveness reporting: `TB` publishes `{"msgCount":0}` per gateway each interval (default, legacy behavior), `LOG` prints one aggregated line (connected n/m, success/failed deltas) without sending anything to ThingsBoard, `NONE` disables. Default: TB
+- `GATEWAY_STATS_REPORT_INTERVAL_SEC` - Interval in seconds for `GATEWAY_STATS_REPORT`. Default: 300
 
 Once params are configured to run test simple type from the folder where configuration file is located:
 ```bash
