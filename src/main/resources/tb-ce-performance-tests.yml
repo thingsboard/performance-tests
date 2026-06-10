@@ -136,15 +136,16 @@ device:
   createOnStart: "${DEVICE_CREATE_ON_START:true}"
   deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
   nameFormat: "${DEVICE_NAME_FORMAT:DEFAULT}" # DEFAULT (DW%08d) or UUID (deterministic 36-char). Device names only; gateways always GW%08d
-  profile: "${DEVICE_PROFILE:}" # device profile name to assign/create; empty = use test.payloadType (master behavior)
+  profile: "${DEVICE_PROFILE:}" # device profile name to assign/create; empty = use test.payloadType
 gateway:
   startIdx: "${GATEWAY_START_IDX:0}"
   endIdx: "${GATEWAY_END_IDX:10}"
   count: "${GATEWAY_COUNT:3}" # count of devices to be used by clients in k8s deployment run
   createOnStart: "${GATEWAY_CREATE_ON_START:false}"
   deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:false}"
+  profile: "${GATEWAY_PROFILE:}" # device profile name to assign to gateways; empty = same profile as devices
   batch: "${GATEWAY_BATCH:false}" # true = one publish per gateway carrying all its devices; MESSAGES_PER_SECOND then counts gateway publishes
-  statsReport: "${GATEWAY_STATS_REPORT:TB}" # TB = per-gateway {"msgCount":0} publish (master behavior), LOG = one aggregated local log line, NONE = disabled
+  statsReport: "${GATEWAY_STATS_REPORT:TB}" # TB = per-gateway {"msgCount":0} publish, LOG = one aggregated local log line, NONE = disabled
   statsReportIntervalSec: "${GATEWAY_STATS_REPORT_INTERVAL_SEC:300}"
   ephemeral:
     enabled: "${EPHEMERAL_ENABLED:false}" # true = connect->publish batch->disconnect per cycle (requires gateway.batch=true)

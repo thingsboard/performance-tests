@@ -99,6 +99,8 @@ public abstract class AbstractAPITest {
     protected String deviceNameFormat;
     @Value("${device.profile:}")
     protected String deviceProfileName;
+    @Value("${gateway.profile:}")
+    protected String gatewayProfileName;
 
     @Autowired
     @Qualifier("randomTelemetryGenerator")
@@ -249,7 +251,12 @@ public abstract class AbstractAPITest {
             restClientService.getHttpExecutor().submit(() -> {
                 Device entity = new Device();
                 try {
-                    String profileName = (deviceProfileName == null || deviceProfileName.isBlank()) ? payloadType : deviceProfileName;
+                    String profileName;
+                    if (isGateway && gatewayProfileName != null && !gatewayProfileName.isBlank()) {
+                        profileName = gatewayProfileName;
+                    } else {
+                        profileName = (deviceProfileName == null || deviceProfileName.isBlank()) ? payloadType : deviceProfileName;
+                    }
                     entity.setDeviceProfileId(deviceProfileManager.getByName(profileName).getId());
                     String token = getToken(isGateway, tokenNumber);
                     if (isGateway) {

@@ -296,12 +296,9 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
     }
 
     /**
-     * Per-publish decision point. Default = master behavior: sequential walk over deviceClients,
-     * one device's message per publish. This reproduces exactly the index arithmetic the master
-     * {@code runApiTestIteration} loop performed inline (msgCount = iteration * testMessagesPerSecond
-     * % deviceCount, then index = msgCount % deviceCount with a post-increment per message), which
-     * is equivalent to (iteration * testMessagesPerSecond + msgOffsetIdx) % deviceCount. Batch mode
-     * overrides this (and only this).
+     * Per-publish decision point. Default: sequential walk over deviceClients, one device's message
+     * per publish — index = (iteration * testMessagesPerSecond + msgOffsetIdx) % deviceCount. Batch
+     * mode overrides this (and only this).
      */
     protected PublishTask nextPublishTask(int iteration, int msgOffsetIdx, boolean alarmRequired, Set<Object> iterationTargets) throws Exception {
         int deviceCount = deviceClients.size();

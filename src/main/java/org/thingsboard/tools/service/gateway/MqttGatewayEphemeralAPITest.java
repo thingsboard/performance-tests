@@ -64,7 +64,6 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
     protected boolean gatewayConnect;
 
     private static final int HEADROOM = 2;
-    private static final int TIME_WAIT_SEC = 60;
 
     // --- metrics ---
     protected final AtomicInteger connectAttempts = new AtomicInteger();
@@ -140,12 +139,9 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
         this.cycleScheduler = Executors.newScheduledThreadPool(Math.max(1, schedulerThreads));
 
         double rate = EphemeralSchedule.connectsPerSecond(gatewayCount, cycleLengthSec);
-        long portBudget = EphemeralSchedule.timeWaitPortBudget(gatewayCount, cycleLengthSec, TIME_WAIT_SEC);
         log.info("Ephemeral mode starting: {} gateways, cycle {}s + jitter {}s, ~{} connects/s, maxConcurrentConnects={} ({})",
                 gatewayCount, cycleLengthSec, jitterSec, String.format("%.1f", rate), cap,
                 ("auto".equalsIgnoreCase(maxConcurrentConnectsConfig) ? "auto" : "override"));
-        log.warn("Ephemeral loader prerequisites: ~{} ephemeral ports held by TIME_WAIT (rate x {}s); ensure ip_local_port_range / tcp_tw_reuse and FD limits (ulimit -n) exceed this and the cap. Shard pods if not.",
-                portBudget, TIME_WAIT_SEC);
 
         this.running = true;
         this.testStartMillis = System.currentTimeMillis();
