@@ -61,11 +61,23 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `DEVICE_DELETE_ON_COMPLETE` | `false` | Delete devices after test |
 | `MESSAGES_PER_SECOND` | `1000` | Target message throughput |
 | `DURATION_IN_SECONDS` | `300` | Test duration |
-| `TEST_PAYLOAD_TYPE` | `SMART_METER` | Payload type: `DEFAULT`, `SMART_TRACKER`, `SMART_METER`, `INDUSTRIAL_PLC` |
+| `TEST_PAYLOAD_TYPE` | `SMART_METER` | Payload type: `DEFAULT`, `SMART_TRACKER`, `SMART_METER`, `INDUSTRIAL_PLC`, `CUSTOM` |
 | `TEST_PAYLOAD_DATAPOINTS` | `60` | Datapoints per message (INDUSTRIAL_PLC only) |
+| `TEST_PAYLOAD_TEMPLATE` | _(empty)_ | Filesystem path to a JSON payload template; required when `TEST_PAYLOAD_TYPE=CUSTOM` |
 | `WARMUP_ENABLED` | `true` | Run warmup phase before test |
 | `UPDATE_ROOT_RULE_CHAIN` | `false` | Replace TB root rule chain with a counter rule chain during test |
 | `ALARMS_PER_SECOND` | `1` | Alarm messages per second |
+| `DEVICE_NAME_FORMAT` | `DEFAULT` | Device name format: `DEFAULT` (`DW%08d`) or `UUID` (deterministic 36-char); gateways always `GW%08d` |
+| `DEVICE_PROFILE` | _(empty)_ | Device-profile name to assign; empty = use `TEST_PAYLOAD_TYPE` |
+| `GATEWAY_PROFILE` | _(empty)_ | Device-profile name to assign to gateways; empty = same profile as devices |
+| `GATEWAY_BATCH` | `false` | Gateway mode: one publish per gateway carrying all its devices (`MESSAGES_PER_SECOND` counts gateway publishes) |
+| `GATEWAY_STATS_REPORT` | `TB` | Gateway stats reporter: `TB` (publish), `LOG` (one aggregated log line), `NONE` |
+| `GATEWAY_STATS_REPORT_INTERVAL_SEC` | `300` | Interval (s) for the gateway stats reporter |
+| `EPHEMERAL_ENABLED` | `false` | With `GATEWAY_BATCH=true`: each gateway runs connect→publish→disconnect cycles (rate = `gatewayCount / EPHEMERAL_CYCLE_SEC`; `MESSAGES_PER_SECOND` ignored) |
+| `EPHEMERAL_CYCLE_SEC` / `EPHEMERAL_JITTER_SEC` | `900` / `300` | Per-gateway cadence + one-sided `[0,jitter]` |
+| `EPHEMERAL_MAX_CONCURRENT_CONNECTS` | `auto` | Cap on in-flight connects; `auto` = `ceil(rate × connectTimeout × 2)` |
+| `EPHEMERAL_GATEWAY_CONNECT` | `false` | Also publish `v1/gateway/connect` per sub-device each cycle |
+| `EPHEMERAL_SCHEDULER_THREADS` | `2` | Dedicated timing-pool size for the ephemeral cycle scheduler |
 
 ## Architecture
 
@@ -84,18 +96,25 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 
 Concrete executors:
 - `DeviceBaseTestExecutor` → `MqttDeviceAPITest`, `HttpDeviceAPITest`, `Lwm2mDeviceAPITest`
-- `GatewayBaseTestExecutor` → `MqttGatewayAPITest`, `GatewayAPITest`
+- `GatewayBaseTestExecutor` → `MqttGatewayAPITest` → `MqttGatewayBatchAPITest` (`GATEWAY_BATCH=true`) → `MqttGatewayEphemeralAPITest` (`+ EPHEMERAL_ENABLED=true`); also `GatewayAPITest`
 - `LwM2MClientBaseTestExecutor` → `Lwm2mDeviceAPITest`
 
+The active gateway bean is selected by mutually-exclusive `@ConditionalOnExpression` on `gateway.batch` × `gateway.ephemeral.enabled`. Batch publishing delegates the per-publish decision to a `nextPublishTask` hook on `BaseMqttAPITest`; ephemeral mode drives its own per-gateway cycle scheduler (timing math in `EphemeralSchedule`) instead of the fixed-rate metronome.
+
 ### Message Generation
-`MessageGenerator` implementations in `service/msg/`:
+`MessageGenerator` implementations in `service/msg/`. Each returns a `NodeMsg` (Jackson `ObjectNode` +
+alarm flag); `BaseMessageGenerator` serializes it to wire bytes, so generators are reusable for both
+device payloads and gateway batches.
 - `SmartMeterTelemetryGenerator` / `SmartMeterAttributesGenerator`
 - `SmartTrackerTelemetryGenerator` / `SmartTrackerAttributesGenerator`
 - `IndustrialPLCTelemetryGenerator` / `IndustrialPLCAttributesGenerator`
 - `RandomTelemetryGenerator` / `RandomAttributesGenerator`
+- `template/TemplateTelemetryGenerator` / `TemplateAttributesGenerator` — `TEST_PAYLOAD_TYPE=CUSTOM`; payload shape (static fields + randomized numeric ranges) is read from an external JSON template (`TEST_PAYLOAD_TEMPLATE`), keeping payload semantics out of code. See `src/main/resources/payloads/example.json`.
 
 ### Device Naming Convention
-Devices are named `DW00000000` (prefix `DW` + zero-padded index), gateways use `GW` prefix.
+Devices are named `DW00000000` (prefix `DW` + zero-padded index), gateways use `GW` prefix. Names are
+built by `EntityNames.entityName(...)`; `DEVICE_NAME_FORMAT=UUID` switches device names to a
+deterministic 36-char UUID form (gateways stay `GW%08d`).
 
 ### Key Services
 - `DefaultRestClientService` — manages thread pools (HTTP executor + log scheduler), wraps TB REST client
@@ -107,4 +126,9 @@ Devices are named `DW00000000` (prefix `DW` + zero-padded index), gateways use `
 The `lwm2m/` package contains a full Leshan-based LwM2M client implementation supporting NoSec, PSK, RPK, and X.509 security modes. LwM2M object models are in `src/main/resources/models/`.
 
 ### Kubernetes / Multi-instance
-Supports sharding across instances via `INSTANCE_IDX` / `USE_INSTANCE_IDX` / `DEVICE_COUNT` to partition the device range among multiple pods.
+Partition one large run across N pods; each pod resolves its `instanceIdx` and takes a disjoint slice of the index ranges.
+- **Instance index:** `INSTANCE_IDX` directly, or extracted from a source string (e.g. the pod hostname) via `USE_INSTANCE_IDX_REGEX` + `INSTANCE_IDX_REGEX` applied to `INSTANCE_IDX_REGEX_SOURCE`.
+- **Sharding (`USE_INSTANCE_IDX=true`):** device range = `[DEVICE_COUNT × instanceIdx, +DEVICE_COUNT)`, gateway range = `[GATEWAY_COUNT × instanceIdx, +GATEWAY_COUNT)`. Otherwise the explicit `*_START_IDX` / `*_END_IDX` apply.
+- **Multi-tenant:** give each pod distinct `REST_USERNAME` / `REST_PASSWORD` to drive a different tenant.
+- **Gateway ranges must be disjoint across pods:** a gateway's MQTT access token *is* its name, and tokens are globally unique in ThingsBoard (device *names* are only per-tenant), so identical gateway ranges across tenants collide on the token. Sub-device ranges may overlap (sub-devices get auto-generated tokens).
+- **Ephemeral mode:** the per-gateway cycle RNG is seeded per `instanceIdx` (`EphemeralSchedule.scheduleSeed`), so pods don't fire synchronized connection bursts.
