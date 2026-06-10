@@ -69,6 +69,7 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `ALARMS_PER_SECOND` | `1` | Alarm messages per second |
 | `DEVICE_NAME_FORMAT` | `DEFAULT` | Device name format: `DEFAULT` (`DW%08d`) or `UUID` (deterministic 36-char); gateways always `GW%08d` |
 | `DEVICE_PROFILE` | _(empty)_ | Device-profile name to assign; empty = use `TEST_PAYLOAD_TYPE` |
+| `DEVICE_PROFILE_PATH` | _(empty)_ | Filesystem dir of profile JSON files to load instead of the classpath `device/profile/`; lets profiles be mounted/edited |
 | `GATEWAY_PROFILE` | _(empty)_ | Device-profile name to assign to gateways; empty = same profile as devices |
 | `GATEWAY_BATCH` | `false` | Gateway mode: one publish per gateway carrying all its devices (`MESSAGES_PER_SECOND` counts gateway publishes) |
 | `GATEWAY_STATS_REPORT` | `TB` | Gateway stats reporter: `TB` (publish), `LOG` (one aggregated log line), `NONE` |
@@ -119,7 +120,7 @@ deterministic 36-char UUID form (gateways stay `GW%08d`).
 ### Key Services
 - `DefaultRestClientService` — manages thread pools (HTTP executor + log scheduler), wraps TB REST client
 - `DefaultDashboardManager` — creates dashboards from JSON files in `src/main/resources/`
-- `DeviceProfileManagerImpl` — creates TB device profiles from JSON files in `src/main/resources/device/profile/`
+- `DeviceProfileManagerImpl` — creates TB device profiles from JSON files in `src/main/resources/device/profile/` (or a mounted filesystem dir via `DEVICE_PROFILE_PATH`)
 - `RuleChainManager` — can swap/revert the TB root rule chain for clean measurement
 
 ### LwM2M Support

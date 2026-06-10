@@ -137,6 +137,8 @@ device:
   deleteOnComplete: "${DEVICE_DELETE_ON_COMPLETE:false}"
   nameFormat: "${DEVICE_NAME_FORMAT:DEFAULT}" # DEFAULT (DW%08d) or UUID (deterministic 36-char). Device names only; gateways always GW%08d
   profile: "${DEVICE_PROFILE:}" # device profile name to assign/create; empty = use test.payloadType
+deviceProfile:
+  path: "${DEVICE_PROFILE_PATH:}" # filesystem dir of profile JSON files; empty = load from classpath device/profile/
 gateway:
   startIdx: "${GATEWAY_START_IDX:0}"
   endIdx: "${GATEWAY_END_IDX:10}"

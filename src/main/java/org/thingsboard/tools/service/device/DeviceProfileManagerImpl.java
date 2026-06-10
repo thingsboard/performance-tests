@@ -29,12 +29,16 @@ import org.thingsboard.tools.service.shared.RestClientService;
 
 import jakarta.annotation.PostConstruct;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -57,6 +61,9 @@ public class DeviceProfileManagerImpl implements DeviceProfileManager {
     @Value("${deviceProfile.deleteIfExists:false}")
     private boolean deleteIfExists;
 
+    @Value("${deviceProfile.path:}")
+    private String profilePath; // filesystem dir of profile JSONs; empty = load from classpath
+
     @Getter
     private final ConcurrentMap<String, DeviceProfile> deviceProfiles = new ConcurrentHashMap<>();
     private final List<DeviceProfile> deviceProfilesCreated = new ArrayList<>();
@@ -67,6 +74,14 @@ public class DeviceProfileManagerImpl implements DeviceProfileManager {
 
 
     List<String> getFiles() throws IOException {
+        if (profilePath != null && !profilePath.isBlank()) {
+            try (Stream<Path> files = Files.list(Paths.get(profilePath))) {
+                return files.filter(Files::isRegularFile)
+                        .map(p -> p.getFileName().toString())
+                        .filter(name -> name.endsWith(".json"))
+                        .collect(Collectors.toList());
+            }
+        }
         return IOUtils.readLines(this.getClass().getClassLoader().getResourceAsStream(DEVICE_PROFILE_RESOURCE_PATH), UTF_8);
     }
 
@@ -129,6 +144,9 @@ public class DeviceProfileManagerImpl implements DeviceProfileManager {
     }
 
     String getFile(String file) throws IOException {
+        if (profilePath != null && !profilePath.isBlank()) {
+            return new String(Files.readAllBytes(Paths.get(profilePath, file)), UTF_8);
+        }
         return new String(IOUtils.resourceToByteArray(DEVICE_PROFILE_RESOURCE_PATH + file, this.getClass().getClassLoader()), UTF_8);
     }
 
