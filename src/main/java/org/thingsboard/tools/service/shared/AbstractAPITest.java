@@ -101,6 +101,8 @@ public abstract class AbstractAPITest {
     protected String deviceProfileName;
     @Value("${gateway.profile:}")
     protected String gatewayProfileName;
+    @Value("${gateway.namePrefix:}")
+    protected String gatewayNamePrefix;
 
     @Autowired
     @Qualifier("randomTelemetryGenerator")
@@ -307,7 +309,12 @@ public abstract class AbstractAPITest {
     }
 
     protected String getToken(boolean isGateway, int token) {
-        return EntityNames.entityName(isGateway, deviceNameFormat, token);
+        // The per-tenant prefix is applied to gateways only: a gateway's MQTT token == its name and tokens are
+        // globally unique in TB, so identical gateway ranges across tenants would otherwise collide. Devices get
+        // auto-generated tokens and device names are per-tenant unique, so they stay unprefixed.
+        return isGateway
+                ? EntityNames.toGatewayName(gatewayNamePrefix, token)
+                : EntityNames.toDeviceName(deviceNameFormat, token);
     }
 
     protected Msg getNextMessage(String deviceName, boolean alarmRequired) {

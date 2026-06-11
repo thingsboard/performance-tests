@@ -140,6 +140,7 @@ device:
 deviceProfile:
   path: "${DEVICE_PROFILE_PATH:}" # filesystem dir of profile JSON files; empty = load from classpath device/profile/
 gateway:
+  namePrefix: "${GATEWAY_NAME_PREFIX:}" # per-tenant prefix prepended to gateway names/tokens; empty = legacy GW%08d. Use a distinct value per tenant to avoid globally-unique-token collisions; devices are never prefixed
   startIdx: "${GATEWAY_START_IDX:0}"
   endIdx: "${GATEWAY_END_IDX:10}"
   count: "${GATEWAY_COUNT:3}" # count of devices to be used by clients in k8s deployment run

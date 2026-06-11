@@ -22,20 +22,25 @@ import static org.assertj.core.api.Assertions.assertThat;
 class EntityNamesTest {
 
     @Test
-    void defaultFormatMatchesMasterBehavior() {
-        assertThat(EntityNames.entityName(false, "DEFAULT", 2)).isEqualTo("DW00000002");
-        assertThat(EntityNames.entityName(false, "DEFAULT", 12345678)).isEqualTo("DW12345678");
-        assertThat(EntityNames.entityName(true, "DEFAULT", 0)).isEqualTo("GW00000000");
+    void deviceName() {
+        // DEFAULT format: DW + zero-padded index
+        assertThat(EntityNames.toDeviceName("DEFAULT", 2)).isEqualTo("DW00000002");
+        assertThat(EntityNames.toDeviceName("DEFAULT", 12345678)).isEqualTo("DW12345678");
+        // UUID format: deterministic, valid 36-char UUID shape, unique per idx
+        String uuid = EntityNames.toDeviceName("UUID", 42);
+        assertThat(uuid).isEqualTo("c1000000-0000-4000-8000-000000000042").hasSize(36);
+        assertThat(uuid).isEqualTo(EntityNames.toDeviceName("UUID", 42));
+        assertThat(EntityNames.toDeviceName("UUID", 43)).isNotEqualTo(uuid);
     }
 
     @Test
-    void uuidFormatIsDeterministicValidUuidShapeForDevicesOnly() {
-        String name = EntityNames.entityName(false, "UUID", 42);
-        assertThat(name).isEqualTo("c1000000-0000-4000-8000-000000000042");
-        assertThat(name).hasSize(36);
-        assertThat(name).isEqualTo(EntityNames.entityName(false, "UUID", 42)); // deterministic
-        assertThat(EntityNames.entityName(false, "UUID", 43)).isNotEqualTo(name); // unique per idx
-        // gateways are NEVER renamed:
-        assertThat(EntityNames.entityName(true, "UUID", 42)).isEqualTo("GW00000042");
+    void gatewayName() {
+        // null/empty prefix => legacy GW%08d
+        assertThat(EntityNames.toGatewayName(null, 0)).isEqualTo("GW00000000");
+        assertThat(EntityNames.toGatewayName("", 42)).isEqualTo("GW00000042");
+        assertThat(EntityNames.toGatewayName(null, 7)).isEqualTo(EntityNames.toGatewayName("", 7));
+        // non-empty prefix is prepended to the GW name (per-tenant uniqueness)
+        assertThat(EntityNames.toGatewayName("A_", 7)).isEqualTo("A_GW00000007");
+        assertThat(EntityNames.toGatewayName("tenant1-", 0)).isEqualTo("tenant1-GW00000000");
     }
 }

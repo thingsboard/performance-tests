@@ -17,19 +17,35 @@ package org.thingsboard.tools.service.shared;
 
 public final class EntityNames {
 
-    public static final String FORMAT_DEFAULT = "DEFAULT";
     public static final String FORMAT_UUID = "UUID";
 
     private EntityNames() {
     }
 
-    public static String entityName(boolean isGateway, String nameFormat, int idx) {
-        if (isGateway) {
-            return "GW" + String.format("%8d", idx).replace(" ", "0");
-        }
+    public static String toDeviceName(String nameFormat, int idx) {
         if (FORMAT_UUID.equalsIgnoreCase(nameFormat)) {
             return String.format("c1000000-0000-4000-8000-%012d", idx);
         }
-        return "DW" + String.format("%8d", idx).replace(" ", "0");
+        return "DW" + nameSuffix(idx);
+    }
+
+    /**
+     * Gateway name carrying a per-tenant prefix. A gateway's MQTT access token == its name, and tokens are
+     * globally unique in ThingsBoard, so giving each tenant a distinct prefix keeps concurrent multi-tenant
+     * runs collision-free. A null/empty prefix yields the legacy {@code GW%08d} name.
+     */
+    public static String toGatewayName(String prefix, int idx) {
+        if (prefix == null) {
+            return toGatewayName(idx);
+        }
+        return prefix + toGatewayName(idx);
+    }
+
+    private static String toGatewayName(int idx) {
+        return "GW" + nameSuffix(idx);
+    }
+
+    private static String nameSuffix(int idx) {
+        return String.format("%8d", idx).replace(" ", "0");
     }
 }

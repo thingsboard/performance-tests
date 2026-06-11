@@ -71,6 +71,7 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `DEVICE_PROFILE` | _(empty)_ | Device-profile name to assign; empty = use `TEST_PAYLOAD_TYPE` |
 | `DEVICE_PROFILE_PATH` | _(empty)_ | Filesystem dir of profile JSON files to load instead of the classpath `device/profile/`; lets profiles be mounted/edited |
 | `GATEWAY_PROFILE` | _(empty)_ | Device-profile name to assign to gateways; empty = same profile as devices |
+| `GATEWAY_NAME_PREFIX` | _(empty)_ | Per-tenant prefix prepended to gateway names/tokens to avoid globally-unique-token collisions across tenants; empty = legacy `GW%08d`. Devices are never prefixed |
 | `GATEWAY_BATCH` | `false` | Gateway mode: one publish per gateway carrying all its devices (`MESSAGES_PER_SECOND` counts gateway publishes) |
 | `GATEWAY_STATS_REPORT` | `TB` | Gateway stats reporter: `TB` (publish), `LOG` (one aggregated log line), `NONE` |
 | `GATEWAY_STATS_REPORT_INTERVAL_SEC` | `300` | Interval (s) for the gateway stats reporter |
@@ -114,8 +115,10 @@ device payloads and gateway batches.
 
 ### Device Naming Convention
 Devices are named `DW00000000` (prefix `DW` + zero-padded index), gateways use `GW` prefix. Names are
-built by `EntityNames.entityName(...)`; `DEVICE_NAME_FORMAT=UUID` switches device names to a
-deterministic 36-char UUID form (gateways stay `GW%08d`).
+built by `EntityNames.toDeviceName(...)` / `EntityNames.toGatewayName(...)` (via `getToken`);
+`DEVICE_NAME_FORMAT=UUID` switches device names to a deterministic 36-char UUID form (gateways stay
+`GW%08d`). `GATEWAY_NAME_PREFIX` prepends a per-tenant prefix to gateway names/tokens only (e.g.
+`tenant1-GW00000000`); devices are never prefixed.
 
 ### Key Services
 - `DefaultRestClientService` — manages thread pools (HTTP executor + log scheduler), wraps TB REST client
@@ -131,5 +134,5 @@ Partition one large run across N pods; each pod resolves its `instanceIdx` and t
 - **Instance index:** `INSTANCE_IDX` directly, or extracted from a source string (e.g. the pod hostname) via `USE_INSTANCE_IDX_REGEX` + `INSTANCE_IDX_REGEX` applied to `INSTANCE_IDX_REGEX_SOURCE`.
 - **Sharding (`USE_INSTANCE_IDX=true`):** device range = `[DEVICE_COUNT × instanceIdx, +DEVICE_COUNT)`, gateway range = `[GATEWAY_COUNT × instanceIdx, +GATEWAY_COUNT)`. Otherwise the explicit `*_START_IDX` / `*_END_IDX` apply.
 - **Multi-tenant:** give each pod distinct `REST_USERNAME` / `REST_PASSWORD` to drive a different tenant.
-- **Gateway ranges must be disjoint across pods:** a gateway's MQTT access token *is* its name, and tokens are globally unique in ThingsBoard (device *names* are only per-tenant), so identical gateway ranges across tenants collide on the token. Sub-device ranges may overlap (sub-devices get auto-generated tokens).
+- **Gateway ranges must be disjoint across pods:** a gateway's MQTT access token *is* its name, and tokens are globally unique in ThingsBoard (device *names* are only per-tenant), so identical gateway ranges across tenants collide on the token. To reuse the same gateway index range across tenants, give each tenant a distinct `GATEWAY_NAME_PREFIX` (prefixes the name/token, keeping them globally unique). Sub-device ranges may overlap (sub-devices get auto-generated tokens).
 - **Ephemeral mode:** the per-gateway cycle RNG is seeded per `instanceIdx` (`EphemeralSchedule.scheduleSeed`), so pods don't fire synchronized connection bursts.
