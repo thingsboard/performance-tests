@@ -72,6 +72,7 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `DEVICE_PROFILE_PATH` | _(empty)_ | Filesystem dir of profile JSON files to load instead of the classpath `device/profile/`; lets profiles be mounted/edited |
 | `GATEWAY_PROFILE` | _(empty)_ | Device-profile name to assign to gateways; empty = same profile as devices |
 | `GATEWAY_NAME_PREFIX` | _(empty)_ | Per-tenant prefix prepended to gateway names/tokens to avoid globally-unique-token collisions across tenants; empty = legacy `GW%08d`. Devices are never prefixed |
+| `GATEWAY_OVERWRITE_ACTIVITY_TIME` | `false` | Reconciles `additionalInfo.overwriteActivityTime` on gateway devices (created + existing) to this value; when `true`, the gateway's connection activity keeps its sub-devices Active without their own telemetry. Idempotent — only writes when the value differs. Never touches sub-devices |
 | `GATEWAY_BATCH` | `false` | Gateway mode: one publish per gateway carrying all its devices (`MESSAGES_PER_SECOND` counts gateway publishes) |
 | `GATEWAY_STATS_REPORT` | `TB` | Gateway stats reporter: `TB` (publish), `LOG` (one aggregated log line), `NONE` |
 | `GATEWAY_STATS_REPORT_INTERVAL_SEC` | `300` | Interval (s) for the gateway stats reporter |

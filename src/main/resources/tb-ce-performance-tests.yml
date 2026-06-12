@@ -147,6 +147,7 @@ gateway:
   createOnStart: "${GATEWAY_CREATE_ON_START:false}"
   deleteOnComplete: "${GATEWAY_DELETE_ON_COMPLETE:false}"
   profile: "${GATEWAY_PROFILE:}" # device profile name to assign to gateways; empty = same profile as devices
+  overwriteActivityTime: "${GATEWAY_OVERWRITE_ACTIVITY_TIME:false}" # true = set additionalInfo.overwriteActivityTime on gateways so the gateway's connection activity keeps sub-devices Active without their own telemetry; reconciled (created + existing) on every run
   batch: "${GATEWAY_BATCH:false}" # true = one publish per gateway carrying all its devices; MESSAGES_PER_SECOND then counts gateway publishes
   statsReport: "${GATEWAY_STATS_REPORT:TB}" # TB = per-gateway {"msgCount":0} publish, LOG = one aggregated local log line, NONE = disabled
   statsReportIntervalSec: "${GATEWAY_STATS_REPORT_INTERVAL_SEC:300}"

@@ -17,6 +17,7 @@ package org.thingsboard.tools.service.shared;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -103,6 +104,8 @@ public abstract class AbstractAPITest {
     protected String gatewayProfileName;
     @Value("${gateway.namePrefix:}")
     protected String gatewayNamePrefix;
+    @Value("${gateway.overwriteActivityTime:false}")
+    protected boolean gatewayOverwriteActivityTime;
 
     @Autowired
     @Qualifier("randomTelemetryGenerator")
@@ -248,6 +251,10 @@ public abstract class AbstractAPITest {
         log.info("Creating {} {}...", entityCount, (isGateway ? "gateways" : "devices"));
         CountDownLatch latch = new CountDownLatch(entityCount);
         AtomicInteger count = new AtomicInteger();
+        // Gateway-only reconcile summary for additionalInfo.overwriteActivityTime
+        AtomicInteger reconcileAlreadyCorrect = new AtomicInteger();
+        AtomicInteger reconcileUpdated = new AtomicInteger();
+        AtomicInteger reconcileFailed = new AtomicInteger();
         for (int i = startIdx; i < endIdx; i++) {
             final int tokenNumber = i;
             restClientService.getHttpExecutor().submit(() -> {
@@ -264,7 +271,10 @@ public abstract class AbstractAPITest {
                     if (isGateway) {
                         entity.setName(token);
                         entity.setType("gateway");
-                        entity.setAdditionalInfo(mapper.createObjectNode().putObject("additionalInfo").put("gateway", true));
+                        ObjectNode additionalInfo = mapper.createObjectNode();
+                        additionalInfo.put("gateway", true);
+                        additionalInfo.put("overwriteActivityTime", gatewayOverwriteActivityTime);
+                        entity.setAdditionalInfo(additionalInfo);
                     } else {
                         entity.setName(token);
                         entity.setType("device");
@@ -274,6 +284,11 @@ public abstract class AbstractAPITest {
 
                     if (existedDevice.isPresent()) {
                         entity = existedDevice.get();
+                        // Reconcile additionalInfo.overwriteActivityTime on existing gateways (read-modify-write,
+                        // preserving all other additionalInfo keys; idempotent — only writes when the value differs).
+                        if (isGateway) {
+                            entity = reconcileGatewayOverwriteActivityTime(entity, reconcileAlreadyCorrect, reconcileUpdated, reconcileFailed);
+                        }
                     } else if (setCredentials) {
                         entity = restClientService.getRestClient().saveDevice(entity, token);
                     } else {
@@ -305,7 +320,45 @@ public abstract class AbstractAPITest {
         logScheduleFuture.cancel(true);
 
         log.info("{} {} have been created successfully!", result.size(), isGateway ? "gateways" : "devices");
+        if (isGateway) {
+            int checked = reconcileAlreadyCorrect.get() + reconcileUpdated.get() + reconcileFailed.get();
+            log.info("Gateway overwriteActivityTime reconcile (target={}): checked {} / already-correct {} / updated {} / failed {}",
+                    gatewayOverwriteActivityTime, checked, reconcileAlreadyCorrect.get(), reconcileUpdated.get(), reconcileFailed.get());
+        }
         return result;
+    }
+
+    /**
+     * Reconciles {@code additionalInfo.overwriteActivityTime} on an existing gateway device to the configured value.
+     * Read-modify-write: preserves all other {@code additionalInfo} keys (notably {@code gateway: true}) and only
+     * issues a REST update when the current value differs from the target (missing/null counts as differing when the
+     * target is {@code true}), keeping the pass idempotent across re-runs over many gateways.
+     */
+    private Device reconcileGatewayOverwriteActivityTime(Device gateway, AtomicInteger alreadyCorrect,
+                                                         AtomicInteger updated, AtomicInteger failed) {
+        try {
+            JsonNode additionalInfoNode = gateway.getAdditionalInfo();
+            ObjectNode additionalInfo = (additionalInfoNode instanceof ObjectNode)
+                    ? (ObjectNode) additionalInfoNode
+                    : mapper.createObjectNode();
+
+            JsonNode current = additionalInfo.get("overwriteActivityTime");
+            boolean alreadyEqual = current != null && current.isBoolean() && current.asBoolean() == gatewayOverwriteActivityTime;
+            if (alreadyEqual) {
+                alreadyCorrect.incrementAndGet();
+                return gateway;
+            }
+
+            additionalInfo.put("overwriteActivityTime", gatewayOverwriteActivityTime);
+            gateway.setAdditionalInfo(additionalInfo);
+            Device saved = restClientService.getRestClient().saveDevice(gateway);
+            updated.incrementAndGet();
+            return saved;
+        } catch (Exception e) {
+            failed.incrementAndGet();
+            log.error("Failed to reconcile overwriteActivityTime for gateway [{}] [{}]", gateway.getName(), getHttpErrorException(e));
+            return gateway;
+        }
     }
 
     protected String getToken(boolean isGateway, int token) {
