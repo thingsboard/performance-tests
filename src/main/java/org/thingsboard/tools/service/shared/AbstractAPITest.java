@@ -331,8 +331,9 @@ public abstract class AbstractAPITest {
     /**
      * Reconciles {@code additionalInfo.overwriteActivityTime} on an existing gateway device to the configured value.
      * Read-modify-write: preserves all other {@code additionalInfo} keys (notably {@code gateway: true}) and only
-     * issues a REST update when the current value differs from the target (missing/null counts as differing when the
-     * target is {@code true}), keeping the pass idempotent across re-runs over many gateways.
+     * issues a REST update when the current value differs from the target. A missing/null/non-boolean key is
+     * treated as {@code false} (TB's default), so {@code target=false} on a gateway that lacks the key is a no-op
+     * — keeping the pass idempotent across re-runs over many gateways for both target values.
      */
     private Device reconcileGatewayOverwriteActivityTime(Device gateway, AtomicInteger alreadyCorrect,
                                                          AtomicInteger updated, AtomicInteger failed) {
@@ -342,9 +343,10 @@ public abstract class AbstractAPITest {
                     ? (ObjectNode) additionalInfoNode
                     : mapper.createObjectNode();
 
+            // Missing/null/non-boolean is treated as false (TB's default), so target=false + absent is a no-op.
             JsonNode current = additionalInfo.get("overwriteActivityTime");
-            boolean alreadyEqual = current != null && current.isBoolean() && current.asBoolean() == gatewayOverwriteActivityTime;
-            if (alreadyEqual) {
+            boolean currentValue = current != null && current.isBoolean() && current.asBoolean();
+            if (currentValue == gatewayOverwriteActivityTime) {
                 alreadyCorrect.incrementAndGet();
                 return gateway;
             }
