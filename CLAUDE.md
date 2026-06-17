@@ -78,6 +78,7 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `GATEWAY_STATS_REPORT_INTERVAL_SEC` | `300` | Interval (s) for the gateway stats reporter |
 | `EPHEMERAL_ENABLED` | `false` | With `GATEWAY_BATCH=true`: each gateway runs connect→publish→disconnect cycles (rate = `gatewayCount / EPHEMERAL_CYCLE_SEC`; `MESSAGES_PER_SECOND` ignored) |
 | `EPHEMERAL_CYCLE_SEC` / `EPHEMERAL_JITTER_SEC` | `900` / `300` | Per-gateway cadence + one-sided `[0,jitter]` |
+| `EPHEMERAL_FIRST_CONNECT_JITTER_SEC` | _(inherits `EPHEMERAL_JITTER_SEC`)_ | Spreads each gateway's first connect uniformly over `[0, this)` seconds at startup. Unset (`-1`) inherits `EPHEMERAL_JITTER_SEC`. `0` = all gateways connect simultaneously at `t=0`; set to `EPHEMERAL_CYCLE_SEC` to pre-diffuse the fleet for a flat aggregate rate from `t=0` |
 | `EPHEMERAL_MAX_CONCURRENT_CONNECTS` | `auto` | Cap on in-flight connects; `auto` = `ceil(rate × connectTimeout × 2)` |
 | `EPHEMERAL_GATEWAY_CONNECT` | `false` | Also publish `v1/gateway/connect` per sub-device each cycle |
 | `EPHEMERAL_SCHEDULER_THREADS` | `2` | Dedicated timing-pool size for the ephemeral cycle scheduler |

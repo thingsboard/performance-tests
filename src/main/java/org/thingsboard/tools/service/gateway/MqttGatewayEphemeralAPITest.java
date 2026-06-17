@@ -56,6 +56,8 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
     protected int cycleLengthSec;
     @Value("${gateway.ephemeral.jitterSec:300}")
     protected int jitterSec;
+    @Value("${gateway.ephemeral.firstConnectJitterSec:-1}")
+    protected int firstConnectJitterSecConfig;
     @Value("${gateway.ephemeral.maxConcurrentConnects:auto}")
     protected String maxConcurrentConnectsConfig;
     @Value("${gateway.ephemeral.schedulerThreads:2}")
@@ -139,15 +141,19 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
         this.cycleScheduler = Executors.newScheduledThreadPool(Math.max(1, schedulerThreads));
 
         double rate = EphemeralSchedule.connectsPerSecond(gatewayCount, cycleLengthSec);
-        log.info("Ephemeral mode starting: {} gateways, cycle {}s + jitter {}s, ~{} connects/s, maxConcurrentConnects={} ({})",
-                gatewayCount, cycleLengthSec, jitterSec, String.format("%.1f", rate), cap,
+        int firstConnectJitterSec = EphemeralSchedule.firstConnectJitterSec(firstConnectJitterSecConfig, jitterSec);
+        long firstSpanMillis = firstConnectJitterSec * 1000L;
+        log.info("Ephemeral mode starting: {} gateways, cycle {}s + jitter {}s, firstConnectJitter {}s (first connect over [0,{}s)), ~{} connects/s, maxConcurrentConnects={} ({})",
+                gatewayCount, cycleLengthSec, jitterSec, firstConnectJitterSec, firstConnectJitterSec,
+                String.format("%.1f", rate), cap,
                 ("auto".equalsIgnoreCase(maxConcurrentConnectsConfig) ? "auto" : "override"));
 
         this.running = true;
         this.testStartMillis = System.currentTimeMillis();
-        // First cycle per gateway spread uniformly over [0, cycleLength) to avoid the startup herd.
+        // First cycle per gateway spread uniformly over [0, firstConnectJitter): a synchronized fleet powers on
+        // within that window, then each gateway reconnects on the cycle + jitter cadence. 0 => all connect at t=0.
         for (GatewayTarget target : all) {
-            long offset = EphemeralSchedule.firstOffsetMillis(scheduleRandom, cycleLengthMillis());
+            long offset = EphemeralSchedule.firstOffsetMillis(scheduleRandom, firstSpanMillis);
             cycleScheduler.schedule(() -> runCycle(target), offset, TimeUnit.MILLISECONDS);
         }
 

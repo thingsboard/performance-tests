@@ -48,6 +48,18 @@ class EphemeralScheduleTest {
     }
 
     @Test
+    void firstConnectJitterInheritsCycleJitterWhenUnset() {
+        // negative sentinel = "unset" -> inherit the per-cycle jitter
+        assertThat(EphemeralSchedule.firstConnectJitterSec(-1, 300)).isEqualTo(300);
+    }
+
+    @Test
+    void firstConnectJitterHonoursExplicitValueIncludingZero() {
+        assertThat(EphemeralSchedule.firstConnectJitterSec(0, 300)).isEqualTo(0);
+        assertThat(EphemeralSchedule.firstConnectJitterSec(900, 300)).isEqualTo(900);
+    }
+
+    @Test
     void nextDelayIsCyclePlusZeroToJitter() {
         Random rnd = new Random(7);
         long cycleMs = 900_000, jitterMs = 300_000;

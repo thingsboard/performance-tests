@@ -26,6 +26,15 @@ public final class EphemeralSchedule {
     }
 
     /**
+     * The first connect per gateway is spread uniformly over [0, firstConnectJitter). This is the configured
+     * first-connect jitter, or — when left unset (negative sentinel) — the per-cycle {@code jitterSec}.
+     * 0 = every gateway connects simultaneously at t=0; larger values pre-spread the startup herd.
+     */
+    public static int firstConnectJitterSec(int configured, int jitterSec) {
+        return configured < 0 ? jitterSec : configured;
+    }
+
+    /**
      * Auto cap = ceil(connectRate * connectTimeoutSec * headroom), where connectRate = gatewayCount / cycleLengthSec.
      * Non-throttling by construction: worst-case in-flight connects even in a total outage (every connect runs to
      * the full timeout) is rate * connectTimeoutSec, so the cap is never the bottleneck in steady state.
@@ -39,12 +48,12 @@ public final class EphemeralSchedule {
         return Math.max(1, value);
     }
 
-    /** First-cycle offset uniformly in [0, cycleLengthMillis) — spreads the startup herd. */
-    public static long firstOffsetMillis(Random random, long cycleLengthMillis) {
-        if (cycleLengthMillis <= 0) {
+    /** First-cycle offset uniformly in [0, spanMillis) — spreads the startup herd over the chosen span (see {@link #firstOffsetSpanMillis}). */
+    public static long firstOffsetMillis(Random random, long spanMillis) {
+        if (spanMillis <= 0) {
             return 0;
         }
-        return (long) (random.nextDouble() * cycleLengthMillis);
+        return (long) (random.nextDouble() * spanMillis);
     }
 
     /** Per-cycle delay = cycleLengthMillis + uniform[0, jitterMillis) (one-sided; never shorter than the cycle). */
