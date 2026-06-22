@@ -117,7 +117,9 @@ latency (`receiveTs − sendTs`, send-timestamp stamped by the rule chain) is re
 commons-math3 `DescriptiveStatistics` accumulator (`RpcLatencyStats`, reported as mean/p50/p95/p99/max),
 and a configurable response (`RpcResponseTemplate`) is published to close the two-way RPC. Ephemeral
 mode rejects the flag (it can't hold a subscription). Measurement assumes NTP-synced clocks between
-TB and the tool host.
+TB and the tool host. RPC latency is reported via a periodic log line whenever `GATEWAY_STATS_REPORT`
+is not `NONE` (both `LOG` and `TB` modes log it in this phase; publishing RPC latency as TB telemetry
+is a deferred enhancement).
 
 ### Message Generation
 `MessageGenerator` implementations in `service/msg/`. Each returns a `NodeMsg` (Jackson `ObjectNode` +
