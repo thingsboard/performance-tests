@@ -62,6 +62,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     private final org.thingsboard.tools.service.gateway.rpc.RpcLatencyStats rpcLatencyStats =
             new org.thingsboard.tools.service.gateway.rpc.RpcLatencyStats();
     private org.thingsboard.tools.service.gateway.rpc.GatewayRpcReceiver rpcReceiver;
+    private java.util.concurrent.ScheduledFuture<?> rpcStatsReportFuture;
 
     private List<Device> gateways = Collections.synchronizedList(new ArrayList<>(1024));
 
@@ -197,7 +198,9 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
             return;
         }
         // Emit the RPC latency line on the log scheduler (separate pool from the test metronome).
-        restClientService.getLogScheduler().scheduleAtFixedRate(
+        // Stored (mirroring reportScheduledFuture) so it can be cancelled if a teardown path is added;
+        // today the reporter stops on JVM exit after the test, like the gateway-stats reporter.
+        rpcStatsReportFuture = restClientService.getLogScheduler().scheduleAtFixedRate(
                 () -> log.info(rpcReceiver.statsSummaryAndReset(statsReportIntervalSec)),
                 statsReportIntervalSec, statsReportIntervalSec, java.util.concurrent.TimeUnit.SECONDS);
     }
