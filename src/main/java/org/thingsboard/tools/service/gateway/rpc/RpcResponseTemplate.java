@@ -10,7 +10,7 @@ import java.nio.file.Path;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class RpcResponseTemplate {
+public final class RpcResponseTemplate {
 
     private static final Pattern TOKEN = Pattern.compile("\\$\\{([^}]+)}");
     private static final String DEFAULT_CLASSPATH = "rpc/response-default.json";

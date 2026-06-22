@@ -17,6 +17,9 @@ public final class JsonPaths {
                 return null;
             }
             node = node.get(part);
+            if (node == null || node.isMissingNode()) {
+                return null;
+            }
         }
         return node;
     }
