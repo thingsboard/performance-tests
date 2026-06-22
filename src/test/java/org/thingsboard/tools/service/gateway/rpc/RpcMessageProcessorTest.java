@@ -68,7 +68,18 @@ class RpcMessageProcessorTest {
         RpcLatencyStats stats = new RpcLatencyStats();
         RpcMessageProcessor p = processor(true, stats);
         byte[] in = bytes("{\"device\":\"GW1\",\"data\":{\"id\":5,\"params\":{\"sendTs\":\"1000\"}}}");
-        p.process(in, 1150L);
+        byte[] out = p.process(in, 1150L);
+        assertThat(out).isNotNull();
+        assertThat(stats.getCount()).isEqualTo(1);
+    }
+
+    @Test
+    void nullTemplateReturnsNull() {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        RpcMessageProcessor p = new RpcMessageProcessor(mapper, "data.params.sendTs", true, null, stats);
+        byte[] in = bytes("{\"device\":\"GW1\",\"data\":{\"id\":5,\"params\":{\"sendTs\":1000}}}");
+        byte[] out = p.process(in, 1150L);
+        assertThat(out).isNull();
         assertThat(stats.getCount()).isEqualTo(1);
     }
 }
