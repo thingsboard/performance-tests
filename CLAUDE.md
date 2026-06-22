@@ -82,6 +82,11 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `EPHEMERAL_MAX_CONCURRENT_CONNECTS` | `auto` | Cap on in-flight connects; `auto` = `ceil(rate × connectTimeout × 2)` |
 | `EPHEMERAL_GATEWAY_CONNECT` | `false` | Also publish `v1/gateway/connect` per sub-device each cycle |
 | `EPHEMERAL_SCHEDULER_THREADS` | `2` | Dedicated timing-pool size for the ephemeral cycle scheduler |
+| `GATEWAY_RPC_ENABLED` | `false` | Persistent gateways subscribe to `v1/gateway/rpc`, handle inbound server-side RPC for their sub-devices, publish a response (two-way), and measure one-way delivery latency. Use `MESSAGES_PER_SECOND=0` for pure RPC (the metronome idles). Not supported with ephemeral mode |
+| `GATEWAY_RPC_TOPIC` | `v1/gateway/rpc` | Gateway RPC subscription + response topic |
+| `GATEWAY_RPC_RESPOND` | `true` | Publish a response to close the two-way RPC; set `false` only if the chain uses one-way RPC |
+| `GATEWAY_RPC_RESPONSE_TEMPLATE` | _(empty)_ | Filesystem path to a response template JSON (placeholders `${now}` and `${<dot.path>}` into the request); empty = built-in neutral `ACCEPTED` template |
+| `GATEWAY_RPC_SEND_TS_PATH` | `data.params.sendTs` | Dot-path to the send-timestamp (epoch ms) the rule chain stamps into the RPC payload; the gateway computes latency = receiveTs − sendTs |
 
 ## Architecture
 
@@ -104,6 +109,15 @@ Concrete executors:
 - `LwM2MClientBaseTestExecutor` → `Lwm2mDeviceAPITest`
 
 The active gateway bean is selected by mutually-exclusive `@ConditionalOnExpression` on `gateway.batch` × `gateway.ephemeral.enabled`. Batch publishing delegates the per-publish decision to a `nextPublishTask` hook on `BaseMqttAPITest`; ephemeral mode drives its own per-gateway cycle scheduler (timing math in `EphemeralSchedule`) instead of the fixed-rate metronome.
+
+**Gateway RPC receive (`GATEWAY_RPC_ENABLED`):** layered onto the persistent gateway modes (not a
+separate executor). After connect, each gateway subscribes to `v1/gateway/rpc` via a reusable
+`GatewayRpcReceiver` (package `service/gateway/rpc/`): inbound commands are parsed, one-way delivery
+latency (`receiveTs − sendTs`, send-timestamp stamped by the rule chain) is recorded in a
+commons-math3 `DescriptiveStatistics` accumulator (`RpcLatencyStats`, reported as mean/p50/p95/p99/max),
+and a configurable response (`RpcResponseTemplate`) is published to close the two-way RPC. Ephemeral
+mode rejects the flag (it can't hold a subscription). Measurement assumes NTP-synced clocks between
+TB and the tool host.
 
 ### Message Generation
 `MessageGenerator` implementations in `service/msg/`. Each returns a `NodeMsg` (Jackson `ObjectNode` +
