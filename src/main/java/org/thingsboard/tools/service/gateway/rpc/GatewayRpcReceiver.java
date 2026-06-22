@@ -16,15 +16,13 @@ public class GatewayRpcReceiver {
     private final MqttQoS qos;
     private final RpcMessageProcessor processor;
     private final RpcLatencyStats stats;
-    private final boolean respond;
 
     public GatewayRpcReceiver(String topic, MqttQoS qos, RpcMessageProcessor processor,
-                              RpcLatencyStats stats, boolean respond) {
+                              RpcLatencyStats stats) {
         this.topic = topic;
         this.qos = qos;
         this.processor = processor;
         this.stats = stats;
-        this.respond = respond;
     }
 
     public void attach(List<MqttClient> clients) {
@@ -36,7 +34,7 @@ public class GatewayRpcReceiver {
                         }
                     });
         }
-        log.info("Subscribed {} gateways to RPC topic {} (respond={})", clients.size(), topic, respond);
+        log.info("Subscribed {} gateways to RPC topic {}", clients.size(), topic);
     }
 
     MqttHandler buildHandler(MqttClient client) {

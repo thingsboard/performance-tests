@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNoException;
 
 class GatewayRpcReceiverTest {
 
@@ -29,7 +30,7 @@ class GatewayRpcReceiverTest {
                 "{\"device\":\"${device}\",\"id\":${data.id},\"data\":{\"status\":\"ACCEPTED\",\"receivedAt\":${now}}}");
         RpcMessageProcessor processor = new RpcMessageProcessor(
                 new ObjectMapper(), "data.params.sendTs", true, template, stats);
-        return new GatewayRpcReceiver("v1/gateway/rpc", MqttQoS.AT_LEAST_ONCE, processor, stats, true);
+        return new GatewayRpcReceiver("v1/gateway/rpc", MqttQoS.AT_LEAST_ONCE, processor, stats);
     }
 
     @Test
@@ -58,6 +59,25 @@ class GatewayRpcReceiverTest {
         r.attach(List.of(a, b));
         assertThat(a.subscribedTopics).containsExactly("v1/gateway/rpc");
         assertThat(b.subscribedTopics).containsExactly("v1/gateway/rpc");
+    }
+
+    @Test
+    void handlerSwallowsProcessorException() {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        RpcResponseTemplate template = new RpcResponseTemplate("{}");
+        RpcMessageProcessor throwing = new RpcMessageProcessor(
+                new ObjectMapper(), "data.params.sendTs", true, template, stats) {
+            @Override
+            public byte[] process(byte[] payload, long nowMs) {
+                throw new RuntimeException("boom");
+            }
+        };
+        GatewayRpcReceiver r = new GatewayRpcReceiver("v1/gateway/rpc", MqttQoS.AT_LEAST_ONCE, throwing, stats);
+        FakeMqttClient fake = new FakeMqttClient();
+        MqttHandler handler = r.buildHandler(fake);
+        ByteBuf in = Unpooled.wrappedBuffer("{}".getBytes(StandardCharsets.UTF_8));
+        assertThatNoException().isThrownBy(() -> handler.onMessage("v1/gateway/rpc", in));
+        assertThat(fake.publishedTopics).isEmpty();
     }
 
     /** Minimal MqttClient test double: only on(3-arg), publish(3-arg) and isConnected are functional. */
