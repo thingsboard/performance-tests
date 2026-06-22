@@ -24,7 +24,12 @@ public class RpcLatencyStats {
     public long getResponsesSent() { return responsesSent.get(); }
     public long getResponseErrors() { return responseErrors.get(); }
 
-    /** Render a one-line summary and reset the histogram + counters for the next interval. */
+    /**
+     * Render a one-line summary and reset the histogram + counters for the next interval.
+     * Note: {@code recordLatency} adds values without holding this monitor, so a sample landing
+     * between the {@code getN()} snapshot and {@code clear()} below is dropped from the report —
+     * acceptable for interval metrics on a load test (at most a few in-flight samples per interval).
+     */
     public synchronized String summaryAndReset(int intervalSec) {
         long n = latency.getN();
         double rate = intervalSec > 0 ? (double) n / intervalSec : 0.0;
