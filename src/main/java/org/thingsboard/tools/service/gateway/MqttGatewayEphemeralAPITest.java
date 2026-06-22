@@ -86,6 +86,16 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
     protected Random scheduleRandom = new Random();
     protected volatile long testStartMillis;
 
+    @jakarta.annotation.PostConstruct
+    protected void rejectRpcInEphemeralMode() {
+        if (rpcEnabled) {
+            throw new IllegalStateException(
+                    "GATEWAY_RPC_ENABLED is not supported with ephemeral mode: ephemeral gateways "
+                            + "connect→publish→disconnect and cannot hold an RPC subscription. "
+                            + "Run RPC on the persistent gateway mode (GATEWAY_BATCH=false or batch without EPHEMERAL_ENABLED).");
+        }
+    }
+
     /**
      * Builds gatewayName -> device names from the configured index ranges and the same round-robin
      * assignment mapDevicesToGatewayClientConnections uses, but WITHOUT any connected clients.

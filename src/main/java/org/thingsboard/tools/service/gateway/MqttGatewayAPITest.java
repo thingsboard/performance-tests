@@ -48,6 +48,21 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     @Value("${gateway.count}")
     int gatewayCount;
 
+    @Value("${gateway.rpc.enabled:false}")
+    boolean rpcEnabled;
+    @Value("${gateway.rpc.topic:v1/gateway/rpc}")
+    String rpcTopic;
+    @Value("${gateway.rpc.respond:true}")
+    boolean rpcRespond;
+    @Value("${gateway.rpc.responseTemplate:}")
+    String rpcResponseTemplate;
+    @Value("${gateway.rpc.sendTsPath:data.params.sendTs}")
+    String rpcSendTsPath;
+
+    private final org.thingsboard.tools.service.gateway.rpc.RpcLatencyStats rpcLatencyStats =
+            new org.thingsboard.tools.service.gateway.rpc.RpcLatencyStats();
+    private org.thingsboard.tools.service.gateway.rpc.GatewayRpcReceiver rpcReceiver;
+
     private List<Device> gateways = Collections.synchronizedList(new ArrayList<>(1024));
 
     protected int gatewayStartIdx;
@@ -107,6 +122,9 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         }
         scheduleGatewayStatsReporting();
         mapDevicesToGatewayClientConnections();
+        if (rpcEnabled) {
+            attachRpcReceiver();
+        }
     }
 
     private void mapDevicesToGatewayClientConnections() {
@@ -158,6 +176,30 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     protected void logFailureTestMessage(int iteration, DeviceClient client, Future<?> future) {
         log.error("[{}] Error while publishing message to device: {} and gateway: {}", iteration, client.getDeviceName(), client.getGatewayName(),
                 future.cause());
+    }
+
+    protected void attachRpcReceiver() {
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        org.thingsboard.tools.service.gateway.rpc.RpcResponseTemplate template =
+                rpcRespond ? org.thingsboard.tools.service.gateway.rpc.RpcResponseTemplate.load(rpcResponseTemplate) : null;
+        org.thingsboard.tools.service.gateway.rpc.RpcMessageProcessor processor =
+                new org.thingsboard.tools.service.gateway.rpc.RpcMessageProcessor(
+                        mapper, rpcSendTsPath, rpcRespond, template, rpcLatencyStats);
+        rpcReceiver = new org.thingsboard.tools.service.gateway.rpc.GatewayRpcReceiver(
+                rpcTopic, io.netty.handler.codec.mqtt.MqttQoS.AT_LEAST_ONCE, processor, rpcLatencyStats);
+        rpcReceiver.attach(mqttClients);
+        scheduleRpcStatsReporting();
+    }
+
+    protected void scheduleRpcStatsReporting() {
+        if (statsReportIntervalSec <= 0 || "NONE".equalsIgnoreCase(statsReportMode)) {
+            log.info("Gateway RPC stats reporting disabled");
+            return;
+        }
+        // Emit the RPC latency line on the log scheduler (separate pool from the test metronome).
+        restClientService.getLogScheduler().scheduleAtFixedRate(
+                () -> log.info(rpcReceiver.statsSummaryAndReset(statsReportIntervalSec)),
+                statsReportIntervalSec, statsReportIntervalSec, java.util.concurrent.TimeUnit.SECONDS);
     }
 
     @Override
