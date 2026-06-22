@@ -1,0 +1,1 @@
+{"device":"${device}","id":${data.id},"data":{"status":"ACCEPTED","receivedAt":${now}}}
