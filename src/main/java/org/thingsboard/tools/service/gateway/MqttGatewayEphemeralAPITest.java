@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.mqtt.MqttQoS;
 import io.netty.util.concurrent.Future;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
@@ -86,7 +87,7 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
     protected Random scheduleRandom = new Random();
     protected volatile long testStartMillis;
 
-    @jakarta.annotation.PostConstruct
+    @PostConstruct
     protected void rejectRpcInEphemeralMode() {
         if (rpcEnabled) {
             throw new IllegalStateException(
