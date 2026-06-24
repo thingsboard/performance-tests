@@ -87,6 +87,7 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `GATEWAY_RPC_RESPOND` | `true` | Publish a response to close the two-way RPC; set `false` only if the chain uses one-way RPC |
 | `GATEWAY_RPC_RESPONSE_TEMPLATE` | _(empty)_ | Filesystem path to a response template JSON (placeholders `${now}` and `${<dot.path>}` into the request); empty = built-in neutral `ACCEPTED` template |
 | `GATEWAY_RPC_SEND_TS_PATH` | `data.params.sendTs` | Dot-path to the send-timestamp (epoch ms) the rule chain stamps into the RPC payload; the gateway computes latency = receiveTs − sendTs |
+| `GATEWAY_RPC_STATS_REPORT_INTERVAL_SEC` | `10` | Interval (s) for the RPC latency log line; always logs while `GATEWAY_RPC_ENABLED` (independent of `GATEWAY_STATS_REPORT`); `<=0` disables |
 
 ## Architecture
 
@@ -117,9 +118,10 @@ latency (`receiveTs − sendTs`, send-timestamp stamped by the rule chain) is re
 commons-math3 `DescriptiveStatistics` accumulator (`RpcLatencyStats`, reported as mean/p50/p95/p99/max),
 and a configurable response (`RpcResponseTemplate`) is published to close the two-way RPC. Ephemeral
 mode rejects the flag (it can't hold a subscription). Measurement assumes NTP-synced clocks between
-TB and the tool host. RPC latency is reported via a periodic log line whenever `GATEWAY_STATS_REPORT`
-is not `NONE` (both `LOG` and `TB` modes log it in this phase; publishing RPC latency as TB telemetry
-is a deferred enhancement).
+TB and the tool host. RPC latency is logged every `GATEWAY_RPC_STATS_REPORT_INTERVAL_SEC` (default
+10s) whenever RPC is enabled — independent of `GATEWAY_STATS_REPORT`; `<=0` disables. With
+`MESSAGES_PER_SECOND=0` (pure RPC) the publish metronome is skipped and connections are just held open
+for the test duration. Clients that subscribe use a dedicated off-event-loop MQTT handler executor.
 
 ### Message Generation
 `MessageGenerator` implementations in `service/msg/`. Each returns a `NodeMsg` (Jackson `ObjectNode` +
