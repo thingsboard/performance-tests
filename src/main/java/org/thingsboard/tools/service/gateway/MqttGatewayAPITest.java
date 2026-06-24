@@ -15,7 +15,9 @@
  */
 package org.thingsboard.tools.service.gateway;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.netty.handler.codec.mqtt.MqttQoS;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +27,7 @@ import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.IdBased;
 import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.tools.service.gateway.rpc.GatewayRpcReceiver;
+import org.thingsboard.tools.service.gateway.rpc.RpcBurstSender;
 import org.thingsboard.tools.service.gateway.rpc.RpcLatencyStats;
 import org.thingsboard.tools.service.gateway.rpc.RpcMessageProcessor;
 import org.thingsboard.tools.service.gateway.rpc.RpcResponseTemplate;
@@ -38,6 +41,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -66,6 +71,25 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     @Value("${gateway.rpc.statsReportIntervalSec:10}")
     int rpcStatsReportIntervalSec;
 
+    @Value("${gateway.rpc.sender.enabled:false}")
+    boolean rpcSenderEnabled;
+    @Value("${gateway.rpc.sender.template:}")
+    String rpcSenderTemplate;
+    @Value("${gateway.rpc.sender.intervalSec:60}")
+    int rpcSenderIntervalSec;
+    @Value("${gateway.rpc.sender.startDelaySec:0}")
+    int rpcSenderStartDelaySec;
+    @Value("${gateway.rpc.sender.chunkSize:500}")
+    int rpcSenderChunkSize;
+    @Value("${gateway.rpc.sender.queue:RpcCalls}")
+    String rpcSenderQueue;
+    @Value("${gateway.rpc.sender.timeoutMs:10000}")
+    int rpcSenderTimeoutMs;
+    @Value("${rest.url}")
+    String restUrl;
+
+    private RpcBurstSender rpcBurstSender;
+
     @Override
     protected boolean isInboundHandlingEnabled() {
         return rpcEnabled;
@@ -73,7 +97,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
 
     private final RpcLatencyStats rpcLatencyStats = new RpcLatencyStats();
     private GatewayRpcReceiver rpcReceiver;
-    private java.util.concurrent.ScheduledFuture<?> rpcStatsReportFuture;
+    private ScheduledFuture<?> rpcStatsReportFuture;
 
     private List<Device> gateways = Collections.synchronizedList(new ArrayList<>(1024));
 
@@ -155,7 +179,34 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
 
     @Override
     public void runApiTests() throws InterruptedException {
-        super.runApiTests(deviceClients.size());
+        if (rpcSenderEnabled) {
+            startRpcBurstSender();
+        }
+        try {
+            super.runApiTests(deviceClients.size());
+        } finally {
+            if (rpcBurstSender != null) {
+                rpcBurstSender.stop();
+            }
+        }
+    }
+
+    private void startRpcBurstSender() {
+        if (!rpcEnabled) {
+            throw new IllegalStateException("GATEWAY_RPC_SENDER_ENABLED requires GATEWAY_RPC_ENABLED=true: the test instance must receive and measure the RPCs it triggers");
+        }
+        if (testMessagesPerSecond > 0) {
+            log.warn("GATEWAY_RPC_SENDER_ENABLED with MESSAGES_PER_SECOND={} (>0): telemetry publishing runs alongside the RPC bursts and will contaminate the command-distribution measurement; set MESSAGES_PER_SECOND=0 for a clean RPC test", testMessagesPerSecond);
+        }
+        JsonNode template = RpcBurstSender.loadCommandTemplate(rpcSenderTemplate);
+        List<String> deviceNames = deviceClients.stream()
+                .map(DeviceClient::getDeviceName)
+                .collect(Collectors.toList());
+        rpcBurstSender = new RpcBurstSender(
+                restClientService.getRestClient(), restUrl, deviceNames, template,
+                rpcSenderQueue, rpcSenderTimeoutMs, rpcSenderChunkSize,
+                rpcSenderIntervalSec, rpcSenderStartDelaySec);
+        rpcBurstSender.start();
     }
 
 
@@ -194,7 +245,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         ObjectMapper mapper = new ObjectMapper();
         RpcResponseTemplate template = rpcRespond ? RpcResponseTemplate.load(rpcResponseTemplate) : null;
         RpcMessageProcessor processor = new RpcMessageProcessor(mapper, rpcSendTsPath, rpcRespond, template, rpcLatencyStats);
-        rpcReceiver = new GatewayRpcReceiver(rpcTopic, io.netty.handler.codec.mqtt.MqttQoS.AT_LEAST_ONCE, processor, rpcLatencyStats);
+        rpcReceiver = new GatewayRpcReceiver(rpcTopic, MqttQoS.AT_LEAST_ONCE, processor, rpcLatencyStats);
         rpcReceiver.attach(mqttClients);
         scheduleRpcStatsReporting();
     }
@@ -209,7 +260,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         // teardown path is added — today it stops on JVM exit after the test.
         rpcStatsReportFuture = restClientService.getLogScheduler().scheduleAtFixedRate(
                 () -> log.info(rpcReceiver.statsSummaryAndReset(rpcStatsReportIntervalSec)),
-                rpcStatsReportIntervalSec, rpcStatsReportIntervalSec, java.util.concurrent.TimeUnit.SECONDS);
+                rpcStatsReportIntervalSec, rpcStatsReportIntervalSec, TimeUnit.SECONDS);
     }
 
     @Override

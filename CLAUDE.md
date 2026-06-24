@@ -88,6 +88,13 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `GATEWAY_RPC_RESPONSE_TEMPLATE` | _(empty)_ | Filesystem path to a response template JSON (placeholders `${now}` and `${<dot.path>}` into the request); empty = built-in neutral `ACCEPTED` template |
 | `GATEWAY_RPC_SEND_TS_PATH` | `data.params.sendTs` | Dot-path to the send-timestamp (epoch ms) the rule chain stamps into the RPC payload; the gateway computes latency = receiveTs − sendTs |
 | `GATEWAY_RPC_STATS_REPORT_INTERVAL_SEC` | `10` | Interval (s) for the RPC latency log line; always logs while `GATEWAY_RPC_ENABLED` (independent of `GATEWAY_STATS_REPORT`); `<=0` disables |
+| `GATEWAY_RPC_SENDER_ENABLED` | `false` | In-tool load driver: after warmup, fire boundary-aligned rule-engine RPC bursts for this instance's device range. Requires `GATEWAY_RPC_ENABLED`; use `MESSAGES_PER_SECOND=0` |
+| `GATEWAY_RPC_SENDER_TEMPLATE` | _(empty)_ | Filesystem path to a `{method, params}` JSON command body (the sender appends the chunked `devices[]`); empty = built-in neutral default |
+| `GATEWAY_RPC_SENDER_INTERVAL_SEC` | `60` | Burst cadence (s). Bursts fire on round clock times (multiples of this, e.g. every whole minute), so separate instances with accurate clocks fire together without coordinating |
+| `GATEWAY_RPC_SENDER_START_DELAY_SEC` | `0` | `0` = auto (first burst at the next boundary after warmup); `>0` = extra settling margin |
+| `GATEWAY_RPC_SENDER_CHUNK_SIZE` | `500` | Devices per rule-engine REST call (under the TBEL 300 KB result limit) |
+| `GATEWAY_RPC_SENDER_QUEUE` | `RpcCalls` | Rule-engine queue name in the call URL |
+| `GATEWAY_RPC_SENDER_TIMEOUT_MS` | `10000` | Rule-engine call timeout; **must equal the rule chain's hardcoded `TIMEOUT_MS`** (chain derives `sendTs = expirationTime − timeout`) |
 
 ## Architecture
 
@@ -122,6 +129,20 @@ TB and the tool host. RPC latency is logged every `GATEWAY_RPC_STATS_REPORT_INTE
 10s) whenever RPC is enabled — independent of `GATEWAY_STATS_REPORT`; `<=0` disables. With
 `MESSAGES_PER_SECOND=0` (pure RPC) the publish metronome is skipped and connections are just held open
 for the test duration. Clients that subscribe use a dedicated off-event-loop MQTT handler executor.
+
+**Gateway RPC burst sender (`GATEWAY_RPC_SENDER_ENABLED`):** an in-tool load driver layered on the
+persistent gateway mode (same instance receives + measures what it triggers). After warmup,
+`RpcBurstSender` (package `service/gateway/rpc/`) resolves its own user id and fires
+`POST /api/rule-engine/USER/<id>/<queue>/<timeout>` bursts for the instance's device range, chunked at
+`CHUNK_SIZE`, repeating every `INTERVAL_SEC`. Bursts fire on **round clock times** (a multiple of
+`INTERVAL_SEC`, e.g. every whole minute): each instance just waits for the next such time on its own
+clock, so if several instances (one per tenant) run with accurate clocks they all fire at the same
+instant with no coordinator. A single instance / local run simply fires on the next round time and
+repeats. The command body comes from
+`GATEWAY_RPC_SENDER_TEMPLATE` (or a built-in neutral default when empty). It runs on its own dedicated
+executors — isolated from the MQTT event loop and RPC handler executor — so it never starves
+inbound-RPC processing. The chain derives the send-timestamp from the call timeout, so
+`GATEWAY_RPC_SENDER_TIMEOUT_MS` must match the chain's hardcoded `TIMEOUT_MS`.
 
 ### Message Generation
 `MessageGenerator` implementations in `service/msg/`. Each returns a `NodeMsg` (Jackson `ObjectNode` +

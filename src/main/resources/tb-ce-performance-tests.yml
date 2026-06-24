@@ -166,6 +166,14 @@ gateway:
     responseTemplate: "${GATEWAY_RPC_RESPONSE_TEMPLATE:}" # filesystem path to a response template JSON; empty = built-in neutral ACCEPTED template
     sendTsPath: "${GATEWAY_RPC_SEND_TS_PATH:data.params.sendTs}" # dot-path to the send-timestamp (epoch ms) the rule chain stamps into the RPC payload
     statsReportIntervalSec: "${GATEWAY_RPC_STATS_REPORT_INTERVAL_SEC:10}" # interval (s) for the RPC latency log line; <=0 disables. Always logs when RPC is enabled (independent of GATEWAY_STATS_REPORT)
+    sender:
+      enabled: "${GATEWAY_RPC_SENDER_ENABLED:false}" # true = this instance fires boundary-aligned rule-engine RPC bursts for its device range (requires gateway.rpc.enabled; use MESSAGES_PER_SECOND=0)
+      template: "${GATEWAY_RPC_SENDER_TEMPLATE:}" # filesystem path to a {method, params} JSON command body; empty = built-in neutral default
+      intervalSec: "${GATEWAY_RPC_SENDER_INTERVAL_SEC:60}" # how often to fire a burst (s). Bursts fire on round clock times (multiples of this, e.g. every whole minute), so separate instances with accurate clocks fire at the same moment without coordinating
+      startDelaySec: "${GATEWAY_RPC_SENDER_START_DELAY_SEC:0}" # 0 = auto (next boundary after warmup); >0 = extra settling margin
+      chunkSize: "${GATEWAY_RPC_SENDER_CHUNK_SIZE:500}" # devices per rule-engine REST call (TBEL result-size bound)
+      queue: "${GATEWAY_RPC_SENDER_QUEUE:RpcCalls}" # rule-engine queue name in the URL
+      timeoutMs: "${GATEWAY_RPC_SENDER_TIMEOUT_MS:10000}" # rule-engine call timeout; MUST equal the rule chain's hardcoded TIMEOUT_MS
 
 customer:
   startIdx: "${CUSTOMER_START_IDX:0}"
