@@ -165,6 +165,7 @@ gateway:
     respond: "${GATEWAY_RPC_RESPOND:true}" # publish a response to close two-way RPC; set false only if the chain uses one-way RPC
     responseTemplate: "${GATEWAY_RPC_RESPONSE_TEMPLATE:}" # filesystem path to a response template JSON; empty = built-in neutral ACCEPTED template
     sendTsPath: "${GATEWAY_RPC_SEND_TS_PATH:data.params.sendTs}" # dot-path to the send-timestamp (epoch ms) the rule chain stamps into the RPC payload
+    statsReportIntervalSec: "${GATEWAY_RPC_STATS_REPORT_INTERVAL_SEC:10}" # interval (s) for the RPC latency log line; <=0 disables. Always logs when RPC is enabled (independent of GATEWAY_STATS_REPORT)
 
 customer:
   startIdx: "${CUSTOMER_START_IDX:0}"

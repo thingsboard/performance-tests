@@ -59,7 +59,7 @@ class RpcLatencyStatsTest {
         s.recordLatency(150);
         s.incResponsesSent();
         String line = s.summaryAndReset(60);
-        assertThat(line).contains("latencySamples=1").contains("responsesSent=1");
+        assertThat(line).contains("measured 1 RPCs").contains("responses sent 1");
         assertThat(s.getCount()).isEqualTo(0);
         assertThat(s.getResponsesSent()).isEqualTo(0);
     }
@@ -67,6 +67,6 @@ class RpcLatencyStatsTest {
     @Test
     void summaryOnEmptyDoesNotThrow() {
         RpcLatencyStats s = new RpcLatencyStats();
-        assertThat(s.summaryAndReset(60)).contains("latencySamples=0");
+        assertThat(s.summaryAndReset(60)).contains("measured 0 RPCs");
     }
 }

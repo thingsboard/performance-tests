@@ -28,6 +28,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.mqtt.MqttClientConfig;
 import org.thingsboard.mqtt.MqttConnectResult;
+import org.thingsboard.common.util.AbstractListeningExecutor;
 import org.thingsboard.server.common.data.StringUtils;
 import org.thingsboard.tools.service.mqtt.DeviceClient;
 import org.thingsboard.tools.service.msg.Msg;
@@ -55,6 +56,11 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
 
     protected static final int CONNECT_TIMEOUT = 5;
     private EventLoopGroup EVENT_LOOP_GROUP;
+    // Off-event-loop executor for inbound MQTT message handlers (e.g. RPC receive). netty-mqtt feeds
+    // each handler's result through Futures.transform(..., this executor), so it must be non-null once
+    // we subscribe (a null executor NPEs on the first received PUBLISH). Created only when inbound
+    // handling is enabled; stays null for publish-only runs, which never receive a PUBLISH.
+    private AbstractListeningExecutor mqttHandlerExecutor;
 
     @Value("${mqtt.host}")
     private String mqttHost;
@@ -87,6 +93,20 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
     protected void init() {
         super.init();
         EVENT_LOOP_GROUP = new NioEventLoopGroup();
+        if (isInboundHandlingEnabled()) {
+            mqttHandlerExecutor = new AbstractListeningExecutor() {
+                @Override
+                protected int getThreadPollSize() {
+                    return Math.max(2, Runtime.getRuntime().availableProcessors());
+                }
+            };
+            mqttHandlerExecutor.init();
+        }
+    }
+
+    /** Whether this test subscribes to inbound MQTT messages and therefore needs a handler executor. */
+    protected boolean isInboundHandlingEnabled() {
+        return false;
     }
 
     @PreDestroy
@@ -96,6 +116,9 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
             mqttClient.disconnect();
         }
 
+        if (mqttHandlerExecutor != null) {
+            mqttHandlerExecutor.destroy();
+        }
         if (!EVENT_LOOP_GROUP.isShutdown()) {
             EVENT_LOOP_GROUP.shutdownGracefully(0, 5, TimeUnit.SECONDS);
         }
@@ -194,7 +217,7 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
     protected MqttClient createClient(String token) {
         MqttClientConfig config = new MqttClientConfig(getSslContext());
         config.setUsername(token);
-        MqttClient client = MqttClient.create(config, null, null);
+        MqttClient client = MqttClient.create(config, null, mqttHandlerExecutor);
         client.setEventLoop(EVENT_LOOP_GROUP);
         return client;
     }

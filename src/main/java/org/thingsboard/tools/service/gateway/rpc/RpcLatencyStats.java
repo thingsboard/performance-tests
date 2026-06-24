@@ -47,11 +47,10 @@ public class RpcLatencyStats {
      */
     public synchronized String summaryAndReset(int intervalSec) {
         long n = latency.getN();
-        double rate = intervalSec > 0 ? (double) n / intervalSec : 0.0;
         String line = String.format(
-                "Gateway RPC stats: latencySamples=%d (%.1f/s), latency ms[mean=%.1f p50=%.1f p95=%.1f p99=%.1f max=%.1f], "
-                        + "responsesSent=%d, responseErrors=%d",
-                n, rate,
+                "Gateway RPC stats [window %ds]: measured %d RPCs; one-way delivery latency: "
+                        + "avg %.1f ms, p50 %.1f ms, p95 %.1f ms, p99 %.1f ms, max %.1f ms; responses sent %d, errors %d",
+                intervalSec, n,
                 n > 0 ? latency.getMean() : 0.0,
                 n > 0 ? latency.getPercentile(50) : 0.0,
                 n > 0 ? latency.getPercentile(95) : 0.0,

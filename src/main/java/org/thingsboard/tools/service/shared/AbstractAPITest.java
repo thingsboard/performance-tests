@@ -181,6 +181,14 @@ public abstract class AbstractAPITest {
     }
 
     protected void runApiTests(int deviceCount) throws InterruptedException {
+        if (testMessagesPerSecond <= 0) {
+            // No-publish mode (e.g. pure RPC receive): skip the sort/shuffle and the per-second
+            // metronome entirely; just hold the open connections for the test duration. The async
+            // RPC receiver keeps working and MQTT keep-alive sustains the sessions.
+            log.info("MESSAGES_PER_SECOND=0: no telemetry publishing; holding connections open for {}s...", testDurationInSec);
+            TimeUnit.SECONDS.sleep(testDurationInSec);
+            return;
+        }
         log.info("Sorting {} devices...", deviceCount);
         devices.sort(Comparator.comparing(Device::getName));
         log.info("Shuffling {} devices with random seed {}...", deviceCount, seed);
