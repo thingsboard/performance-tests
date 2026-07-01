@@ -21,7 +21,7 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.codec.mqtt.MqttQoS;
 import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.GlobalEventExecutor;
+import io.netty.util.concurrent.ImmediateEventExecutor;
 import io.netty.util.concurrent.Promise;
 import org.junit.jupiter.api.Test;
 import org.thingsboard.common.util.ListeningExecutor;
@@ -104,14 +104,14 @@ class GatewayRpcReceiverTest {
         @Override
         public Future<Void> on(String topic, MqttHandler handler, MqttQoS qos) {
             subscribedTopics.add(topic);
-            return GlobalEventExecutor.INSTANCE.newSucceededFuture(null);
+            return ImmediateEventExecutor.INSTANCE.newSucceededFuture(null);
         }
 
         @Override
         public Future<Void> publish(String topic, ByteBuf payload, MqttQoS qos) {
             publishedTopics.add(topic);
             publishedPayloads.add(payload.toString(StandardCharsets.UTF_8));
-            return GlobalEventExecutor.INSTANCE.newSucceededFuture(null);
+            return ImmediateEventExecutor.INSTANCE.newSucceededFuture(null);
         }
 
         @Override public boolean isConnected() { return true; }
