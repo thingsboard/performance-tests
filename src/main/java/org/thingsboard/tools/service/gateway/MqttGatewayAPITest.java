@@ -64,6 +64,8 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     String rpcTopic;
     @Value("${gateway.rpc.respond:true}")
     boolean rpcRespond;
+    @Value("${gateway.rpc.responseDelayMs:0}")
+    long rpcResponseDelayMs;
     @Value("${gateway.rpc.responseTemplate:}")
     String rpcResponseTemplate;
     @Value("${gateway.rpc.sendTsPath:data.params.sendTs}")
@@ -245,7 +247,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         ObjectMapper mapper = new ObjectMapper();
         RpcResponseTemplate template = rpcRespond ? RpcResponseTemplate.load(rpcResponseTemplate) : null;
         RpcMessageProcessor processor = new RpcMessageProcessor(mapper, rpcSendTsPath, rpcRespond, template, rpcLatencyStats);
-        rpcReceiver = new GatewayRpcReceiver(rpcTopic, MqttQoS.AT_LEAST_ONCE, processor, rpcLatencyStats);
+        rpcReceiver = new GatewayRpcReceiver(rpcTopic, MqttQoS.AT_LEAST_ONCE, processor, rpcLatencyStats, rpcResponseDelayMs);
         rpcReceiver.attach(mqttClients);
         scheduleRpcStatsReporting();
     }

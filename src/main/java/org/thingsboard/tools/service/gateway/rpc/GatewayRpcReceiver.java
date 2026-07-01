@@ -23,6 +23,7 @@ import org.thingsboard.mqtt.MqttHandler;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class GatewayRpcReceiver {
@@ -31,13 +32,15 @@ public class GatewayRpcReceiver {
     private final MqttQoS qos;
     private final RpcMessageProcessor processor;
     private final RpcLatencyStats stats;
+    private final long responseDelayMs;
 
     public GatewayRpcReceiver(String topic, MqttQoS qos, RpcMessageProcessor processor,
-                              RpcLatencyStats stats) {
+                              RpcLatencyStats stats, long responseDelayMs) {
         this.topic = topic;
         this.qos = qos;
         this.processor = processor;
         this.stats = stats;
+        this.responseDelayMs = responseDelayMs;
     }
 
     public void attach(List<MqttClient> clients) {
@@ -58,20 +61,32 @@ public class GatewayRpcReceiver {
             try {
                 byte[] response = processor.process(payload, now);
                 if (response != null) {
-                    client.publish(topic, Unpooled.wrappedBuffer(response), qos)
-                            .addListener(f -> {
-                                if (f.isSuccess()) {
-                                    stats.incResponsesSent();
-                                } else {
-                                    stats.incResponseErrors();
-                                }
-                            });
+                    if (responseDelayMs > 0) {
+                        // Defer the response to exercise the delayed-reply case. Scheduled on the
+                        // client's netty event loop, so no extra threads and no blocking of the
+                        // inbound handler.
+                        client.getEventLoop().schedule(
+                                () -> publishResponse(client, response), responseDelayMs, TimeUnit.MILLISECONDS);
+                    } else {
+                        publishResponse(client, response);
+                    }
                 }
             } catch (Exception e) {
                 log.warn("Failed to handle inbound RPC", e);
             }
             return CompletableFuture.completedFuture(null);
         };
+    }
+
+    private void publishResponse(MqttClient client, byte[] response) {
+        client.publish(topic, Unpooled.wrappedBuffer(response), qos)
+                .addListener(f -> {
+                    if (f.isSuccess()) {
+                        stats.incResponsesSent();
+                    } else {
+                        stats.incResponseErrors();
+                    }
+                });
     }
 
     public String statsSummaryAndReset(int intervalSec) {

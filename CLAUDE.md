@@ -85,6 +85,7 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `GATEWAY_RPC_ENABLED` | `false` | Persistent gateways subscribe to `v1/gateway/rpc`, handle inbound server-side RPC for their sub-devices, publish a response (two-way), and measure one-way delivery latency. Use `MESSAGES_PER_SECOND=0` for pure RPC (the metronome idles). Not supported with ephemeral mode |
 | `GATEWAY_RPC_TOPIC` | `v1/gateway/rpc` | Gateway RPC subscription + response topic |
 | `GATEWAY_RPC_RESPOND` | `true` | Publish a response to close the two-way RPC; set `false` only if the chain uses one-way RPC |
+| `GATEWAY_RPC_RESPONSE_DELAY_MS` | `0` | Delay (ms) before publishing the device reply. `0` = reply immediately; `>0` exercises the delayed-response case. Scheduled on the client's netty event loop (no extra threads, inbound handler not blocked) |
 | `GATEWAY_RPC_RESPONSE_TEMPLATE` | _(empty)_ | Filesystem path to a response template JSON (placeholders `${now}` and `${<dot.path>}` into the request); empty = built-in neutral `ACCEPTED` template |
 | `GATEWAY_RPC_SEND_TS_PATH` | `data.params.sendTs` | Dot-path to the send-timestamp (epoch ms) the rule chain stamps into the RPC payload; the gateway computes latency = receiveTs − sendTs |
 | `GATEWAY_RPC_STATS_REPORT_INTERVAL_SEC` | `10` | Interval (s) for the RPC latency log line; always logs while `GATEWAY_RPC_ENABLED` (independent of `GATEWAY_STATS_REPORT`); `<=0` disables |

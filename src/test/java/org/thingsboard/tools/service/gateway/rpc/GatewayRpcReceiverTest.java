@@ -45,7 +45,7 @@ class GatewayRpcReceiverTest {
                 "{\"device\":\"${device}\",\"id\":${data.id},\"data\":{\"status\":\"ACCEPTED\",\"receivedAt\":${now}}}");
         RpcMessageProcessor processor = new RpcMessageProcessor(
                 new ObjectMapper(), "data.params.sendTs", true, template, stats);
-        return new GatewayRpcReceiver("v1/gateway/rpc", MqttQoS.AT_LEAST_ONCE, processor, stats);
+        return new GatewayRpcReceiver("v1/gateway/rpc", MqttQoS.AT_LEAST_ONCE, processor, stats, 0L);
     }
 
     @Test
@@ -87,7 +87,7 @@ class GatewayRpcReceiverTest {
                 throw new RuntimeException("boom");
             }
         };
-        GatewayRpcReceiver r = new GatewayRpcReceiver("v1/gateway/rpc", MqttQoS.AT_LEAST_ONCE, throwing, stats);
+        GatewayRpcReceiver r = new GatewayRpcReceiver("v1/gateway/rpc", MqttQoS.AT_LEAST_ONCE, throwing, stats, 0L);
         FakeMqttClient fake = new FakeMqttClient();
         MqttHandler handler = r.buildHandler(fake);
         ByteBuf in = Unpooled.wrappedBuffer("{}".getBytes(StandardCharsets.UTF_8));

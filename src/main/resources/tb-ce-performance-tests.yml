@@ -163,6 +163,7 @@ gateway:
     enabled: "${GATEWAY_RPC_ENABLED:false}" # true = persistent gateways subscribe to v1/gateway/rpc, handle inbound RPC, respond, and measure one-way delivery latency (use MESSAGES_PER_SECOND=0 for pure RPC). Not supported with ephemeral mode.
     topic: "${GATEWAY_RPC_TOPIC:v1/gateway/rpc}" # gateway RPC subscription + response topic
     respond: "${GATEWAY_RPC_RESPOND:true}" # publish a response to close two-way RPC; set false only if the chain uses one-way RPC
+    responseDelayMs: "${GATEWAY_RPC_RESPONSE_DELAY_MS:0}" # delay (ms) before publishing the device reply. 0 = reply immediately; >0 exercises the delayed-response case
     responseTemplate: "${GATEWAY_RPC_RESPONSE_TEMPLATE:}" # filesystem path to a response template JSON; empty = built-in neutral ACCEPTED template
     sendTsPath: "${GATEWAY_RPC_SEND_TS_PATH:data.params.sendTs}" # dot-path to the send-timestamp (epoch ms) the rule chain stamps into the RPC payload
     statsReportIntervalSec: "${GATEWAY_RPC_STATS_REPORT_INTERVAL_SEC:10}" # interval (s) for the RPC latency log line; <=0 disables. Always logs when RPC is enabled (independent of GATEWAY_STATS_REPORT)
