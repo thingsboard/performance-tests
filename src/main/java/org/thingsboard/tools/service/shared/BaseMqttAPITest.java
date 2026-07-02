@@ -37,7 +37,6 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import javax.net.ssl.TrustManagerFactory;
 import java.io.FileInputStream;
-import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -76,14 +75,6 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
     private int mqttKeepAliveSec;
     @Value("${mqtt.reconnectDelayMs:0}")
     private long mqttReconnectDelayMs;
-
-    @Value("${gateway.statsReport:TB}")
-    protected String statsReportMode;
-    @Value("${gateway.statsReportIntervalSec:300}")
-    protected int statsReportIntervalSec;
-
-    private final AtomicInteger lastReportedSuccess = new AtomicInteger();
-    private final AtomicInteger lastReportedFailed = new AtomicInteger();
 
     protected final List<MqttClient> mqttClients = Collections.synchronizedList(new ArrayList<>(1024 * 16));
     // Maps each connected MQTT client to the name it connected with (gateway or device name).
@@ -302,45 +293,10 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
         return null;
     }
 
-    protected void reportMqttClientsStats() {
-        for (MqttClient mqttClient : mqttClients) {
-            mqttClient.publish("v1/devices/me/telemetry", Unpooled.wrappedBuffer("{\"msgCount\":0}".getBytes(StandardCharsets.UTF_8)), MqttQoS.AT_MOST_ONCE).addListener(future -> {
-                        if (future.isSuccess()) {
-                            log.debug("[{}] Gateway statistics message was successfully published.", mqttClient.getClientConfig().getUsername());
-                        } else {
-                            log.error("[{}] Error while publishing gateway statistics message ", mqttClient.getClientConfig().getUsername(), future.cause());
-                        }
-                    }
-            );
-        }
-    }
-
-    protected void scheduleGatewayStatsReporting() {
-        if (statsReportIntervalSec <= 0 || "NONE".equalsIgnoreCase(statsReportMode)) {
-            log.info("Gateway stats reporting disabled");
-            return;
-        }
-        if ("LOG".equalsIgnoreCase(statsReportMode)) {
-            // logScheduler: separate pool - never blocks the single-threaded test metronome
-            reportScheduledFuture = restClientService.getLogScheduler()
-                    .scheduleAtFixedRate(() -> log.info(gatewayStatsSummary()), statsReportIntervalSec, statsReportIntervalSec, TimeUnit.SECONDS);
-        } else {
-            reportScheduledFuture = restClientService.getScheduler()
-                    .scheduleAtFixedRate(this::reportMqttClientsStats, statsReportIntervalSec, statsReportIntervalSec, TimeUnit.SECONDS);
-        }
-    }
-
-    protected String gatewayStatsSummary() {
-        long connected = 0;
-        for (MqttClient mqttClient : mqttClients) {
-            if (mqttClient.isConnected()) {
-                connected++;
-            }
-        }
-        int success = totalSuccessPublishedCount.get();
-        int failed = totalFailedPublishedCount.get();
-        return String.format("Gateway stats: connected %d/%d, published since last report: success=%d, failed=%d",
-                connected, mqttClients.size(), success - lastReportedSuccess.getAndSet(success), failed - lastReportedFailed.getAndSet(failed));
+    /** Fixed-fleet connection gauge: set the target and register the Connections block. */
+    protected void registerConnectionStats() {
+        connectionStats.setTarget(mqttClients.size());
+        statsReporter().register(StatsBlock.CONNECTIONS, connectionStats::summaryAndReset);
     }
 
     /**

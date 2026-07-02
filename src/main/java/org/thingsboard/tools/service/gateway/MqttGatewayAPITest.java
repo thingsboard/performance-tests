@@ -164,10 +164,9 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         if (pack != null && !pack.isEmpty()) {
             connectDevices(pack, totalConnectedCount, true);
         }
-        // Fixed persistent fleet: publish the target so the connection line shows live=<n>/<target>.
-        // Ephemeral overrides connectGateways and does not call this, so churn mode omits the target.
-        connectionStats.setTarget(mqttClients.size());
-        scheduleGatewayStatsReporting();
+        // Fixed persistent fleet: register the Connections gauge (live=<n>/<target>).
+        // Ephemeral overrides connectGateways and does not call this, so churn mode omits it.
+        registerConnectionStats();
         mapDevicesToGatewayClientConnections();
         if (rpcEnabled) {
             attachRpcReceiver();

@@ -81,23 +81,4 @@ class BaseMqttApiTestPublishTaskTest {
         assertThat(api.nextPublishTask(0, 0, true, new HashSet<>()).alarmsTriggered()).isEqualTo(1);
         assertThat(api.nextPublishTask(0, 0, false, new HashSet<>()).alarmsTriggered()).isEqualTo(0);
     }
-
-    @Test
-    void statsSummaryCountsConnectedClientsAndDeltas() {
-        TestApi api = new TestApi();
-        org.thingsboard.mqtt.MqttClient connected = mock(org.thingsboard.mqtt.MqttClient.class);
-        org.thingsboard.mqtt.MqttClient dropped = mock(org.thingsboard.mqtt.MqttClient.class);
-        when(connected.isConnected()).thenReturn(true);
-        when(dropped.isConnected()).thenReturn(false);
-        api.mqttClients.add(connected);
-        api.mqttClients.add(dropped);
-        api.totalSuccessPublishedCount.set(10);
-        api.totalFailedPublishedCount.set(1);
-
-        assertThat(api.gatewayStatsSummary())
-                .isEqualTo("Gateway stats: connected 1/2, published since last report: success=10, failed=1");
-        api.totalSuccessPublishedCount.set(25);
-        assertThat(api.gatewayStatsSummary())
-                .isEqualTo("Gateway stats: connected 1/2, published since last report: success=15, failed=0");
-    }
 }

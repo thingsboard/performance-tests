@@ -116,6 +116,7 @@ public class MqttDeviceAPITest extends BaseMqttAPITest implements DeviceAPITest 
             connectDevices(pack, totalConnectedCount, false);
         }
         mapDevicesToDeviceClientConnections();
+        registerConnectionStats();
     }
 
     @Override

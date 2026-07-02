@@ -57,8 +57,6 @@ public abstract class AbstractAPITest {
 
     protected static ObjectMapper mapper = new ObjectMapper();
 
-    protected ScheduledFuture<?> reportScheduledFuture;
-
     @Value("${stats.log.enabled:true}")
     protected boolean statsLogEnabled;
     @Value("${stats.log.intervalSec:10}")
@@ -184,9 +182,6 @@ public abstract class AbstractAPITest {
 
     @PreDestroy
     protected void destroy() {
-        if (reportScheduledFuture != null) {
-            reportScheduledFuture.cancel(true);
-        }
         if (statsReporter != null) {
             statsReporter.stop();
         }
