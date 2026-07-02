@@ -230,11 +230,11 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
     protected MqttClient createClient(String token) {
         MqttClientConfig config = new MqttClientConfig(getSslContext());
         config.setUsername(token);
-        // -1 = leave the client-library default untouched (no behavior change unless configured).
-        if (mqttKeepAliveSec >= 0) {
+        // <= 0 (incl. the -1 sentinel) leaves the client-library default untouched; only a positive value overrides.
+        if (mqttKeepAliveSec > 0) {
             config.setTimeoutSeconds(mqttKeepAliveSec);
         }
-        if (mqttReconnectDelayMs >= 0) {
+        if (mqttReconnectDelayMs > 0) {
             config.setReconnectDelay(mqttReconnectDelayMs);
         }
         MqttClient client = MqttClient.create(config, null, mqttHandlerExecutor);
