@@ -45,6 +45,8 @@ mqtt:
   host: "${MQTT_HOST:localhost}"
   # Usually 1883 for MQTT or 8883 for MQTTS
   port: "${MQTT_PORT:1883}"
+  keepAliveSec: "${MQTT_KEEPALIVE_SEC:-1}" # MQTT keep-alive interval (s); -1 = client-library default (60). Lower = more frequent PINGREQ
+  reconnectDelayMs: "${MQTT_RECONNECT_DELAY_MS:-1}" # delay (ms) before auto-reconnect after a drop; -1 = client-library default
   ssl:
     enabled: "${MQTT_SSL_ENABLED:false}"
     # Java keystore file mqttclient.jks. If not set, it will use a default trusted certs for Java like ca-certificates pre-installed. Use custom JKS truststore only to deal with self-managed certificates
