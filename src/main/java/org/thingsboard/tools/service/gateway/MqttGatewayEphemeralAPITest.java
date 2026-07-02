@@ -27,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.mqtt.MqttConnectResult;
 import org.thingsboard.tools.service.msg.NodeMsg;
+import org.thingsboard.tools.service.shared.StatsBlock;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -36,8 +37,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Ephemeral gateway mode (GATEWAY_BATCH=true AND EPHEMERAL_ENABLED=true): each gateway repeats
@@ -69,13 +68,7 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
     private static final int HEADROOM = 2;
 
     // --- metrics ---
-    protected final AtomicInteger connectAttempts = new AtomicInteger();
-    protected final AtomicInteger connectSuccess = new AtomicInteger();
-    protected final AtomicInteger connectFailed = new AtomicInteger();
-    protected final AtomicInteger publishSuccess = new AtomicInteger();
-    protected final AtomicInteger publishFailed = new AtomicInteger();
-    protected final AtomicLong cycleWallMillisTotal = new AtomicLong();
-    protected final AtomicInteger cyclesCompleted = new AtomicInteger();
+    protected final EphemeralStats ephemeralStats = new EphemeralStats();
 
     // --- runtime state (initialised in runApiTests) ---
     protected volatile List<GatewayTarget> targets;
@@ -83,7 +76,6 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
     protected ScheduledExecutorService cycleScheduler;
     protected volatile boolean running;
     protected Random scheduleRandom = new Random();
-    protected volatile long testStartMillis;
 
     @PostConstruct
     protected void rejectRpcInEphemeralMode() {
@@ -158,7 +150,6 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
                 ("auto".equalsIgnoreCase(maxConcurrentConnectsConfig) ? "auto" : "override"));
 
         this.running = true;
-        this.testStartMillis = System.currentTimeMillis();
         // First cycle per gateway spread uniformly over [0, firstConnectJitter): a synchronized fleet powers on
         // within that window, then each gateway reconnects on the cycle + jitter cadence. 0 => all connect at t=0.
         for (GatewayTarget target : all) {
@@ -166,16 +157,16 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
             cycleScheduler.schedule(() -> runCycle(target), offset, TimeUnit.MILLISECONDS);
         }
 
-        ScheduledExecutorService statsLog = Executors.newSingleThreadScheduledExecutor();
-        statsLog.scheduleAtFixedRate(this::logStats, 10, 10, TimeUnit.SECONDS);
+        statsReporter().register(StatsBlock.EPHEMERAL, ephemeralStats::summaryAndReset);
+        statsReporter().start();
 
         Thread.sleep(testDurationInSec * 1000L);
 
         this.running = false;
-        statsLog.shutdownNow();
         cycleScheduler.shutdownNow();
         cycleScheduler.awaitTermination(CONNECT_TIMEOUT + 5L, TimeUnit.SECONDS);
-        logStats();
+        statsReporter().reportOnce();
+        statsReporter().stop();
         log.info("Ephemeral mode finished.");
     }
 
@@ -184,7 +175,6 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
         if (!running && cycleScheduler != null) {
             return; // stop spawning new cycles after the test window closes
         }
-        connectAttempts.incrementAndGet();
         connectPermits.acquireUninterruptibly();
         final long start = System.currentTimeMillis();
         final MqttClient client = createClient(target.gatewayName());
@@ -201,10 +191,10 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
             Object now = f.getNow();
             boolean ok = f.isSuccess() && now instanceof MqttConnectResult && ((MqttConnectResult) now).isSuccess();
             if (ok) {
-                connectSuccess.incrementAndGet();
+                ephemeralStats.onConnectOk();
                 publishBatch(client, target, start);
             } else {
-                connectFailed.incrementAndGet();
+                ephemeralStats.onConnectFail();
                 finishCycle(client, target, start);
             }
         });
@@ -222,14 +212,14 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
             client.publish(getTestTopic(), Unpooled.wrappedBuffer(payload), MqttQoS.AT_MOST_ONCE)
                     .addListener(pf -> {
                         if (pf.isSuccess()) {
-                            publishSuccess.incrementAndGet();
+                            ephemeralStats.onPublishOk();
                         } else {
-                            publishFailed.incrementAndGet();
+                            ephemeralStats.onPublishFail();
                         }
                         finishCycle(client, target, start);
                     });
         } catch (Exception e) {
-            publishFailed.incrementAndGet();
+            ephemeralStats.onPublishFail();
             finishCycle(client, target, start);
         }
     }
@@ -242,8 +232,7 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
         }
         // Drop the throwaway cycle client from the shared callback map so it does not grow unbounded.
         connectionCallbacks.remove(client);
-        cycleWallMillisTotal.addAndGet(System.currentTimeMillis() - start);
-        cyclesCompleted.incrementAndGet();
+        ephemeralStats.onCycleComplete(System.currentTimeMillis() - start);
         connectPermits.release();
         scheduleNext(target);
     }
@@ -269,17 +258,5 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
 
     protected long jitterMillis() {
         return jitterSec * 1000L;
-    }
-
-    protected void logStats() {
-        int completed = cyclesCompleted.get();
-        long elapsedSec = Math.max(1, (System.currentTimeMillis() - testStartMillis) / 1000);
-        double connectsPerSec = (double) connectAttempts.get() / elapsedSec;
-        long avgCycleWallMs = completed == 0 ? 0 : cycleWallMillisTotal.get() / completed;
-        log.info(connectionStats.summaryAndReset(10));
-        log.info("Ephemeral stats: attempts={}, connectOk={}, connectFail={}, publishOk={}, publishFail={}, ~{} connects/s, avgCycleWall={}ms",
-                connectAttempts.get(), connectSuccess.get(), connectFailed.get(),
-                publishSuccess.get(), publishFailed.get(),
-                String.format("%.1f", connectsPerSec), avgCycleWallMs);
     }
 }

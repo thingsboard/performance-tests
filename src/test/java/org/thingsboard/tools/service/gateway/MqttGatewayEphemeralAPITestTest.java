@@ -133,14 +133,12 @@ class MqttGatewayEphemeralAPITestTest extends MqttGatewayEphemeralAPITest {
 
         runCycle(buildTargets().get(0));
 
-        assertThat(connectSuccess.get()).isEqualTo(1);
-        assertThat(connectFailed.get()).isEqualTo(0);
-        assertThat(publishSuccess.get()).isEqualTo(1);
+        String summary = ephemeralStats.summaryAndReset(1);
+        assertThat(summary).contains("connectOk=1", "connectFail=0", "publishOk=1", "cycles=1");
         verify(lastClient, times(1)).publish(eq("v1/gateway/telemetry"), any(), any());
         verify(lastClient, times(1)).disconnect();
         assertThat(rescheduleCalls).isEqualTo(1);
         assertThat(connectPermits.availablePermits()).isEqualTo(8); // permit released
-        assertThat(cyclesCompleted.get()).isEqualTo(1);
         // inherited protected collections — never populated by the ephemeral path
         assertThat(mqttClients).isEmpty();
         assertThat(clientNames).isEmpty();
@@ -154,8 +152,8 @@ class MqttGatewayEphemeralAPITestTest extends MqttGatewayEphemeralAPITest {
 
         runCycle(buildTargets().get(0));
 
-        assertThat(connectFailed.get()).isEqualTo(1);
-        assertThat(connectSuccess.get()).isEqualTo(0);
+        String summary = ephemeralStats.summaryAndReset(1);
+        assertThat(summary).contains("connectFail=1", "connectOk=0");
         verify(lastClient, never()).publish(anyString(), any(), any());
         verify(lastClient, times(1)).disconnect();
         assertThat(rescheduleCalls).isEqualTo(1);
