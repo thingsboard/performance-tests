@@ -45,14 +45,24 @@ public class GatewayRpcReceiver {
 
     public void attach(List<MqttClient> clients) {
         for (MqttClient client : clients) {
-            client.on(topic, buildHandler(client), qos)
-                    .addListener(f -> {
-                        if (!f.isSuccess()) {
-                            log.error("Failed to subscribe a gateway to RPC topic {}", topic, f.cause());
-                        }
-                    });
+            subscribe(client);
         }
         log.info("Subscribed {} gateways to RPC topic {}", clients.size(), topic);
+    }
+
+    /** Re-issue the RPC-topic subscription for one client after it reconnects (subscription is lost on
+     *  channel close with cleanSession=true). */
+    public void resubscribe(MqttClient client) {
+        subscribe(client);
+    }
+
+    private void subscribe(MqttClient client) {
+        client.on(topic, buildHandler(client), qos)
+                .addListener(f -> {
+                    if (!f.isSuccess()) {
+                        log.error("Failed to subscribe a gateway to RPC topic {}", topic, f.cause());
+                    }
+                });
     }
 
     MqttHandler buildHandler(MqttClient client) {

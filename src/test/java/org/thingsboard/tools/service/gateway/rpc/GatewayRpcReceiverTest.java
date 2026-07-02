@@ -95,6 +95,17 @@ class GatewayRpcReceiverTest {
         assertThat(fake.publishedTopics).isEmpty();
     }
 
+    @Test
+    void resubscribeSubscribesTheClientAgain() {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        GatewayRpcReceiver r = receiver(stats);
+        FakeMqttClient fake = new FakeMqttClient();
+        r.attach(List.of(fake));
+        assertThat(fake.subscribedTopics).containsExactly("v1/gateway/rpc");
+        r.resubscribe(fake);
+        assertThat(fake.subscribedTopics).containsExactly("v1/gateway/rpc", "v1/gateway/rpc");
+    }
+
     /** Minimal MqttClient test double: only on(3-arg), publish(3-arg) and isConnected are functional. */
     static class FakeMqttClient implements MqttClient {
         final List<String> subscribedTopics = new ArrayList<>();
