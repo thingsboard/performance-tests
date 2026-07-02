@@ -141,6 +141,10 @@ device:
   profile: "${DEVICE_PROFILE:}" # device profile name to assign/create; empty = use test.payloadType
 deviceProfile:
   path: "${DEVICE_PROFILE_PATH:}" # filesystem dir of profile JSON files; empty = load from classpath device/profile/
+stats:
+  log:
+    enabled: "${STATS_LOG_ENABLED:true}"        # master on/off for all stats logging (every mode)
+    intervalSec: "${STATS_LOG_INTERVAL_SEC:10}" # single interval for every stat block; <=0 also disables
 gateway:
   namePrefix: "${GATEWAY_NAME_PREFIX:}" # per-tenant prefix prepended to gateway names/tokens; empty = legacy GW%08d. Use a distinct value per tenant to avoid globally-unique-token collisions; devices are never prefixed
   startIdx: "${GATEWAY_START_IDX:0}"
@@ -151,8 +155,6 @@ gateway:
   profile: "${GATEWAY_PROFILE:}" # device profile name to assign to gateways; empty = same profile as devices
   overwriteActivityTime: "${GATEWAY_OVERWRITE_ACTIVITY_TIME:false}" # true = set additionalInfo.overwriteActivityTime on gateways so the gateway's connection activity keeps sub-devices Active without their own telemetry; reconciled (created + existing) on every run
   batch: "${GATEWAY_BATCH:false}" # true = one publish per gateway carrying all its devices; MESSAGES_PER_SECOND then counts gateway publishes
-  statsReport: "${GATEWAY_STATS_REPORT:TB}" # TB = per-gateway {"msgCount":0} publish, LOG = one aggregated local log line, NONE = disabled
-  statsReportIntervalSec: "${GATEWAY_STATS_REPORT_INTERVAL_SEC:300}"
   ephemeral:
     enabled: "${EPHEMERAL_ENABLED:false}" # true = connect->publish batch->disconnect per cycle (requires gateway.batch=true)
     cycleLengthSec: "${EPHEMERAL_CYCLE_SEC:900}" # per-gateway cadence
@@ -168,7 +170,6 @@ gateway:
     responseDelayMs: "${GATEWAY_RPC_RESPONSE_DELAY_MS:0}" # delay (ms) before publishing the device reply. 0 = reply immediately; >0 exercises the delayed-response case
     responseTemplate: "${GATEWAY_RPC_RESPONSE_TEMPLATE:}" # filesystem path to a response template JSON; empty = built-in neutral ACCEPTED template
     sendTsPath: "${GATEWAY_RPC_SEND_TS_PATH:data.params.sendTs}" # dot-path to the send-timestamp (epoch ms) the rule chain stamps into the RPC payload
-    statsReportIntervalSec: "${GATEWAY_RPC_STATS_REPORT_INTERVAL_SEC:10}" # interval (s) for the RPC latency log line; <=0 disables. Always logs when RPC is enabled (independent of GATEWAY_STATS_REPORT)
     sender:
       enabled: "${GATEWAY_RPC_SENDER_ENABLED:false}" # true = this instance fires boundary-aligned rule-engine RPC bursts for its device range (requires gateway.rpc.enabled; use MESSAGES_PER_SECOND=0)
       template: "${GATEWAY_RPC_SENDER_TEMPLATE:}" # filesystem path to a {method, params} JSON command body; empty = built-in neutral default

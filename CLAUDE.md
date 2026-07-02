@@ -76,8 +76,8 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `GATEWAY_NAME_PREFIX` | _(empty)_ | Per-tenant prefix prepended to gateway names/tokens to avoid globally-unique-token collisions across tenants; empty = legacy `GW%08d`. Devices are never prefixed |
 | `GATEWAY_OVERWRITE_ACTIVITY_TIME` | `false` | Reconciles `additionalInfo.overwriteActivityTime` on gateway devices (created + existing) to this value; when `true`, the gateway's connection activity keeps its sub-devices Active without their own telemetry. Idempotent — only writes when the value differs. Never touches sub-devices |
 | `GATEWAY_BATCH` | `false` | Gateway mode: one publish per gateway carrying all its devices (`MESSAGES_PER_SECOND` counts gateway publishes) |
-| `GATEWAY_STATS_REPORT` | `TB` | Gateway stats reporter: `TB` (publish), `LOG` (one aggregated log line), `NONE` |
-| `GATEWAY_STATS_REPORT_INTERVAL_SEC` | `300` | Interval (s) for the gateway stats reporter |
+| `STATS_LOG_ENABLED` | `true` | Master switch for periodic stats logging in every mode (device/gateway/RPC/ephemeral) |
+| `STATS_LOG_INTERVAL_SEC` | `10` | Single interval (s) for all stat blocks; `<=0` disables |
 | `EPHEMERAL_ENABLED` | `false` | With `GATEWAY_BATCH=true`: each gateway runs connect→publish→disconnect cycles (rate = `gatewayCount / EPHEMERAL_CYCLE_SEC`; `MESSAGES_PER_SECOND` ignored) |
 | `EPHEMERAL_CYCLE_SEC` / `EPHEMERAL_JITTER_SEC` | `900` / `300` | Per-gateway cadence + one-sided `[0,jitter]` |
 | `EPHEMERAL_FIRST_CONNECT_JITTER_SEC` | _(inherits `EPHEMERAL_JITTER_SEC`)_ | Spreads each gateway's first connect uniformly over `[0, this)` seconds at startup. Unset (`-1`) inherits `EPHEMERAL_JITTER_SEC`. `0` = all gateways connect simultaneously at `t=0`; set to `EPHEMERAL_CYCLE_SEC` to pre-diffuse the fleet for a flat aggregate rate from `t=0` |
@@ -90,7 +90,6 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `GATEWAY_RPC_RESPONSE_DELAY_MS` | `0` | Delay (ms) before publishing the device reply. `0` = reply immediately; `>0` exercises the delayed-response case. Scheduled on the client's netty event loop (no extra threads, inbound handler not blocked) |
 | `GATEWAY_RPC_RESPONSE_TEMPLATE` | _(empty)_ | Filesystem path to a response template JSON (placeholders `${now}` and `${<dot.path>}` into the request); empty = built-in neutral `ACCEPTED` template |
 | `GATEWAY_RPC_SEND_TS_PATH` | `data.params.sendTs` | Dot-path to the send-timestamp (epoch ms) the rule chain stamps into the RPC payload; the gateway computes latency = receiveTs − sendTs |
-| `GATEWAY_RPC_STATS_REPORT_INTERVAL_SEC` | `10` | Interval (s) for the RPC latency log line; always logs while `GATEWAY_RPC_ENABLED` (independent of `GATEWAY_STATS_REPORT`); `<=0` disables |
 | `GATEWAY_RPC_SENDER_ENABLED` | `false` | In-tool load driver: after warmup, fire boundary-aligned rule-engine RPC bursts for this instance's device range. Requires `GATEWAY_RPC_ENABLED`; use `MESSAGES_PER_SECOND=0` |
 | `GATEWAY_RPC_SENDER_TEMPLATE` | _(empty)_ | Filesystem path to a `{method, params}` JSON command body (the sender appends the chunked `devices[]`); empty = built-in neutral default |
 | `GATEWAY_RPC_SENDER_INTERVAL_SEC` | `60` | Burst cadence (s). Bursts fire on round clock times (multiples of this, e.g. every whole minute), so separate instances with accurate clocks fire together without coordinating |
@@ -121,6 +120,17 @@ Concrete executors:
 
 The active gateway bean is selected by mutually-exclusive `@ConditionalOnExpression` on `gateway.batch` × `gateway.ephemeral.enabled`. Batch publishing delegates the per-publish decision to a `nextPublishTask` hook on `BaseMqttAPITest`; ephemeral mode drives its own per-gateway cycle scheduler (timing math in `EphemeralSchedule`) instead of the fixed-rate metronome.
 
+**Unified stats reporting (`StatsReporter`):** one periodic reporter, one interval
+(`stats.log.enabled` / `stats.log.intervalSec`, env `STATS_LOG_ENABLED` / `STATS_LOG_INTERVAL_SEC`),
+shared by every mode. Each active mode registers only the `StatsBlock`s relevant to it, and the
+reporter logs every registered block once per interval, in a fixed order, on the shared log scheduler
+(never the test metronome): `CONNECTIONS` for fixed-fleet MQTT gateways/devices (live/target vs.
+disconnects/reconnects), `THROUGHPUT` whenever publishing is active (registered by the shared
+`AbstractAPITest.runApiTests` metronome, so it also covers `HttpDeviceAPITest`), `RPC` when
+`GATEWAY_RPC_ENABLED=true`, and `EPHEMERAL` for churn-mode gateways. A block that throws is skipped for
+that tick without affecting the others or the schedule. The old per-gateway `TB` `{"msgCount":0}`
+publish is gone — stats reporting is log-only now.
+
 **Gateway RPC receive (`GATEWAY_RPC_ENABLED`):** layered onto the persistent gateway modes (not a
 separate executor). After connect, each gateway subscribes to `v1/gateway/rpc` via a reusable
 `GatewayRpcReceiver` (package `service/gateway/rpc/`): inbound commands are parsed, one-way delivery
@@ -128,10 +138,10 @@ latency (`receiveTs − sendTs`, send-timestamp stamped by the rule chain) is re
 commons-math3 `DescriptiveStatistics` accumulator (`RpcLatencyStats`, reported as mean/p50/p95/p99/max),
 and a configurable response (`RpcResponseTemplate`) is published to close the two-way RPC. Ephemeral
 mode rejects the flag (it can't hold a subscription). Measurement assumes NTP-synced clocks between
-TB and the tool host. RPC latency is logged every `GATEWAY_RPC_STATS_REPORT_INTERVAL_SEC` (default
-10s) whenever RPC is enabled — independent of `GATEWAY_STATS_REPORT`; `<=0` disables. With
-`MESSAGES_PER_SECOND=0` (pure RPC) the publish metronome is skipped and connections are just held open
-for the test duration. Clients that subscribe use a dedicated off-event-loop MQTT handler executor.
+TB and the tool host. RPC latency is logged as the `RPC` block of the unified `StatsReporter` above,
+every `STATS_LOG_INTERVAL_SEC`. With `MESSAGES_PER_SECOND=0` (pure RPC) the publish metronome is
+skipped and connections are just held open for the test duration. Clients that subscribe use a
+dedicated off-event-loop MQTT handler executor.
 
 **Gateway RPC burst sender (`GATEWAY_RPC_SENDER_ENABLED`):** an in-tool load driver layered on the
 persistent gateway mode (same instance receives + measures what it triggers). After warmup,
