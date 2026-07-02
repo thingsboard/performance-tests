@@ -17,6 +17,8 @@ package org.thingsboard.tools.service.shared;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ConnectionTrackingCallbackTest {
@@ -64,5 +66,37 @@ class ConnectionTrackingCallbackTest {
         cb.connectionLost(new RuntimeException("reset again"));
         assertThat(stats.getDisconnects()).isEqualTo(1);
         assertThat(stats.getLive()).isEqualTo(0);
+    }
+
+    @Test
+    void onSuccessfulReconnectInvokesAction() {
+        ConnectionStats stats = new ConnectionStats();
+        ConnectionTrackingCallback cb = new ConnectionTrackingCallback(stats);
+        AtomicInteger calls = new AtomicInteger();
+        cb.setOnReconnect(calls::incrementAndGet);
+        cb.onSuccessfulReconnect();
+        assertThat(calls.get()).isEqualTo(1);
+    }
+
+    @Test
+    void onSuccessfulReconnectWithNoActionIsSafe() {
+        ConnectionStats stats = new ConnectionStats();
+        ConnectionTrackingCallback cb = new ConnectionTrackingCallback(stats);
+        cb.onSuccessfulReconnect(); // no action set — must not throw
+        assertThat(stats.getReconnects()).isEqualTo(0);
+    }
+
+    @Test
+    void reconnectActionDoesNotPerturbStatsClassification() {
+        ConnectionStats stats = new ConnectionStats();
+        ConnectionTrackingCallback cb = new ConnectionTrackingCallback(stats);
+        cb.setOnReconnect(() -> { });
+        cb.onConnAck(null);                        // connect
+        cb.connectionLost(new RuntimeException());  // disconnect
+        cb.onSuccessfulReconnect();                 // fires action; must not touch stats
+        cb.onConnAck(null);                         // reconnect (stats)
+        assertThat(stats.getConnects()).isEqualTo(1);
+        assertThat(stats.getReconnects()).isEqualTo(1);
+        assertThat(stats.getDisconnects()).isEqualTo(1);
     }
 }

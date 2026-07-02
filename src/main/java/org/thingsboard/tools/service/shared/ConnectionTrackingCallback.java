@@ -24,17 +24,23 @@ import org.thingsboard.mqtt.MqttClientCallback;
  * up is a disconnect. Two flags keep this correct without shared per-client state:
  * {@code everConnected} distinguishes the first connect from later reconnects, {@code up} guards
  * against duplicate CONNACK/close events. Reconnect is classified via {@code onConnAck} (which the
- * client fires on every CONNACK, initial and reconnect); {@code onSuccessfulReconnect} is left as a
- * no-op to avoid double counting.
+ * client fires on every CONNACK, initial and reconnect). Reconnect COUNTING stays in {@code onConnAck}
+ * to avoid double counting; {@code onSuccessfulReconnect} runs only an optional recovery action.
  */
 public class ConnectionTrackingCallback implements MqttClientCallback {
 
     private final ConnectionStats stats;
     private boolean everConnected;
     private boolean up;
+    private volatile Runnable onReconnect;
 
     public ConnectionTrackingCallback(ConnectionStats stats) {
         this.stats = stats;
+    }
+
+    /** Optional action run when the client reconnects (e.g. re-subscribe + re-announce). */
+    public void setOnReconnect(Runnable onReconnect) {
+        this.onReconnect = onReconnect;
     }
 
     @Override
@@ -59,6 +65,11 @@ public class ConnectionTrackingCallback implements MqttClientCallback {
 
     @Override
     public void onSuccessfulReconnect() {
-        // Reconnects are classified in onConnAck; overriding here would double count.
+        // Reconnect COUNTING stays in onConnAck (avoids double count); this hook runs an optional
+        // recovery action (re-subscribe + re-announce) that a subscriber registers per client.
+        Runnable action = onReconnect;
+        if (action != null) {
+            action.run();
+        }
     }
 }
