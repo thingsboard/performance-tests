@@ -34,6 +34,7 @@ import org.thingsboard.tools.service.gateway.rpc.RpcMessageProcessor;
 import org.thingsboard.tools.service.gateway.rpc.RpcResponseTemplate;
 import org.thingsboard.tools.service.mqtt.DeviceClient;
 import org.thingsboard.tools.service.shared.BaseMqttAPITest;
+import org.thingsboard.tools.service.shared.StatsBlock;
 
 import jakarta.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
@@ -44,8 +45,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -73,8 +72,6 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     String rpcResponseTemplate;
     @Value("${gateway.rpc.sendTsPath:data.params.sendTs}")
     String rpcSendTsPath;
-    @Value("${gateway.rpc.statsReportIntervalSec:10}")
-    int rpcStatsReportIntervalSec;
 
     @Value("${gateway.rpc.sender.enabled:false}")
     boolean rpcSenderEnabled;
@@ -102,7 +99,6 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
 
     private final RpcLatencyStats rpcLatencyStats = new RpcLatencyStats();
     private GatewayRpcReceiver rpcReceiver;
-    private ScheduledFuture<?> rpcStatsReportFuture;
 
     private List<Device> gateways = Collections.synchronizedList(new ArrayList<>(1024));
 
@@ -280,23 +276,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
                 reannounceDevices(client);
             });
         }
-        scheduleRpcStatsReporting();
-    }
-
-    protected void scheduleRpcStatsReporting() {
-        if (rpcStatsReportIntervalSec <= 0) {
-            log.info("Gateway RPC stats reporting disabled (gateway.rpc.statsReportIntervalSec <= 0)");
-            return;
-        }
-        // RPC stats always log when RPC is enabled, independent of GATEWAY_STATS_REPORT. Emitted on the
-        // log scheduler (separate pool from the test metronome); stored so it can be cancelled if a
-        // teardown path is added — today it stops on JVM exit after the test.
-        rpcStatsReportFuture = restClientService.getLogScheduler().scheduleAtFixedRate(
-                () -> {
-                    log.info(rpcReceiver.statsSummaryAndReset(rpcStatsReportIntervalSec));
-                    log.info(connectionStats.summaryAndReset(rpcStatsReportIntervalSec));
-                },
-                rpcStatsReportIntervalSec, rpcStatsReportIntervalSec, TimeUnit.SECONDS);
+        statsReporter().register(StatsBlock.RPC, rpcReceiver::statsSummaryAndReset);
     }
 
     @Override
