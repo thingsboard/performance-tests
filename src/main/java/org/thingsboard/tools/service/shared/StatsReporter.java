@@ -69,8 +69,11 @@ public class StatsReporter {
         future = scheduler.scheduleAtFixedRate(this::report, intervalSec, intervalSec, TimeUnit.SECONDS);
     }
 
-    /** Emit one report immediately (used for a final flush at shutdown). */
+    /** Emit one report immediately (used for a final flush at shutdown). No-op when logging is disabled. */
     public void reportOnce() {
+        if (!enabled || intervalSec <= 0) {
+            return;
+        }
         report();
     }
 

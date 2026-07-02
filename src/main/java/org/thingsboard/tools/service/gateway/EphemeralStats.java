@@ -47,7 +47,7 @@ public class EphemeralStats {
 
     public void onCycleComplete(long wallMillis) {
         cycleWallMillisTotal.addAndGet(wallMillis);
-        cycles.incrementAndGet();
+        cycles.incrementAndGet(); // Note: cycleWallMillisTotal and cycles updates are intentionally non-atomic; a report racing between them may skew one window's avgCycleWall slightly (accepted tradeoff).
     }
 
     public synchronized String summaryAndReset(int windowSec) {

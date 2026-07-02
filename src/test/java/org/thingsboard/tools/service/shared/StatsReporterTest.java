@@ -58,4 +58,22 @@ class StatsReporterTest {
         List<String> lines = r.collect();
         assertThat(lines).containsExactly("thr 10");
     }
+
+    @Test
+    void reportOnceIsNoOpWhenDisabled() {
+        StatsReporter r = new StatsReporter(null, false, 10); // enabled=false
+        AtomicInteger calls = new AtomicInteger();
+        r.register(StatsBlock.CONNECTIONS, w -> { calls.incrementAndGet(); return "x"; });
+        r.reportOnce();
+        assertThat(calls.get()).isEqualTo(0);
+    }
+
+    @Test
+    void reportOnceEmitsWhenEnabled() {
+        StatsReporter r = new StatsReporter(null, true, 10);
+        AtomicInteger calls = new AtomicInteger();
+        r.register(StatsBlock.CONNECTIONS, w -> { calls.incrementAndGet(); return "x"; });
+        r.reportOnce();
+        assertThat(calls.get()).isEqualTo(1);
+    }
 }
