@@ -240,6 +240,7 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
             client.disconnect();
         } catch (Exception ignored) {
         }
+        forgetClient(client);
         cycleWallMillisTotal.addAndGet(System.currentTimeMillis() - start);
         cyclesCompleted.incrementAndGet();
         connectPermits.release();
