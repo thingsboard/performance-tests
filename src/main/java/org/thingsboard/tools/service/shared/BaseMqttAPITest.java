@@ -91,6 +91,11 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
     // ConnectionTrackingCallback registered in createClient; emitted by each gateway mode's reporter.
     protected final ConnectionStats connectionStats = new ConnectionStats();
 
+    // Per-client callback references, so a subscriber (e.g. the RPC receiver) can register a reconnect
+    // recovery action after createClient has already installed the callback. MqttClient exposes no
+    // callback getter, so we retain the mapping ourselves (like clientNames).
+    protected final Map<MqttClient, ConnectionTrackingCallback> connectionCallbacks = new ConcurrentHashMap<>();
+
     protected final List<DeviceClient> deviceClients = Collections.synchronizedList(new ArrayList<>(1024 * 16));
 
     @PostConstruct
@@ -223,8 +228,19 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
         config.setUsername(token);
         MqttClient client = MqttClient.create(config, null, mqttHandlerExecutor);
         client.setEventLoop(EVENT_LOOP_GROUP);
-        client.setCallback(new ConnectionTrackingCallback(connectionStats));
+        ConnectionTrackingCallback callback = new ConnectionTrackingCallback(connectionStats);
+        client.setCallback(callback);
+        connectionCallbacks.put(client, callback);
         return client;
+    }
+
+    /** Register a recovery action to run when the given client reconnects. No-op if the client has no
+     *  tracked callback (e.g. it was never created via createClient). */
+    protected void setReconnectAction(MqttClient client, Runnable action) {
+        ConnectionTrackingCallback callback = connectionCallbacks.get(client);
+        if (callback != null) {
+            callback.setOnReconnect(action);
+        }
     }
 
     /** Initiates a non-blocking connect; the returned Netty Future completes with the broker result. */
