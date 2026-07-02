@@ -74,8 +74,6 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
     protected final AtomicInteger connectFailed = new AtomicInteger();
     protected final AtomicInteger publishSuccess = new AtomicInteger();
     protected final AtomicInteger publishFailed = new AtomicInteger();
-    protected final AtomicInteger liveConnections = new AtomicInteger();
-    protected final AtomicInteger peakConnections = new AtomicInteger();
     protected final AtomicLong cycleWallMillisTotal = new AtomicLong();
     protected final AtomicInteger cyclesCompleted = new AtomicInteger();
 
@@ -188,7 +186,6 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
         }
         connectAttempts.incrementAndGet();
         connectPermits.acquireUninterruptibly();
-        updatePeak(liveConnections.incrementAndGet());
         final long start = System.currentTimeMillis();
         final MqttClient client = createClient(target.gatewayName());
         final Future<MqttConnectResult> connectFuture = connectAsync(client);
@@ -245,7 +242,6 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
         }
         cycleWallMillisTotal.addAndGet(System.currentTimeMillis() - start);
         cyclesCompleted.incrementAndGet();
-        liveConnections.decrementAndGet();
         connectPermits.release();
         scheduleNext(target);
     }
@@ -273,18 +269,15 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
         return jitterSec * 1000L;
     }
 
-    private void updatePeak(int live) {
-        peakConnections.accumulateAndGet(live, Math::max);
-    }
-
     protected void logStats() {
         int completed = cyclesCompleted.get();
         long elapsedSec = Math.max(1, (System.currentTimeMillis() - testStartMillis) / 1000);
         double connectsPerSec = (double) connectAttempts.get() / elapsedSec;
         long avgCycleWallMs = completed == 0 ? 0 : cycleWallMillisTotal.get() / completed;
-        log.info("Ephemeral stats: attempts={}, connectOk={}, connectFail={}, publishOk={}, publishFail={}, live={}, peak={}, ~{} connects/s, avgCycleWall={}ms",
+        log.info(connectionStats.summaryAndReset(10));
+        log.info("Ephemeral stats: attempts={}, connectOk={}, connectFail={}, publishOk={}, publishFail={}, ~{} connects/s, avgCycleWall={}ms",
                 connectAttempts.get(), connectSuccess.get(), connectFailed.get(),
-                publishSuccess.get(), publishFailed.get(), liveConnections.get(), peakConnections.get(),
+                publishSuccess.get(), publishFailed.get(),
                 String.format("%.1f", connectsPerSec), avgCycleWallMs);
     }
 }
