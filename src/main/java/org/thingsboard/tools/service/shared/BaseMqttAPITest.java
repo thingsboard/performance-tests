@@ -72,9 +72,9 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
     String mqttSslKeyStore;
     @Value("${mqtt.ssl.key_store_password}")
     String mqttSslKeyStorePassword;
-    @Value("${mqtt.keepAliveSec:-1}")
+    @Value("${mqtt.keepAliveSec:0}")
     private int mqttKeepAliveSec;
-    @Value("${mqtt.reconnectDelayMs:-1}")
+    @Value("${mqtt.reconnectDelayMs:0}")
     private long mqttReconnectDelayMs;
 
     @Value("${gateway.statsReport:TB}")
@@ -230,7 +230,7 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
     protected MqttClient createClient(String token) {
         MqttClientConfig config = new MqttClientConfig(getSslContext());
         config.setUsername(token);
-        // <= 0 (incl. the -1 sentinel) leaves the client-library default untouched; only a positive value overrides.
+        // <= 0 (incl. the 0 default) leaves the client-library default untouched; only a positive value overrides.
         if (mqttKeepAliveSec > 0) {
             config.setTimeoutSeconds(mqttKeepAliveSec);
         }
