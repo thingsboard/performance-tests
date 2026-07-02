@@ -87,6 +87,10 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
     // way to label a client by its actual entity name.
     protected final Map<MqttClient, String> clientNames = new ConcurrentHashMap<>();
 
+    // Aggregate MQTT connection health across every client this test creates. Fed by a per-client
+    // ConnectionTrackingCallback registered in createClient; emitted by each gateway mode's reporter.
+    protected final ConnectionStats connectionStats = new ConnectionStats();
+
     protected final List<DeviceClient> deviceClients = Collections.synchronizedList(new ArrayList<>(1024 * 16));
 
     @PostConstruct
@@ -219,6 +223,7 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
         config.setUsername(token);
         MqttClient client = MqttClient.create(config, null, mqttHandlerExecutor);
         client.setEventLoop(EVENT_LOOP_GROUP);
+        client.setCallback(new ConnectionTrackingCallback(connectionStats));
         return client;
     }
 
