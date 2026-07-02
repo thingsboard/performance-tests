@@ -254,12 +254,6 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
         }
     }
 
-    /** Drop a client's tracked callback (call when a client is permanently disconnected, e.g. an
-     *  ephemeral cycle end) so connectionCallbacks does not grow unbounded. */
-    protected void forgetClient(MqttClient client) {
-        connectionCallbacks.remove(client);
-    }
-
     /** Initiates a non-blocking connect; the returned Netty Future completes with the broker result. */
     protected Future<MqttConnectResult> connectAsync(MqttClient client) {
         return client.connect(mqttHost, mqttPort);

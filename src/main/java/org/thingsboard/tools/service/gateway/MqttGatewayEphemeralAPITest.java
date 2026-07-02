@@ -240,7 +240,8 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
             client.disconnect();
         } catch (Exception ignored) {
         }
-        forgetClient(client);
+        // Drop the throwaway cycle client from the shared callback map so it does not grow unbounded.
+        connectionCallbacks.remove(client);
         cycleWallMillisTotal.addAndGet(System.currentTimeMillis() - start);
         cyclesCompleted.incrementAndGet();
         connectPermits.release();
