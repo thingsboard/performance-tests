@@ -158,6 +158,9 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         if (pack != null && !pack.isEmpty()) {
             connectDevices(pack, totalConnectedCount, true);
         }
+        // Fixed persistent fleet: publish the target so the connection line shows live=<n>/<target>.
+        // Ephemeral overrides connectGateways and does not call this, so churn mode omits the target.
+        connectionStats.setTarget(mqttClients.size());
         scheduleGatewayStatsReporting();
         mapDevicesToGatewayClientConnections();
         if (rpcEnabled) {
@@ -261,7 +264,10 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         // log scheduler (separate pool from the test metronome); stored so it can be cancelled if a
         // teardown path is added — today it stops on JVM exit after the test.
         rpcStatsReportFuture = restClientService.getLogScheduler().scheduleAtFixedRate(
-                () -> log.info(rpcReceiver.statsSummaryAndReset(rpcStatsReportIntervalSec)),
+                () -> {
+                    log.info(rpcReceiver.statsSummaryAndReset(rpcStatsReportIntervalSec));
+                    log.info(connectionStats.summaryAndReset(rpcStatsReportIntervalSec));
+                },
                 rpcStatsReportIntervalSec, rpcStatsReportIntervalSec, TimeUnit.SECONDS);
     }
 
