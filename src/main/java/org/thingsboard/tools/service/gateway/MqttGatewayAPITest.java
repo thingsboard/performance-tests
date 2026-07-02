@@ -17,6 +17,7 @@ package org.thingsboard.tools.service.gateway;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.mqtt.MqttQoS;
 import io.netty.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
@@ -38,7 +39,9 @@ import jakarta.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledFuture;
@@ -105,6 +108,9 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
 
     protected int gatewayStartIdx;
     protected int gatewayEndIdx;
+
+    // Gateway client -> its sub-device names, for re-announcing sub-devices on reconnect.
+    private final Map<MqttClient, List<String>> gatewayDeviceNames = new HashMap<>();
 
 
     @PostConstruct
@@ -179,6 +185,21 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
             client.setDeviceName(getToken(false, i));
             client.setGatewayName(clientNames.get(gatewayClient));
             deviceClients.add(client);
+            gatewayDeviceNames.computeIfAbsent(gatewayClient, k -> new ArrayList<>())
+                    .add(client.getDeviceName());
+        }
+    }
+
+    /** Re-announce a reconnected gateway's sub-devices so the server re-routes their RPC through it.
+     *  Reuses the gateway connect topic and payload used at warm-up. */
+    private void reannounceDevices(MqttClient gatewayClient) {
+        List<String> deviceNames = gatewayDeviceNames.get(gatewayClient);
+        if (deviceNames == null) {
+            return;
+        }
+        for (String deviceName : deviceNames) {
+            gatewayClient.publish(getWarmUpTopic(), Unpooled.wrappedBuffer(getData(deviceName)),
+                    MqttQoS.AT_MOST_ONCE);
         }
     }
 
@@ -252,6 +273,14 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         RpcMessageProcessor processor = new RpcMessageProcessor(mapper, rpcSendTsPath, rpcRespond, template, rpcLatencyStats);
         rpcReceiver = new GatewayRpcReceiver(rpcTopic, MqttQoS.AT_LEAST_ONCE, processor, rpcLatencyStats, rpcResponseDelayMs);
         rpcReceiver.attach(mqttClients);
+        // On reconnect, a gateway loses its RPC subscription (cleanSession) and its server-side
+        // sub-device routing; restore both so RPC delivery resumes instead of silently dropping.
+        for (MqttClient client : mqttClients) {
+            setReconnectAction(client, () -> {
+                rpcReceiver.resubscribe(client);
+                reannounceDevices(client);
+            });
+        }
         scheduleRpcStatsReporting();
     }
 
