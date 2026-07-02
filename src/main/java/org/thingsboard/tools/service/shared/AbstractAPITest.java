@@ -59,6 +59,20 @@ public abstract class AbstractAPITest {
 
     protected ScheduledFuture<?> reportScheduledFuture;
 
+    @Value("${stats.log.enabled:true}")
+    protected boolean statsLogEnabled;
+    @Value("${stats.log.intervalSec:10}")
+    protected int statsLogIntervalSec;
+
+    private StatsReporter statsReporter;
+
+    protected synchronized StatsReporter statsReporter() {
+        if (statsReporter == null) {
+            statsReporter = new StatsReporter(restClientService.getLogScheduler(), statsLogEnabled, statsLogIntervalSec);
+        }
+        return statsReporter;
+    }
+
     @Value("${device.startIdx}")
     protected int deviceStartIdxConfig;
     @Value("${device.endIdx}")
@@ -173,6 +187,9 @@ public abstract class AbstractAPITest {
         if (reportScheduledFuture != null) {
             reportScheduledFuture.cancel(true);
         }
+        if (statsReporter != null) {
+            statsReporter.stop();
+        }
     }
 
     protected void createDevices(boolean setCredentials) throws Exception {
@@ -181,6 +198,11 @@ public abstract class AbstractAPITest {
     }
 
     protected void runApiTests(int deviceCount) throws InterruptedException {
+        if (testMessagesPerSecond > 0) {
+            statsReporter().register(StatsBlock.THROUGHPUT,
+                    new ThroughputStats(totalSuccessPublishedCount, totalFailedPublishedCount)::summaryAndReset);
+        }
+        statsReporter().start();
         if (testMessagesPerSecond <= 0) {
             // No-publish mode (e.g. pure RPC receive): skip the sort/shuffle and the per-second
             // metronome entirely; just hold the open connections for the test duration. The async
