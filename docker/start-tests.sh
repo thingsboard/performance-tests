@@ -15,11 +15,13 @@
 # limitations under the License.
 #
 
-CONF_FOLDER="${pkg.installFolder}/conf"
+CONF_FOLDER="/config"
 jarfile=${pkg.installFolder}/bin/${pkg.name}.jar
 configfile=${pkg.name}.conf
 
 source "${CONF_FOLDER}/${configfile}"
+
+export LOADER_PATH=/config,${LOADER_PATH}
 
 echo "Starting ThingsBoard Performance Test..."
 
