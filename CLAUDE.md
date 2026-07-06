@@ -90,6 +90,8 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `GATEWAY_RPC_RESPONSE_DELAY_MS` | `0` | Delay (ms) before publishing the device reply. `0` = reply immediately; `>0` exercises the delayed-response case. Scheduled on the client's netty event loop (no extra threads, inbound handler not blocked) |
 | `GATEWAY_RPC_RESPONSE_TEMPLATE` | _(empty)_ | Filesystem path to a response template JSON (placeholders `${now}` and `${<dot.path>}` into the request); empty = built-in neutral `ACCEPTED` template |
 | `GATEWAY_RPC_SEND_TS_PATH` | `data.params.sendTs` | Dot-path to the send-timestamp (epoch ms) the rule chain stamps into the RPC payload; the gateway computes latency = receiveTs − sendTs |
+| `GATEWAY_RPC_DRAIN_QUIET_SEC` | `5` | After the load window ends, inbound RPC must be idle this long before the tail is considered settled (drain exits early). Only relevant with `GATEWAY_RPC_ENABLED=true` |
+| `GATEWAY_RPC_DRAIN_MAX_SEC` | `0` (auto) | Hard cap on the post-window drain phase so it can never hang. `>0` = explicit seconds; `0` = auto (sender on: `GATEWAY_RPC_SENDER_TIMEOUT_MS + GATEWAY_RPC_RESPONSE_DELAY_MS + 5s`; sender off: `30s`), floored to `>= QUIET_SEC` |
 | `GATEWAY_RPC_SENDER_ENABLED` | `false` | In-tool load driver: after warmup, fire boundary-aligned rule-engine RPC bursts for this instance's device range. Requires `GATEWAY_RPC_ENABLED`; use `MESSAGES_PER_SECOND=0` |
 | `GATEWAY_RPC_SENDER_TEMPLATE` | _(empty)_ | Filesystem path to a `{method, params}` JSON command body (the sender appends the chunked `devices[]`); empty = built-in neutral default |
 | `GATEWAY_RPC_SENDER_INTERVAL_SEC` | `60` | Burst cadence (s). Bursts fire on round clock times (multiples of this, e.g. every whole minute), so separate instances with accurate clocks fire together without coordinating |
@@ -141,7 +143,13 @@ mode rejects the flag (it can't hold a subscription). Measurement assumes NTP-sy
 TB and the tool host. RPC latency is logged as the `RPC` block of the unified `StatsReporter` above,
 every `STATS_LOG_INTERVAL_SEC`. With `MESSAGES_PER_SECOND=0` (pure RPC) the publish metronome is
 skipped and connections are just held open for the test duration. Clients that subscribe use a
-dedicated off-event-loop MQTT handler executor.
+dedicated off-event-loop MQTT handler executor. When the load window ends, the test stops the burst
+sender and enters a bounded **drain** phase (`GatewayRpcReceiver.drain`) that holds the receiver open
+until inbound RPC has been idle for `GATEWAY_RPC_DRAIN_QUIET_SEC` and outstanding replies have flushed
+(or a hard cap `GATEWAY_RPC_DRAIN_MAX_SEC` elapses), so the last burst's two-way RPCs are answered
+instead of being cut off. A final `Gateway RPC drain complete [...] quiesced=<bool>` line reports
+cumulative received/responded/errors/pending; the periodic `RPC` stats block also carries running
+`totals:`.
 
 **Gateway RPC burst sender (`GATEWAY_RPC_SENDER_ENABLED`):** an in-tool load driver layered on the
 persistent gateway mode (same instance receives + measures what it triggers). After warmup,

@@ -73,6 +73,11 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     @Value("${gateway.rpc.sendTsPath:data.params.sendTs}")
     String rpcSendTsPath;
 
+    @Value("${gateway.rpc.drain.quietSec:5}")
+    int rpcDrainQuietSec;
+    @Value("${gateway.rpc.drain.maxSec:0}")
+    long rpcDrainMaxSecConfig;
+
     @Value("${gateway.rpc.sender.enabled:false}")
     boolean rpcSenderEnabled;
     @Value("${gateway.rpc.sender.template:}")
@@ -206,8 +211,23 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         try {
             super.runApiTests(deviceClients.size());
         } finally {
+            // Stop firing new bursts BEFORE draining so the tail can settle without fresh inbound.
             if (rpcBurstSender != null) {
                 rpcBurstSender.stop();
+            }
+            if (rpcEnabled && rpcReceiver != null) {
+                long quietMs = rpcDrainQuietSec * 1000L;
+                long maxMs = GatewayRpcReceiver.resolveDrainMaxMs(
+                        rpcDrainMaxSecConfig, rpcSenderEnabled, rpcSenderTimeoutMs, rpcResponseDelayMs, rpcDrainQuietSec);
+                log.info("Gateway RPC drain: waiting for in-flight RPCs to settle (quietSec={}, maxSec={})...",
+                        rpcDrainQuietSec, maxMs / 1000);
+                GatewayRpcReceiver.DrainResult result = rpcReceiver.drain(quietMs, maxMs, rpcRespond);
+                String summary = rpcReceiver.drainSummary(result.elapsedMs, result.quiesced);
+                if (result.quiesced) {
+                    log.info(summary);
+                } else {
+                    log.warn(summary);
+                }
             }
         }
     }

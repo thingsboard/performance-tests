@@ -170,6 +170,9 @@ gateway:
     responseDelayMs: "${GATEWAY_RPC_RESPONSE_DELAY_MS:0}" # delay (ms) before publishing the device reply. 0 = reply immediately; >0 exercises the delayed-response case
     responseTemplate: "${GATEWAY_RPC_RESPONSE_TEMPLATE:}" # filesystem path to a response template JSON; empty = built-in neutral ACCEPTED template
     sendTsPath: "${GATEWAY_RPC_SEND_TS_PATH:data.params.sendTs}" # dot-path to the send-timestamp (epoch ms) the rule chain stamps into the RPC payload
+    drain:
+      quietSec: "${GATEWAY_RPC_DRAIN_QUIET_SEC:5}" # inbound RPC must be idle this long before the tail is called settled (drain exits early)
+      maxSec: "${GATEWAY_RPC_DRAIN_MAX_SEC:0}" # hard cap on the post-window drain. >0 = explicit seconds; 0 = auto (sender on: timeoutMs+responseDelayMs+5s; sender off: 30s), floored to >= quietSec
     sender:
       enabled: "${GATEWAY_RPC_SENDER_ENABLED:false}" # true = this instance fires boundary-aligned rule-engine RPC bursts for its device range (requires gateway.rpc.enabled; use MESSAGES_PER_SECOND=0)
       template: "${GATEWAY_RPC_SENDER_TEMPLATE:}" # filesystem path to a {method, params} JSON command body; empty = built-in neutral default

@@ -147,7 +147,7 @@ public class GatewayRpcReceiver {
      * expiration = timeout): {@code senderTimeoutMs + responseDelayMs + 5s margin}. Sender off → fixed
      * 30s fallback. Always floored to {@code >= quietSec}.
      */
-    static long resolveDrainMaxMs(long overrideSec, boolean senderEnabled, long senderTimeoutMs,
+    public static long resolveDrainMaxMs(long overrideSec, boolean senderEnabled, long senderTimeoutMs,
                                   long responseDelayMs, long quietSec) {
         long maxMs;
         if (overrideSec > 0) {
