@@ -69,4 +69,49 @@ class RpcLatencyStatsTest {
         RpcLatencyStats s = new RpcLatencyStats();
         assertThat(s.summaryAndReset(60)).contains("measured 0 RPCs");
     }
+
+    @Test
+    void incReceivedStampsTotalAndLastInbound() {
+        RpcLatencyStats s = new RpcLatencyStats();
+        s.incReceived(12345L);
+        s.incReceived(67890L);
+        assertThat(s.getReceivedTotal()).isEqualTo(2);
+        assertThat(s.getLastInboundMs()).isEqualTo(67890L);
+    }
+
+    @Test
+    void cumulativeTotalsSurviveIntervalReset() {
+        RpcLatencyStats s = new RpcLatencyStats();
+        s.incReceived(1000L);
+        s.incResponsesSent();
+        s.incResponseErrors();
+        s.summaryAndReset(60); // clears interval counters, not cumulative
+        assertThat(s.getReceivedTotal()).isEqualTo(1);
+        assertThat(s.getRespondedTotal()).isEqualTo(2); // sent + errors
+        assertThat(s.getResponsesSent()).isEqualTo(0);  // interval counter did reset
+    }
+
+    @Test
+    void summaryIncludesRunningTotals() {
+        RpcLatencyStats s = new RpcLatencyStats();
+        s.incReceived(1000L);
+        s.recordLatency(150);
+        s.incResponsesSent();
+        String line = s.summaryAndReset(10);
+        assertThat(line).contains("totals: received 1, responded 1, errors 0");
+    }
+
+    @Test
+    void drainSummaryRendersQuiescedAndCapped() {
+        RpcLatencyStats s = new RpcLatencyStats();
+        s.incReceived(1000L);
+        s.incReceived(1000L);
+        s.incResponsesSent();
+        String ok = s.drainSummary(6200L, true);
+        assertThat(ok).contains("drained 6.2s").contains("quiesced=true")
+                .contains("received total 2").contains("responded total 1")
+                .contains("errors 0").contains("pending 1");
+        String capped = s.drainSummary(15000L, false);
+        assertThat(capped).contains("drained 15.0s").contains("quiesced=false");
+    }
 }
