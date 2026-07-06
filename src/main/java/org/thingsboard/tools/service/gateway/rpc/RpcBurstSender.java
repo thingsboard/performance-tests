@@ -36,6 +36,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 public class RpcBurstSender {
@@ -58,6 +59,8 @@ public class RpcBurstSender {
     private ScheduledFuture<?> burstFuture;
     private List<List<String>> chunks;
     private String ruleEngineUrl;
+    private final AtomicLong burstsFired = new AtomicLong();
+    private final AtomicLong devicesDispatched = new AtomicLong();
 
     public RpcBurstSender(RestClient restClient, String restUrl, List<String> deviceNames,
                           JsonNode commandTemplate, String queue, int timeoutMs, int chunkSize,
@@ -101,6 +104,7 @@ public class RpcBurstSender {
     }
 
     private void fireBurst() {
+        recordBurst(deviceNames.size());
         long startedAt = System.currentTimeMillis();
         AtomicInteger ok = new AtomicInteger();
         AtomicInteger failed = new AtomicInteger();
@@ -131,7 +135,18 @@ public class RpcBurstSender {
                 deviceNames.size(), ok.get(), failed.get(), elapsed);
     }
 
+    void recordBurst(int deviceCount) {
+        burstsFired.incrementAndGet();
+        devicesDispatched.addAndGet(deviceCount);
+    }
+
+    String dispatchSummary() {
+        return String.format("RPC burst sender stopped: %d bursts fired, %d device-RPCs dispatched",
+                burstsFired.get(), devicesDispatched.get());
+    }
+
     public void stop() {
+        log.info(dispatchSummary());
         if (burstFuture != null) {
             burstFuture.cancel(true);
         }
