@@ -34,6 +34,8 @@ public class GatewayRpcReceiver {
     private final RpcLatencyStats stats;
     private final long responseDelayMs;
 
+    private static final long DRAIN_POLL_MS = 500L;
+
     public GatewayRpcReceiver(String topic, MqttQoS qos, RpcMessageProcessor processor,
                               RpcLatencyStats stats, long responseDelayMs) {
         this.topic = topic;
@@ -101,5 +103,70 @@ public class GatewayRpcReceiver {
 
     public String statsSummaryAndReset(int intervalSec) {
         return stats.summaryAndReset(intervalSec);
+    }
+
+    /**
+     * After the load window ends and the burst sender is stopped, wait for the last burst's in-flight
+     * RPCs to settle. Observation only — responses flow asynchronously via the publish listener; this
+     * loop just watches the shared stats. Exits early ({@code quiesced=true}) once inbound has been idle
+     * for {@code quietMs} and, when {@code respond} is true, every received RPC has been answered; or at
+     * {@code maxMs} ({@code quiesced=false}) so it can never hang.
+     */
+    public DrainResult drain(long quietMs, long maxMs, boolean respond) {
+        long start = System.currentTimeMillis();
+        long deadline = start + maxMs;
+        while (true) {
+            long now = System.currentTimeMillis();
+            long idle = now - stats.getLastInboundMs();
+            long pending = stats.getReceivedTotal() - stats.getRespondedTotal();
+            if (idle >= quietMs && (!respond || pending <= 0)) {
+                return new DrainResult(true, now - start);
+            }
+            if (now >= deadline) {
+                return new DrainResult(false, now - start);
+            }
+            long sleep = Math.min(DRAIN_POLL_MS, deadline - now);
+            if (sleep > 0) {
+                try {
+                    Thread.sleep(sleep);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return new DrainResult(false, System.currentTimeMillis() - start);
+                }
+            }
+        }
+    }
+
+    public String drainSummary(long elapsedMs, boolean quiesced) {
+        return stats.drainSummary(elapsedMs, quiesced);
+    }
+
+    /**
+     * Resolve the drain hard-cap in milliseconds. {@code overrideSec > 0} wins. Otherwise, with the
+     * in-tool sender on, derive from the RPC timeout (an RPC cannot arrive after its server-side
+     * expiration = timeout): {@code senderTimeoutMs + responseDelayMs + 5s margin}. Sender off → fixed
+     * 30s fallback. Always floored to {@code >= quietSec}.
+     */
+    static long resolveDrainMaxMs(long overrideSec, boolean senderEnabled, long senderTimeoutMs,
+                                  long responseDelayMs, long quietSec) {
+        long maxMs;
+        if (overrideSec > 0) {
+            maxMs = overrideSec * 1000L;
+        } else if (senderEnabled) {
+            maxMs = senderTimeoutMs + responseDelayMs + 5000L;
+        } else {
+            maxMs = 30_000L;
+        }
+        return Math.max(maxMs, quietSec * 1000L);
+    }
+
+    public static final class DrainResult {
+        public final boolean quiesced;
+        public final long elapsedMs;
+
+        DrainResult(boolean quiesced, long elapsedMs) {
+            this.quiesced = quiesced;
+            this.elapsedMs = elapsedMs;
+        }
     }
 }

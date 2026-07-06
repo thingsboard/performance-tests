@@ -106,6 +106,64 @@ class GatewayRpcReceiverTest {
         assertThat(fake.subscribedTopics).containsExactly("v1/gateway/rpc", "v1/gateway/rpc");
     }
 
+    @Test
+    void drainQuiescesImmediatelyWhenNothingReceived() {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        GatewayRpcReceiver r = receiver(stats);
+        GatewayRpcReceiver.DrainResult res = r.drain(1000L, 5000L, true);
+        assertThat(res.quiesced).isTrue();
+        assertThat(res.elapsedMs).isLessThan(1000L);
+    }
+
+    @Test
+    void drainSettlesWhenIdleAndRepliesCaughtUp() {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        stats.incReceived(System.currentTimeMillis() - 10_000L); // inbound 10s ago
+        stats.incResponsesSent();                                // reply already sent
+        GatewayRpcReceiver r = receiver(stats);
+        GatewayRpcReceiver.DrainResult res = r.drain(1000L, 5000L, true);
+        assertThat(res.quiesced).isTrue();
+    }
+
+    @Test
+    void drainReturnsCappedWhenInboundStaysActive() {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        stats.incReceived(System.currentTimeMillis()); // just received, reply still pending
+        GatewayRpcReceiver r = receiver(stats);
+        GatewayRpcReceiver.DrainResult res = r.drain(10_000L, 300L, true);
+        assertThat(res.quiesced).isFalse();
+        assertThat(res.elapsedMs).isGreaterThanOrEqualTo(300L);
+    }
+
+    @Test
+    void drainIgnoresPendingWhenRespondFalse() {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        stats.incReceived(System.currentTimeMillis() - 10_000L); // idle, but no reply sent
+        GatewayRpcReceiver r = receiver(stats);
+        GatewayRpcReceiver.DrainResult res = r.drain(1000L, 5000L, false);
+        assertThat(res.quiesced).isTrue();
+    }
+
+    @Test
+    void resolveDrainMaxMsExplicitOverride() {
+        assertThat(GatewayRpcReceiver.resolveDrainMaxMs(20, true, 10000, 0, 5)).isEqualTo(20_000L);
+    }
+
+    @Test
+    void resolveDrainMaxMsDerivesFromSenderTimeout() {
+        assertThat(GatewayRpcReceiver.resolveDrainMaxMs(0, true, 10000, 2000, 5)).isEqualTo(17_000L);
+    }
+
+    @Test
+    void resolveDrainMaxMsFallsBackWhenSenderOff() {
+        assertThat(GatewayRpcReceiver.resolveDrainMaxMs(0, false, 10000, 0, 5)).isEqualTo(30_000L);
+    }
+
+    @Test
+    void resolveDrainMaxMsFlooredToQuiet() {
+        assertThat(GatewayRpcReceiver.resolveDrainMaxMs(0, true, 100, 0, 60)).isEqualTo(60_000L);
+    }
+
     /** Minimal MqttClient test double: only on(3-arg), publish(3-arg) and isConnected are functional. */
     static class FakeMqttClient implements MqttClient {
         final List<String> subscribedTopics = new ArrayList<>();
