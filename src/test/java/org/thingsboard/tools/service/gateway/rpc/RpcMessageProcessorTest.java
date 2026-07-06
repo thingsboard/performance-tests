@@ -97,4 +97,20 @@ class RpcMessageProcessorTest {
         assertThat(out).isNull();
         assertThat(stats.getCount()).isEqualTo(1);
     }
+
+    @Test
+    void processCountsEveryInboundAndStampsLastInbound() {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        RpcResponseTemplate template = new RpcResponseTemplate("{\"ok\":true}");
+        RpcMessageProcessor p = new RpcMessageProcessor(
+                mapper, "data.params.sendTs", true, template, stats);
+
+        // valid message with sendTs
+        p.process("{\"device\":\"GW1\",\"data\":{\"params\":{\"sendTs\":1000}}}".getBytes(StandardCharsets.UTF_8), 9000L);
+        // malformed payload still counts as received
+        p.process("not json".getBytes(StandardCharsets.UTF_8), 9500L);
+
+        assertThat(stats.getReceivedTotal()).isEqualTo(2);
+        assertThat(stats.getLastInboundMs()).isEqualTo(9500L);
+    }
 }

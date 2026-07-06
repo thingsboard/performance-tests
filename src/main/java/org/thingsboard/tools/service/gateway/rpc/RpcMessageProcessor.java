@@ -47,6 +47,7 @@ public class RpcMessageProcessor {
     }
 
     public byte[] process(byte[] payload, long nowMs) {
+        stats.incReceived(nowMs);
         JsonNode request;
         try {
             request = mapper.readTree(payload);
