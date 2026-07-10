@@ -54,7 +54,8 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `MQTT_PORT` | `1883` | MQTT broker port (8883 for TLS) |
 | `MQTT_SSL_ENABLED` | `false` | Enable MQTT TLS |
 | `MQTT_KEEPALIVE_SEC` | `0` | MQTT keep-alive interval (seconds); only a positive value overrides, `0` = client default (60). Lower values send PINGREQ more often (keeps NLB idle timers fresh, surfaces dead sockets faster) |
-| `MQTT_RECONNECT_DELAY_MS` | `0` | Delay (ms) before the client auto-reconnects after a drop; only a positive value overrides, `0` = client default |
+| `MQTT_RECONNECT_MIN_DELAY_SEC` | `0` | Lower bound (seconds) of each client's reconnect delay after a drop. `min == max` (or `max = 0`) = constant delay for every client; both `0` = client-library default (1s). Whole-second granularity, 1s floor (netty-mqtt limits) |
+| `MQTT_RECONNECT_MAX_DELAY_SEC` | `0` | Upper bound (seconds). When `> MIN`, each client draws an independent uniform-random delay in `[MIN, MAX]` — spreads a fleet's reconnects so a bounced transport pod refills instead of staying empty (avoids the instant-reconnect stampede) |
 | `DEVICE_API` | `MQTT` | Device protocol: `MQTT`, `HTTP`, or `LWM2M` |
 | `TEST_API` | `device` | Test mode: `device`, `gateway`, or `lwm2m` |
 | `DEVICE_START_IDX` | `0` | First device index |
