@@ -46,7 +46,8 @@ mqtt:
   # Usually 1883 for MQTT or 8883 for MQTTS
   port: "${MQTT_PORT:1883}"
   keepAliveSec: "${MQTT_KEEPALIVE_SEC:0}" # MQTT keep-alive interval (s); set a positive value to override, 0 = client-library default (60). Lower = more frequent PINGREQ
-  reconnectDelayMs: "${MQTT_RECONNECT_DELAY_MS:0}" # delay (ms) before auto-reconnect after a drop; set a positive value to override, 0 = client-library default
+  reconnectMinDelaySec: "${MQTT_RECONNECT_MIN_DELAY_SEC:0}" # per-client reconnect delay lower bound (s). min==max (or max=0) => constant; max>min => random jitter per client; both 0 => library default (1s)
+  reconnectMaxDelaySec: "${MQTT_RECONNECT_MAX_DELAY_SEC:0}" # per-client reconnect delay upper bound (s). See reconnectMinDelaySec
   ssl:
     enabled: "${MQTT_SSL_ENABLED:false}"
     # Java keystore file mqttclient.jks. If not set, it will use a default trusted certs for Java like ca-certificates pre-installed. Use custom JKS truststore only to deal with self-managed certificates

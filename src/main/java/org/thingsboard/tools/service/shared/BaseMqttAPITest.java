@@ -46,6 +46,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -73,8 +74,14 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
     String mqttSslKeyStorePassword;
     @Value("${mqtt.keepAliveSec:0}")
     private int mqttKeepAliveSec;
-    @Value("${mqtt.reconnectDelayMs:0}")
-    private long mqttReconnectDelayMs;
+    // Per-client reconnect delay (seconds). min==max (or max<=0) => constant; max>min => uniform random
+    // per client. Both 0 => library default (1s). Whole-second granularity + 1s floor are netty-mqtt
+    // limits; see ReconnectDelay. Randomizing spreads a fleet's reconnects so a bounced transport pod
+    // refills instead of staying empty.
+    @Value("${mqtt.reconnectMinDelaySec:0}")
+    private long mqttReconnectMinDelaySec;
+    @Value("${mqtt.reconnectMaxDelaySec:0}")
+    private long mqttReconnectMaxDelaySec;
 
     protected final List<MqttClient> mqttClients = Collections.synchronizedList(new ArrayList<>(1024 * 16));
     // Maps each connected MQTT client to the name it connected with (gateway or device name).
@@ -96,6 +103,7 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
     @PostConstruct
     protected void init() {
         super.init();
+        log.info("MQTT reconnect delay: {}", ReconnectDelay.describe(mqttReconnectMinDelaySec, mqttReconnectMaxDelaySec));
         EVENT_LOOP_GROUP = new NioEventLoopGroup();
         if (isInboundHandlingEnabled()) {
             mqttHandlerExecutor = new AbstractListeningExecutor() {
@@ -225,8 +233,10 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
         if (mqttKeepAliveSec > 0) {
             config.setTimeoutSeconds(mqttKeepAliveSec);
         }
-        if (mqttReconnectDelayMs > 0) {
-            config.setReconnectDelay(mqttReconnectDelayMs);
+        long reconnectDelaySec = ReconnectDelay.resolveSec(
+                mqttReconnectMinDelaySec, mqttReconnectMaxDelaySec, ThreadLocalRandom.current());
+        if (reconnectDelaySec > 0) {
+            config.setReconnectDelay(reconnectDelaySec);
         }
         MqttClient client = MqttClient.create(config, null, mqttHandlerExecutor);
         client.setEventLoop(EVENT_LOOP_GROUP);
