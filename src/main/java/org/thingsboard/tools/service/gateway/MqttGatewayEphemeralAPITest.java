@@ -87,6 +87,15 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
         }
     }
 
+    /** Ephemeral cycle clients are throwaway: connect→publish→disconnect. They must never
+     *  auto-reconnect — a server close mid-cycle (e.g. a transport roll) would otherwise race with
+     *  finishCycle's disconnect() and open an untracked orphan session that accumulates above
+     *  baseline for the whole roll. */
+    @Override
+    protected boolean autoReconnect() {
+        return false;
+    }
+
     /**
      * Builds gatewayName -> device names from the configured index ranges and the same round-robin
      * assignment mapDevicesToGatewayClientConnections uses, but WITHOUT any connected clients.

@@ -121,6 +121,14 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
         return false;
     }
 
+    /** Whether clients this test creates should auto-reconnect after a drop. Persistent fleets keep
+     *  reconnect on (they re-subscribe via setReconnectAction on reconnect); ephemeral throwaway
+     *  clients override to false so a server-side close mid-cycle ends the cycle instead of spawning
+     *  an untracked orphan session. */
+    protected boolean autoReconnect() {
+        return true;
+    }
+
     @PreDestroy
     public void destroy() {
         super.destroy();
@@ -238,6 +246,7 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
         if (reconnectDelaySec > 0) {
             config.setReconnectDelay(reconnectDelaySec);
         }
+        config.setReconnect(autoReconnect());
         MqttClient client = MqttClient.create(config, null, mqttHandlerExecutor);
         client.setEventLoop(EVENT_LOOP_GROUP);
         ConnectionTrackingCallback callback = new ConnectionTrackingCallback(connectionStats);
