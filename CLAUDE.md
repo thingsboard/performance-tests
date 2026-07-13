@@ -123,6 +123,8 @@ Concrete executors:
 
 The active gateway bean is selected by mutually-exclusive `@ConditionalOnExpression` on `gateway.batch` × `gateway.ephemeral.enabled`. Batch publishing delegates the per-publish decision to a `nextPublishTask` hook on `BaseMqttAPITest`; ephemeral mode drives its own per-gateway cycle scheduler (timing math in `EphemeralSchedule`) instead of the fixed-rate metronome.
 
+Ephemeral cycle clients never auto-reconnect (the persistent fleet does): every client is created via the shared `BaseMqttAPITest.createClient`, which sets `config.setReconnect(autoReconnect())` — a policy hook that defaults to `true` (persistent gateways/devices re-subscribe on reconnect via `setReconnectAction`) and is overridden to `false` in `MqttGatewayEphemeralAPITest`. Without this, a server-side close mid-cycle (e.g. a `tb-mqtt-transport` roll) races with `finishCycle`'s `disconnect()`: netty-mqtt schedules a reconnect that fires after the disconnect and opens an untracked orphan session, so telemetry connections pile up above baseline for the whole roll. With reconnect off, a dropped cycle is simply counted as a failed publish and the gateway publishes again on its next scheduled cycle (matching the QoS-0 periodic-telemetry model), so connections return to baseline promptly. Consequently `MQTT_RECONNECT_MIN/MAX_DELAY_SEC` has no effect in ephemeral mode.
+
 **Unified stats reporting (`StatsReporter`):** one periodic reporter, one interval
 (`stats.log.enabled` / `stats.log.intervalSec`, env `STATS_LOG_ENABLED` / `STATS_LOG_INTERVAL_SEC`),
 shared by every mode. Each active mode registers only the `StatsBlock`s relevant to it, and the
