@@ -47,19 +47,29 @@ class MqttGatewayEphemeralRetryTest extends MqttGatewayEphemeralAPITest {
     static final ObjectMapper testMapper = new ObjectMapper();
 
     final Deque<Future<MqttConnectResult>> connectQueue = new ArrayDeque<>();
+    final Deque<Boolean> publishOutcomes = new ArrayDeque<>(); // per-attempt publish outcome; falls back to publishSucceeds
     boolean publishSucceeds = true;
-    int createdClients;
+    int createFailuresRemaining;                               // make the next N createClient calls throw
+    int attempts;                                              // every createClient call (incl. throwing ones)
+    int createdClients;                                        // clients actually returned
     int retryScheduleCalls;
     int rescheduleCalls;
     MqttClient lastClient;
 
     @Override
     protected MqttClient createClient(String token) {
+        attempts++;
+        if (createFailuresRemaining > 0) {
+            createFailuresRemaining--;
+            throw new RuntimeException("create boom"); // simulate a synchronous setup failure
+        }
         MqttClient c = mock(MqttClient.class);
-        when(c.publish(anyString(), any(), any())).thenReturn(
-                publishSucceeds
-                        ? ImmediateEventExecutor.INSTANCE.newSucceededFuture(null)
-                        : ImmediateEventExecutor.INSTANCE.newFailedFuture(new RuntimeException("pub fail")));
+        when(c.publish(anyString(), any(), any())).thenAnswer(inv -> {
+            boolean ok = publishOutcomes.isEmpty() ? publishSucceeds : publishOutcomes.poll();
+            return ok
+                    ? ImmediateEventExecutor.INSTANCE.newSucceededFuture(null)
+                    : ImmediateEventExecutor.INSTANCE.newFailedFuture(new RuntimeException("pub fail"));
+        });
         createdClients++;
         lastClient = c;
         return c;
@@ -164,5 +174,56 @@ class MqttGatewayEphemeralRetryTest extends MqttGatewayEphemeralAPITest {
         assertThat(connectPermits.availablePermits()).isEqualTo(8);
         assertThat(ephemeralStats.summaryAndReset(1))
                 .contains("retries=0, recovered=0, lost=1");
+    }
+
+    @Test
+    void retriesWhenPublishFailsThenCountsLostOnExhaustion() {
+        configure();
+        maxRetries = 2;
+        publishSucceeds = false; // connects succeed (queue empty), every publish fails
+
+        runCycle(buildTargets().get(0));
+
+        assertThat(retryScheduleCalls).isEqualTo(2);
+        assertThat(createdClients).isEqualTo(3);
+        assertThat(rescheduleCalls).isEqualTo(1);
+        assertThat(connectPermits.availablePermits()).isEqualTo(8);
+        assertThat(connectionCallbacks).isEmpty();
+        assertThat(ephemeralStats.summaryAndReset(1))
+                .contains("connectOk=3", "publishFail=3", "retries=2, recovered=0, lost=1");
+    }
+
+    @Test
+    void recoversAfterTransientPublishFailure() {
+        configure();
+        maxRetries = 3;
+        publishOutcomes.add(false); // attempt 1 publish fails; attempt 2 falls back to publishSucceeds=true
+
+        runCycle(buildTargets().get(0));
+
+        assertThat(retryScheduleCalls).isEqualTo(1);
+        assertThat(createdClients).isEqualTo(2);
+        assertThat(rescheduleCalls).isEqualTo(1);
+        assertThat(connectPermits.availablePermits()).isEqualTo(8);
+        assertThat(ephemeralStats.summaryAndReset(1))
+                .contains("connectOk=2", "publishOk=1", "publishFail=1", "retries=1, recovered=1, lost=0");
+    }
+
+    @Test
+    void synchronousSetupFailureIsRoutedThroughRetryPathWithoutLeakingPermit() {
+        configure();
+        maxRetries = 2;
+        createFailuresRemaining = 1; // attempt 1's createClient throws before any client/listener exists
+
+        runCycle(buildTargets().get(0));
+
+        assertThat(attempts).isEqualTo(2);        // threw once, then a real attempt
+        assertThat(createdClients).isEqualTo(1);  // only the second attempt built a client
+        assertThat(retryScheduleCalls).isEqualTo(1);
+        assertThat(rescheduleCalls).isEqualTo(1); // finalized exactly once
+        assertThat(connectPermits.availablePermits()).isEqualTo(8); // permit released, not leaked
+        assertThat(connectionCallbacks).isEmpty();
+        assertThat(ephemeralStats.summaryAndReset(1))
+                .contains("connectFail=1", "connectOk=1", "retries=1, recovered=1, lost=0");
     }
 }

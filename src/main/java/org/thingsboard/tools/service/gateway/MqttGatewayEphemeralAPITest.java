@@ -57,7 +57,10 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
     private static final class CycleAttempt {
         final GatewayTarget target;
         final long cycleStart;
-        int retryCount; // retries performed so far (0 on the first attempt)
+        // Attempts are strictly sequential and hop between the netty event loop and the cycle
+        // scheduler; each executor handoff already provides a happens-before edge, but volatile makes
+        // the cross-thread visibility of the running retry count self-evident.
+        volatile int retryCount; // retries performed so far (0 on the first attempt)
         final AtomicBoolean finalized = new AtomicBoolean();
 
         CycleAttempt(GatewayTarget target, long cycleStart) {
@@ -212,8 +215,21 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
     }
 
     private void attemptOnce(CycleAttempt ctx) {
-        final MqttClient client = createClient(ctx.target.gatewayName());
-        final Future<MqttConnectResult> connectFuture = connectAsync(client);
+        MqttClient client = null;
+        Future<MqttConnectResult> connectFuture;
+        try {
+            client = createClient(ctx.target.gatewayName());
+            connectFuture = connectAsync(client);
+        } catch (Exception e) {
+            // A synchronous setup failure (client build / connect initiation) would otherwise escape
+            // into a swallowed scheduler task, leaking the permit and stalling this gateway forever.
+            // Route it through the normal failure path so the cycle still retries/finalizes cleanly.
+            log.debug("Ephemeral connect setup failed for {}", ctx.target.gatewayName(), e);
+            ephemeralStats.onConnectFail();
+            onAttemptFailure(client, ctx); // client may be null (guarded in disconnectAndForget)
+            return;
+        }
+        final MqttClient connectedClient = client;
         if (cycleScheduler != null) {
             // per-attempt watchdog: a hung connect must not occupy the permit forever
             cycleScheduler.schedule(() -> {
@@ -227,10 +243,10 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
             boolean ok = f.isSuccess() && now instanceof MqttConnectResult && ((MqttConnectResult) now).isSuccess();
             if (ok) {
                 ephemeralStats.onConnectOk();
-                publishBatch(client, ctx);
+                publishBatch(connectedClient, ctx);
             } else {
                 ephemeralStats.onConnectFail();
-                onAttemptFailure(client, ctx);
+                onAttemptFailure(connectedClient, ctx);
             }
         });
     }
@@ -296,6 +312,9 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
     }
 
     private void disconnectAndForget(MqttClient client) {
+        if (client == null) {
+            return; // setup failed before a client existed
+        }
         try {
             client.disconnect();
         } catch (Exception ignored) {
