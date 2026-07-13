@@ -37,6 +37,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Ephemeral gateway mode (GATEWAY_BATCH=true AND EPHEMERAL_ENABLED=true): each gateway repeats
@@ -52,6 +53,19 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
     public record GatewayTarget(String gatewayName, List<String> deviceNames) {
     }
 
+    /** Per-cycle retry state; finalized exactly once via the AtomicBoolean guard. */
+    private static final class CycleAttempt {
+        final GatewayTarget target;
+        final long cycleStart;
+        int retryCount; // retries performed so far (0 on the first attempt)
+        final AtomicBoolean finalized = new AtomicBoolean();
+
+        CycleAttempt(GatewayTarget target, long cycleStart) {
+            this.target = target;
+            this.cycleStart = cycleStart;
+        }
+    }
+
     @Value("${gateway.ephemeral.cycleLengthSec:900}")
     protected int cycleLengthSec;
     @Value("${gateway.ephemeral.jitterSec:300}")
@@ -64,6 +78,14 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
     protected int schedulerThreads;
     @Value("${gateway.ephemeral.gatewayConnect:false}")
     protected boolean gatewayConnect;
+    @Value("${gateway.ephemeral.maxRetries:3}")
+    protected int maxRetries;
+    @Value("${gateway.ephemeral.retryBackoffMinMs:1000}")
+    protected long retryBackoffMinMs;
+    @Value("${gateway.ephemeral.retryBackoffMaxMs:5000}")
+    protected long retryBackoffMaxMs;
+    @Value("${gateway.ephemeral.retryDeadlineMs:0}")
+    protected long retryDeadlineMs;
 
     private static final int HEADROOM = 2;
 
@@ -179,17 +201,21 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
         log.info("Ephemeral mode finished.");
     }
 
-    /** One connect -> publish -> disconnect cycle. Non-blocking: returns after wiring the async listeners. */
+    /** One connect -> publish -> disconnect cycle, with a bounded app-level retry on failure.
+     *  Non-blocking: returns after wiring the async listeners for the current attempt. */
     protected void runCycle(GatewayTarget target) {
         if (!running && cycleScheduler != null) {
             return; // stop spawning new cycles after the test window closes
         }
         connectPermits.acquireUninterruptibly();
-        final long start = System.currentTimeMillis();
-        final MqttClient client = createClient(target.gatewayName());
+        attemptOnce(new CycleAttempt(target, System.currentTimeMillis()));
+    }
+
+    private void attemptOnce(CycleAttempt ctx) {
+        final MqttClient client = createClient(ctx.target.gatewayName());
         final Future<MqttConnectResult> connectFuture = connectAsync(client);
         if (cycleScheduler != null) {
-            // watchdog: a hung connect must not occupy a permit forever
+            // per-attempt watchdog: a hung connect must not occupy the permit forever
             cycleScheduler.schedule(() -> {
                 if (!connectFuture.isDone()) {
                     connectFuture.cancel(true);
@@ -201,49 +227,91 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
             boolean ok = f.isSuccess() && now instanceof MqttConnectResult && ((MqttConnectResult) now).isSuccess();
             if (ok) {
                 ephemeralStats.onConnectOk();
-                publishBatch(client, target, start);
+                publishBatch(client, ctx);
             } else {
                 ephemeralStats.onConnectFail();
-                finishCycle(client, target, start);
+                onAttemptFailure(client, ctx);
             }
         });
     }
 
-    private void publishBatch(MqttClient client, GatewayTarget target, long start) {
+    private void publishBatch(MqttClient client, CycleAttempt ctx) {
         try {
             if (gatewayConnect) {
-                for (String deviceName : target.deviceNames()) {
+                for (String deviceName : ctx.target.deviceNames()) {
                     byte[] connectMsg = ("{\"device\":\"" + deviceName + "\"}").getBytes(StandardCharsets.UTF_8);
                     client.publish("v1/gateway/connect", Unpooled.wrappedBuffer(connectMsg), MqttQoS.AT_MOST_ONCE);
                 }
             }
-            byte[] payload = buildBatch(target.deviceNames(), false);
+            byte[] payload = buildBatch(ctx.target.deviceNames(), false);
             client.publish(getTestTopic(), Unpooled.wrappedBuffer(payload), MqttQoS.AT_MOST_ONCE)
                     .addListener(pf -> {
                         if (pf.isSuccess()) {
                             ephemeralStats.onPublishOk();
+                            finalizeCycle(ctx, client, true);
                         } else {
                             ephemeralStats.onPublishFail();
+                            onAttemptFailure(client, ctx);
                         }
-                        finishCycle(client, target, start);
                     });
         } catch (Exception e) {
             ephemeralStats.onPublishFail();
-            finishCycle(client, target, start);
+            onAttemptFailure(client, ctx);
         }
     }
 
-    /** Always runs exactly once per cycle: record wall time, disconnect, release the permit, reschedule. */
-    private void finishCycle(MqttClient client, GatewayTarget target, long start) {
+    /** Tear down the failed attempt's client, then either schedule a bounded retry or finalize as lost. */
+    private void onAttemptFailure(MqttClient client, CycleAttempt ctx) {
+        disconnectAndForget(client);
+        boolean deadlineHit = retryDeadlineMs > 0
+                && (System.currentTimeMillis() - ctx.cycleStart) >= retryDeadlineMs;
+        if (ctx.retryCount >= maxRetries || deadlineHit) {
+            finalizeCycle(ctx, null, false);
+            return;
+        }
+        ctx.retryCount++;
+        ephemeralStats.onRetryAttempt();
+        long backoff = EphemeralRetryBackoff.resolveMillis(ctx.retryCount, retryBackoffMinMs, retryBackoffMaxMs, scheduleRandom);
+        if (!scheduleRetry(ctx.target, () -> attemptOnce(ctx), backoff)) {
+            finalizeCycle(ctx, null, false); // window closed: release the permit rather than leak it
+        }
+    }
+
+    /** Runs exactly once per cycle: record outcome + wall time, release the permit, schedule next cycle. */
+    private void finalizeCycle(CycleAttempt ctx, MqttClient successClient, boolean success) {
+        if (!ctx.finalized.compareAndSet(false, true)) {
+            return;
+        }
+        if (success) {
+            disconnectAndForget(successClient);
+            if (ctx.retryCount > 0) {
+                ephemeralStats.onCycleRecoveredAfterRetry();
+            }
+        } else {
+            ephemeralStats.onCycleFailedAfterRetries();
+        }
+        ephemeralStats.onCycleComplete(System.currentTimeMillis() - ctx.cycleStart);
+        connectPermits.release();
+        scheduleNext(ctx.target);
+    }
+
+    private void disconnectAndForget(MqttClient client) {
         try {
             client.disconnect();
         } catch (Exception ignored) {
         }
         // Drop the throwaway cycle client from the shared callback map so it does not grow unbounded.
         connectionCallbacks.remove(client);
-        ephemeralStats.onCycleComplete(System.currentTimeMillis() - start);
-        connectPermits.release();
-        scheduleNext(target);
+    }
+
+    /** Schedules {@code attempt} after {@code backoffMillis} on the cycle scheduler; false if the
+     *  window has closed (caller then finalizes so the permit is not leaked). */
+    protected boolean scheduleRetry(GatewayTarget target, Runnable attempt, long backoffMillis) {
+        if (running && cycleScheduler != null) {
+            cycleScheduler.schedule(attempt, backoffMillis, TimeUnit.MILLISECONDS);
+            return true;
+        }
+        return false;
     }
 
     /** Schedules this gateway's next cycle. */

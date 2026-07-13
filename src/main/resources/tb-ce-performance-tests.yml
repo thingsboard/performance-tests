@@ -164,6 +164,10 @@ gateway:
     maxConcurrentConnects: "${EPHEMERAL_MAX_CONCURRENT_CONNECTS:auto}" # 'auto' = ceil(rate*CONNECT_TIMEOUT*2); positive int overrides
     gatewayConnect: "${EPHEMERAL_GATEWAY_CONNECT:false}" # true = also publish v1/gateway/connect per cycle (default: telemetry-only)
     schedulerThreads: "${EPHEMERAL_SCHEDULER_THREADS:2}" # dedicated timing pool size
+    maxRetries: "${EPHEMERAL_MAX_RETRIES:3}" # bounded app-level retries after a failed ephemeral cycle; each retry a fresh throwaway client (library reconnect stays off); 0 = pre-feature single-attempt behaviour
+    retryBackoffMinMs: "${EPHEMERAL_RETRY_BACKOFF_MIN_MS:1000}" # lower bound (ms) of the jittered exponential retry backoff
+    retryBackoffMaxMs: "${EPHEMERAL_RETRY_BACKOFF_MAX_MS:5000}" # upper bound (ms) / cap of the retry backoff window (full-jitter over min<<attempt, capped here)
+    retryDeadlineMs: "${EPHEMERAL_RETRY_DEADLINE_MS:0}" # optional hard cap (ms) on total time a cycle may spend retrying; 0 = bounded only by maxRetries
   rpc:
     enabled: "${GATEWAY_RPC_ENABLED:false}" # true = persistent gateways subscribe to v1/gateway/rpc, handle inbound RPC, respond, and measure one-way delivery latency (use MESSAGES_PER_SECOND=0 for pure RPC). Not supported with ephemeral mode.
     topic: "${GATEWAY_RPC_TOPIC:v1/gateway/rpc}" # gateway RPC subscription + response topic
