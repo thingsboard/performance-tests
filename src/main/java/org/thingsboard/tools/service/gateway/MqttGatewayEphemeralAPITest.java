@@ -89,6 +89,8 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
     protected long retryBackoffMaxMs;
     @Value("${gateway.ephemeral.retryDeadlineMs:0}")
     protected long retryDeadlineMs;
+    @Value("${gateway.ephemeral.permitWaitMs:250}")
+    protected long permitWaitMs;
 
     private static final int HEADROOM = 2;
 
@@ -210,8 +212,30 @@ public class MqttGatewayEphemeralAPITest extends MqttGatewayBatchAPITest {
         if (!running && cycleScheduler != null) {
             return; // stop spawning new cycles after the test window closes
         }
-        connectPermits.acquireUninterruptibly();
+        // Non-blocking acquire: a scheduler thread must NEVER park on the permit. The tasks that
+        // release permits (retry attemptOnce, finalizeCycle) run on this same bounded pool, so a
+        // blocking acquire here deadlocks the pool under a connect-failure burst — every permit ends
+        // up held by a retrying cycle whose release task can no longer get a thread. Instead, if no
+        // permit is free, re-queue this cycle and let the thread go free so the release path can run.
+        if (!connectPermits.tryAcquire()) {
+            rescheduleForPermit(target);
+            return;
+        }
         attemptOnce(new CycleAttempt(target, System.currentTimeMillis()));
+    }
+
+    /** Re-queues a cycle that could not get a connect permit, after a short jittered wait. Guarded by
+     *  the window so it stops with the test; never blocks the calling scheduler thread. */
+    protected void rescheduleForPermit(GatewayTarget target) {
+        if (running && cycleScheduler != null) {
+            cycleScheduler.schedule(() -> runCycle(target), permitWaitMillis(), TimeUnit.MILLISECONDS);
+        }
+    }
+
+    /** Full-jitter [1, permitWaitMs] wait before re-checking for a free permit, so a fleet that
+     *  saturated the permits together does not re-poll in lockstep. */
+    protected long permitWaitMillis() {
+        return 1L + scheduleRandom.nextInt(Math.max(1, (int) permitWaitMs));
     }
 
     private void attemptOnce(CycleAttempt ctx) {
