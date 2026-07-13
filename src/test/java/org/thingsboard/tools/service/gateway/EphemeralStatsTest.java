@@ -30,7 +30,7 @@ class EphemeralStatsTest {
             s.onCycleComplete(200); // 5 cycles, 200ms each
         }
         assertThat(s.summaryAndReset(10)).isEqualTo(
-                "Ephemeral [window 10s]: cycles=5 (~1/s), connectOk=5, connectFail=0, publishOk=5, publishFail=0, avgCycleWall=200ms");
+                "Ephemeral [window 10s]: cycles=5 (~1/s), connectOk=5, connectFail=0, publishOk=5, publishFail=0, retries=0, recovered=0, lost=0, avgCycleWall=200ms");
     }
 
     @Test
@@ -39,7 +39,7 @@ class EphemeralStatsTest {
         s.onConnectFail();
         s.onPublishFail();
         assertThat(s.summaryAndReset(10)).isEqualTo(
-                "Ephemeral [window 10s]: cycles=0 (~0/s), connectOk=0, connectFail=1, publishOk=0, publishFail=1, avgCycleWall=0ms");
+                "Ephemeral [window 10s]: cycles=0 (~0/s), connectOk=0, connectFail=1, publishOk=0, publishFail=1, retries=0, recovered=0, lost=0, avgCycleWall=0ms");
     }
 
     @Test
@@ -50,6 +50,17 @@ class EphemeralStatsTest {
         s.onConnectOk();
         s.onCycleComplete(300);
         assertThat(s.summaryAndReset(10)).isEqualTo(
-                "Ephemeral [window 10s]: cycles=1 (~0/s), connectOk=1, connectFail=0, publishOk=0, publishFail=0, avgCycleWall=300ms");
+                "Ephemeral [window 10s]: cycles=1 (~0/s), connectOk=1, connectFail=0, publishOk=0, publishFail=0, retries=0, recovered=0, lost=0, avgCycleWall=300ms");
+    }
+
+    @Test
+    void reportsRetryRecoveredLostDeltas() {
+        EphemeralStats s = new EphemeralStats();
+        s.onRetryAttempt();
+        s.onRetryAttempt();
+        s.onCycleRecoveredAfterRetry();
+        s.onCycleFailedAfterRetries();
+        s.onCycleComplete(100); // one finalized cycle so the line is realistic
+        assertThat(s.summaryAndReset(10)).contains("retries=2, recovered=1, lost=1");
     }
 }

@@ -31,6 +31,9 @@ public class EphemeralStats {
     private final AtomicLong connectFail = new AtomicLong();
     private final AtomicLong publishOk = new AtomicLong();
     private final AtomicLong publishFail = new AtomicLong();
+    private final AtomicLong retriesAttempted = new AtomicLong();
+    private final AtomicLong cyclesRecoveredAfterRetry = new AtomicLong();
+    private final AtomicLong cyclesFailedAfterRetries = new AtomicLong();
     private final AtomicLong cycleWallMillisTotal = new AtomicLong();
 
     private long lastCycles;
@@ -38,12 +41,18 @@ public class EphemeralStats {
     private long lastConnectFail;
     private long lastPublishOk;
     private long lastPublishFail;
+    private long lastRetries;
+    private long lastRecovered;
+    private long lastLost;
     private long lastWall;
 
     public void onConnectOk() { connectOk.incrementAndGet(); }
     public void onConnectFail() { connectFail.incrementAndGet(); }
     public void onPublishOk() { publishOk.incrementAndGet(); }
     public void onPublishFail() { publishFail.incrementAndGet(); }
+    public void onRetryAttempt() { retriesAttempted.incrementAndGet(); }
+    public void onCycleRecoveredAfterRetry() { cyclesRecoveredAfterRetry.incrementAndGet(); }
+    public void onCycleFailedAfterRetries() { cyclesFailedAfterRetries.incrementAndGet(); }
 
     public void onCycleComplete(long wallMillis) {
         cycleWallMillisTotal.addAndGet(wallMillis);
@@ -56,6 +65,9 @@ public class EphemeralStats {
         long cf = connectFail.get();
         long pok = publishOk.get();
         long pf = publishFail.get();
+        long rt = retriesAttempted.get();
+        long rec = cyclesRecoveredAfterRetry.get();
+        long lost = cyclesFailedAfterRetries.get();
         long wall = cycleWallMillisTotal.get();
 
         long dCycles = c - lastCycles;
@@ -63,6 +75,9 @@ public class EphemeralStats {
         long dConnectFail = cf - lastConnectFail;
         long dPublishOk = pok - lastPublishOk;
         long dPublishFail = pf - lastPublishFail;
+        long dRetries = rt - lastRetries;
+        long dRecovered = rec - lastRecovered;
+        long dLost = lost - lastLost;
         long dWall = wall - lastWall;
 
         lastCycles = c;
@@ -70,12 +85,15 @@ public class EphemeralStats {
         lastConnectFail = cf;
         lastPublishOk = pok;
         lastPublishFail = pf;
+        lastRetries = rt;
+        lastRecovered = rec;
+        lastLost = lost;
         lastWall = wall;
 
         double rate = windowSec > 0 ? (double) dCycles / windowSec : 0.0;
         long avgWall = dCycles > 0 ? dWall / dCycles : 0;
         return String.format(
-                "Ephemeral [window %ds]: cycles=%d (~%.0f/s), connectOk=%d, connectFail=%d, publishOk=%d, publishFail=%d, avgCycleWall=%dms",
-                windowSec, dCycles, rate, dConnectOk, dConnectFail, dPublishOk, dPublishFail, avgWall);
+                "Ephemeral [window %ds]: cycles=%d (~%.0f/s), connectOk=%d, connectFail=%d, publishOk=%d, publishFail=%d, retries=%d, recovered=%d, lost=%d, avgCycleWall=%dms",
+                windowSec, dCycles, rate, dConnectOk, dConnectFail, dPublishOk, dPublishFail, dRetries, dRecovered, dLost, avgWall);
     }
 }
