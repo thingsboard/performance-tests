@@ -44,7 +44,7 @@ class RpcLatencyStatsTest {
     }
 
     @Test
-    void countersIncrement() {
+    void publishCountersIncrement() {
         RpcLatencyStats s = new RpcLatencyStats();
         s.incResponsesSent();
         s.incResponsesSent();
@@ -58,73 +58,73 @@ class RpcLatencyStatsTest {
     }
 
     @Test
-    void summaryAndResetClearsState() {
-        RpcLatencyStats s = new RpcLatencyStats();
-        s.recordLatency(150);
-        s.incResponsesSent();
-        String line = s.summaryAndReset(60);
-        assertThat(line).contains("measured 1 RPCs").contains("responses sent 1");
-        assertThat(s.getCount()).isEqualTo(0);
-        assertThat(s.getResponsesSent()).isEqualTo(0);
-    }
-
-    @Test
-    void summaryOnEmptyDoesNotThrow() {
-        RpcLatencyStats s = new RpcLatencyStats();
-        assertThat(s.summaryAndReset(60)).contains("measured 0 RPCs");
-    }
-
-    @Test
     void incReceivedStampsTotalAndLastInbound() {
         RpcLatencyStats s = new RpcLatencyStats();
         s.incReceived(12345L);
         s.incReceived(67890L);
         assertThat(s.getReceivedTotal()).isEqualTo(2);
+        assertThat(s.getReceived()).isEqualTo(2);
         assertThat(s.getLastInboundMs()).isEqualTo(67890L);
     }
 
     @Test
-    void cumulativeTotalsSurviveIntervalReset() {
+    void receiveSummaryShowsRawDuplicateUniqueAndResetsWindow() {
         RpcLatencyStats s = new RpcLatencyStats();
         s.incReceived(1000L);
-        s.incResponsesSent();
-        s.incRecovered();
-        s.incLost();
-        s.summaryAndReset(60); // clears interval counters, not cumulative
-        assertThat(s.getReceivedTotal()).isEqualTo(1);
-        assertThat(s.getRespondedTotal()).isEqualTo(3); // sent + recovered + lost
-        assertThat(s.getResponsesSent()).isEqualTo(0);  // interval counter did reset
+        s.incReceived(1000L);
+        s.incReceived(1000L);
+        s.incDuplicate(); // one of the three was a redelivery
+        s.recordLatency(150);
+        assertThat(s.receiveSummary(10)).isEqualTo(
+                "RPC Receive [window 10s]: received=3, duplicate=1 (unique=2); "
+                        + "latency avg=150.0 p50=150.0 p95=150.0 p99=150.0 max=150.0 ms");
+        // window counters reset; totals persist
+        assertThat(s.getReceived()).isZero();
+        assertThat(s.getReceivedTotal()).isEqualTo(3);
+        assertThat(s.getCount()).isZero();
     }
 
     @Test
-    void summaryIncludesSubscribeHealth() {
+    void receiveSummaryOnEmptyDoesNotThrow() {
+        assertThat(new RpcLatencyStats().receiveSummary(10)).contains("received=0, duplicate=0 (unique=0)");
+    }
+
+    @Test
+    void subscriptionSummaryReportsHealthAndResets() {
         RpcLatencyStats s = new RpcLatencyStats();
         s.incSubscribeAcked();
-        s.incSubscribeRetried();
-        assertThat(s.summaryAndReset(10)).contains("subscribe acked=1, failed=0, retried=1, unconfirmed=0");
+        s.incSubscribeFailed();
+        s.incSubscribeUnconfirmed();
+        assertThat(s.subscriptionSummary(10)).isEqualTo(
+                "RPC Subscription [window 10s]: acked=1, failed=1, unconfirmed=1");
+        assertThat(s.getSubscribeAcked()).isZero(); // reset
     }
 
     @Test
-    void summaryIncludesRunningTotals() {
+    void publishSummaryShowsWindowAndTotalsWithPending() {
         RpcLatencyStats s = new RpcLatencyStats();
-        s.incReceived(1000L);
-        s.recordLatency(150);
         s.incResponsesSent();
-        String line = s.summaryAndReset(10);
-        assertThat(line).contains("totals: received 1, sent 1, recovered 0, lost 0, pending 0");
+        s.incRecovered();
+        s.incRetryQueued();
+        String line = s.publishSummary(10, 4);
+        assertThat(line).isEqualTo(
+                "RPC Publish [window 10s]: sent=1, recovered=1, lost=0, retryQueued=1 "
+                        + "| totals: answered=2, pending=4, retryQueued=1");
+        // window counters reset, retryQueued total persists
+        assertThat(s.getResponsesSent()).isZero();
+        assertThat(s.publishSummary(10, 0)).contains("retryQueued=0 | totals: answered=2, pending=0, retryQueued=1");
     }
 
     @Test
-    void drainSummaryRendersQuiescedAndCapped() {
+    void drainSummaryRendersPendingFromArg() {
         RpcLatencyStats s = new RpcLatencyStats();
         s.incReceived(1000L);
         s.incReceived(1000L);
         s.incResponsesSent();
-        String ok = s.drainSummary(6200L, true);
-        assertThat(ok).contains("drained 6.2s").contains("quiesced=true")
-                .contains("received total 2").contains("sent 1")
-                .contains("recovered 0").contains("lost 0").contains("pending 1");
-        String capped = s.drainSummary(15000L, false);
-        assertThat(capped).contains("drained 15.0s").contains("quiesced=false");
+        String ok = s.drainSummary(6200L, true, 1);
+        assertThat(ok).isEqualTo(
+                "Gateway RPC drain complete [drained 6.2s, quiesced=true]: received total 2, "
+                        + "answered 1, lost 0, pending 1");
+        assertThat(s.drainSummary(15000L, false, 0)).contains("drained 15.0s").contains("quiesced=false");
     }
 }

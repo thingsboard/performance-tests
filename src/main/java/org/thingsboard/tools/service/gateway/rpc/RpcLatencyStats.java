@@ -19,22 +19,34 @@ import org.apache.commons.math3.stat.descriptive.SynchronizedDescriptiveStatisti
 
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * Gateway RPC counters, reported as three stage lines (subscription / receive / publish). Window
+ * counters use {@code getAndSet(0)} deltas; cumulative totals persist for the run. {@code pending}
+ * is not held here — it is the outstanding-set size (distinct unanswered RPCs), passed in by the
+ * receiver so duplicates never distort it.
+ */
 public class RpcLatencyStats {
 
     private final SynchronizedDescriptiveStatistics latency = new SynchronizedDescriptiveStatistics();
+
+    // --- receive (window) ---
+    private final AtomicLong received = new AtomicLong();   // raw per-delivery (incl. server redeliveries)
+    private final AtomicLong duplicate = new AtomicLong();  // deliveries of an already-known (device,requestId)
+
+    // --- publish (window) ---
     private final AtomicLong responsesSent = new AtomicLong(); // first-try deliveries
     private final AtomicLong recovered = new AtomicLong();     // delivered on a retry after reconnect
     private final AtomicLong lost = new AtomicLong();          // expired / over-cap / never reconnected
     private final AtomicLong retryQueued = new AtomicLong();   // buffered for retry (informational, not terminal)
 
-    // v1/gateway/rpc subscription health (the RPC delivery channel), per window.
+    // --- subscribe health (window): observe-only, no app retry (netty retransmits; we resubscribe per reconnect) ---
     private final AtomicLong subscribeAcked = new AtomicLong();       // SUBACK-confirmed
-    private final AtomicLong subscribeFailed = new AtomicLong();      // per-attempt subscribe failures/timeouts
-    private final AtomicLong subscribeRetried = new AtomicLong();
-    private final AtomicLong subscribeUnconfirmed = new AtomicLong(); // exhausted retries without SUBACK (RPC delivery at risk)
+    private final AtomicLong subscribeFailed = new AtomicLong();      // future failed (e.g. max retransmissions)
+    private final AtomicLong subscribeUnconfirmed = new AtomicLong(); // no SUBACK within the ack timeout (orphan)
 
-    // Cumulative counters — never reset by summaryAndReset (unlike the interval counters above).
+    // --- cumulative totals (never reset) ---
     private final AtomicLong receivedTotal = new AtomicLong();
+    private final AtomicLong duplicateTotal = new AtomicLong();
     private final AtomicLong responsesSentTotal = new AtomicLong();
     private final AtomicLong recoveredTotal = new AtomicLong();
     private final AtomicLong lostTotal = new AtomicLong();
@@ -46,11 +58,15 @@ public class RpcLatencyStats {
         latency.addValue(latencyMs);
     }
 
-    /** Count an inbound RPC (every message, even parse failures) and refresh the quiescence timestamp. */
+    /** Count an inbound RPC (every delivery, even parse failures) and refresh the quiescence timestamp. */
     public void incReceived(long nowMs) {
+        received.incrementAndGet();
         receivedTotal.incrementAndGet();
         lastInboundMs = nowMs;
     }
+
+    /** A delivery of a request-id already seen (server redelivery on reconnect). */
+    public void incDuplicate() { duplicate.incrementAndGet(); duplicateTotal.incrementAndGet(); }
 
     public void incResponsesSent() { responsesSent.incrementAndGet(); responsesSentTotal.incrementAndGet(); }
     public void incRecovered() { recovered.incrementAndGet(); recoveredTotal.incrementAndGet(); }
@@ -58,13 +74,14 @@ public class RpcLatencyStats {
     public void incRetryQueued() { retryQueued.incrementAndGet(); retryQueuedTotal.incrementAndGet(); }
     public void incSubscribeAcked() { subscribeAcked.incrementAndGet(); }
     public void incSubscribeFailed() { subscribeFailed.incrementAndGet(); }
-    public void incSubscribeRetried() { subscribeRetried.incrementAndGet(); }
     public void incSubscribeUnconfirmed() { subscribeUnconfirmed.incrementAndGet(); }
 
     public long getCount() { return latency.getN(); }
     public double getMean() { return latency.getMean(); }
     public double getPercentile(double p) { return latency.getPercentile(p); }
     public double getMax() { return latency.getMax(); }
+    public long getReceived() { return received.get(); }
+    public long getDuplicate() { return duplicate.get(); }
     public long getResponsesSent() { return responsesSent.get(); }
     public long getRecovered() { return recovered.get(); }
     public long getLost() { return lost.get(); }
@@ -73,53 +90,58 @@ public class RpcLatencyStats {
     public long getReceivedTotal() { return receivedTotal.get(); }
     public long getSubscribeAcked() { return subscribeAcked.get(); }
     public long getSubscribeFailed() { return subscribeFailed.get(); }
-    public long getSubscribeRetried() { return subscribeRetried.get(); }
     public long getSubscribeUnconfirmed() { return subscribeUnconfirmed.get(); }
-    // All terminal reply states; drives drain() quiescence (a buffered-not-yet-terminal reply keeps this below received).
-    public long getRespondedTotal() { return responsesSentTotal.get() + recoveredTotal.get() + lostTotal.get(); }
+
+    /** {@code v1/gateway/rpc} (re)subscribe health — the RPC delivery channel. */
+    public String subscriptionSummary(int intervalSec) {
+        return String.format(
+                "RPC Subscription [window %ds]: acked=%d, failed=%d, unconfirmed=%d",
+                intervalSec, subscribeAcked.getAndSet(0), subscribeFailed.getAndSet(0), subscribeUnconfirmed.getAndSet(0));
+    }
 
     /**
-     * Render a one-line summary and reset the histogram + counters for the next interval.
-     * Note: {@code recordLatency} adds values without holding this monitor, so a sample landing
-     * between the {@code getN()} snapshot and {@code clear()} below is dropped from the report —
-     * acceptable for interval metrics on a load test (at most a few in-flight samples per interval).
+     * Inbound-command line: raw {@code received}, {@code duplicate} (redeliveries; {@code unique =
+     * received − duplicate}), and one-way delivery-latency percentiles. Resets the histogram.
+     * A latency sample landing between the {@code getN()} snapshot and {@code clear()} is dropped —
+     * acceptable for interval metrics.
      */
-    public synchronized String summaryAndReset(int intervalSec) {
+    public synchronized String receiveSummary(int intervalSec) {
         long n = latency.getN();
+        long rcv = received.getAndSet(0);
+        long dup = duplicate.getAndSet(0);
         String line = String.format(
-                "Gateway RPC stats [window %ds]: measured %d RPCs; one-way delivery latency: "
-                        + "avg %.1f ms, p50 %.1f ms, p95 %.1f ms, p99 %.1f ms, max %.1f ms; "
-                        + "responses sent %d, recovered %d, lost %d, retryQueued %d"
-                        + "; totals: received %d, sent %d, recovered %d, lost %d, pending %d"
-                        + "; subscribe acked=%d, failed=%d, retried=%d, unconfirmed=%d",
-                intervalSec, n,
+                "RPC Receive [window %ds]: received=%d, duplicate=%d (unique=%d); "
+                        + "latency avg=%.1f p50=%.1f p95=%.1f p99=%.1f max=%.1f ms",
+                intervalSec, rcv, dup, rcv - dup,
                 n > 0 ? latency.getMean() : 0.0,
                 n > 0 ? latency.getPercentile(50) : 0.0,
                 n > 0 ? latency.getPercentile(95) : 0.0,
                 n > 0 ? latency.getPercentile(99) : 0.0,
-                n > 0 ? latency.getMax() : 0.0,
-                responsesSent.getAndSet(0), recovered.getAndSet(0), lost.getAndSet(0), retryQueued.getAndSet(0),
-                receivedTotal.get(), responsesSentTotal.get(), recoveredTotal.get(), lostTotal.get(),
-                receivedTotal.get() - responsesSentTotal.get() - recoveredTotal.get() - lostTotal.get(),
-                subscribeAcked.getAndSet(0), subscribeFailed.getAndSet(0),
-                subscribeRetried.getAndSet(0), subscribeUnconfirmed.getAndSet(0));
+                n > 0 ? latency.getMax() : 0.0);
         latency.clear();
         return line;
     }
 
-    /** One-line summary emitted once when the drain phase ends. {@code sent} = first-try, {@code
-     *  recovered} = retried-and-delivered, {@code lost} = expired/over-cap/never-reconnected;
-     *  {@code pending} = received minus all terminal states = replies still legitimately in flight
-     *  (0 on a clean run). */
-    public String drainSummary(long elapsedMs, boolean quiesced) {
-        long received = receivedTotal.get();
-        long sent = responsesSentTotal.get();
-        long rec = recoveredTotal.get();
-        long lst = lostTotal.get();
-        long pending = received - sent - rec - lst;
+    /**
+     * Reply-publish line: window {@code sent/recovered/lost/retryQueued}, plus cumulative
+     * {@code answered} (= sent + recovered), the outstanding-set {@code pending} (passed in), and the
+     * run-total {@code retryQueued} so retry activity stays legible outside the roll window.
+     */
+    public String publishSummary(int intervalSec, long pending) {
+        return String.format(
+                "RPC Publish [window %ds]: sent=%d, recovered=%d, lost=%d, retryQueued=%d "
+                        + "| totals: answered=%d, pending=%d, retryQueued=%d",
+                intervalSec, responsesSent.getAndSet(0), recovered.getAndSet(0), lost.getAndSet(0), retryQueued.getAndSet(0),
+                responsesSentTotal.get() + recoveredTotal.get(), pending, retryQueuedTotal.get());
+    }
+
+    /** One-line summary emitted once when the drain phase ends. {@code pending} = outstanding-set size
+     *  (distinct unanswered RPCs); reaches 0 on a clean run. */
+    public String drainSummary(long elapsedMs, boolean quiesced, long pending) {
         return String.format(
                 "Gateway RPC drain complete [drained %.1fs, quiesced=%b]: received total %d, "
-                        + "sent %d, recovered %d, lost %d, pending %d",
-                elapsedMs / 1000.0, quiesced, received, sent, rec, lst, pending);
+                        + "answered %d, lost %d, pending %d",
+                elapsedMs / 1000.0, quiesced, receivedTotal.get(),
+                responsesSentTotal.get() + recoveredTotal.get(), lostTotal.get(), pending);
     }
 }

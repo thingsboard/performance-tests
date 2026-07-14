@@ -28,7 +28,7 @@ class StatsReporterTest {
     void collectReturnsRegisteredBlocksInEnumOrder() {
         StatsReporter r = new StatsReporter(null, true, 10);
         // register out of canonical order on purpose
-        r.register(StatsBlock.RPC, w -> "rpc " + w);
+        r.register(StatsBlock.RPC_RECEIVE, w -> "rpc " + w);
         r.register(StatsBlock.CONNECTIONS, w -> "conn " + w);
         r.register(StatsBlock.THROUGHPUT, w -> "thr " + w);
         assertThat(r.collect()).containsExactly("conn 10", "thr 10", "rpc 10");

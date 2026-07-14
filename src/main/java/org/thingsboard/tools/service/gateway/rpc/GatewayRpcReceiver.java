@@ -17,20 +17,22 @@ package org.thingsboard.tools.service.gateway.rpc;
 
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.mqtt.MqttQoS;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.ScheduledFuture;
 import lombok.extern.slf4j.Slf4j;
 import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.mqtt.MqttHandler;
-import org.thingsboard.tools.service.gateway.AckedRetry;
-import org.thingsboard.tools.service.gateway.AckedRetryConfig;
+import org.thingsboard.tools.service.gateway.rpc.RpcMessageProcessor.ProcessedRpc;
+import org.thingsboard.tools.service.gateway.rpc.RpcOutstandingTracker.RpcKey;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class GatewayRpcReceiver {
@@ -41,37 +43,35 @@ public class GatewayRpcReceiver {
     private final RpcLatencyStats stats;
     private final long responseDelayMs;
 
-    // Reply retry-on-reconnect: a reply whose publish fails (channel dropped mid-reply) is buffered
-    // per client and re-published when that client reconnects, up to the RPC's server-side expiry.
+    // Reply retry-on-reconnect: a reply that is not confirmed sent (publish fails OR its future never
+    // completes — the netty-mqtt orphan; see TODO below) is buffered per client and re-published when
+    // that client reconnects, up to the RPC's server-side expiry.
     private final boolean retryEnabled;
     private final long replyTtlMs;
     private final int maxBufferedPerClient;
-    private final Map<MqttClient, ClientRetryBuffer> retryBuffers = new ConcurrentHashMap<>();
+    // Per-attempt wait for the broker ack (PUBACK / SUBACK). Used to detect an orphaned reply publish
+    // and to flag an unconfirmed subscribe for observability.
+    private final long ackTimeoutMs;
 
-    // Resubscribe reliability: SUBACK-tracked, retried until confirmed on the client's event loop.
-    private final AckedRetryConfig subscribeRetry;
-    private final Random rng;
+    private final Map<MqttClient, ClientRetryBuffer> retryBuffers = new ConcurrentHashMap<>();
+    // One stable inbound handler per client, reused across every (re)subscribe. netty-mqtt keys pending
+    // handlers by (handler, once) record-equality, so re-subscribing with the SAME instance dedups; a
+    // fresh handler per resubscribe would register twice and double-deliver every RPC.
+    private final Map<MqttClient, MqttHandler> handlers = new ConcurrentHashMap<>();
+    // Per-unique-RPC accounting; pending = outstanding.size(), immune to redelivery duplicates.
+    private final RpcOutstandingTracker outstanding = new RpcOutstandingTracker();
 
     private static final long DRAIN_POLL_MS = 500L;
-    private static final AckedRetryConfig DEFAULT_SUBSCRIBE_RETRY = new AckedRetryConfig(5, 5000, 1000, 5000);
 
-    /** Legacy constructor: reply retry disabled (a failed reply is immediately counted lost). */
+    /** Legacy constructor: reply retry disabled (a not-confirmed reply is immediately counted lost). */
     public GatewayRpcReceiver(String topic, MqttQoS qos, RpcMessageProcessor processor,
                               RpcLatencyStats stats, long responseDelayMs) {
-        this(topic, qos, processor, stats, responseDelayMs, false, 0L, 0, DEFAULT_SUBSCRIBE_RETRY, new Random());
+        this(topic, qos, processor, stats, responseDelayMs, false, 0L, 0, 5000L);
     }
 
     public GatewayRpcReceiver(String topic, MqttQoS qos, RpcMessageProcessor processor,
                               RpcLatencyStats stats, long responseDelayMs,
-                              boolean retryEnabled, long replyTtlMs, int maxBufferedPerClient) {
-        this(topic, qos, processor, stats, responseDelayMs, retryEnabled, replyTtlMs, maxBufferedPerClient,
-                DEFAULT_SUBSCRIBE_RETRY, new Random());
-    }
-
-    public GatewayRpcReceiver(String topic, MqttQoS qos, RpcMessageProcessor processor,
-                              RpcLatencyStats stats, long responseDelayMs,
-                              boolean retryEnabled, long replyTtlMs, int maxBufferedPerClient,
-                              AckedRetryConfig subscribeRetry, Random rng) {
+                              boolean retryEnabled, long replyTtlMs, int maxBufferedPerClient, long ackTimeoutMs) {
         this.topic = topic;
         this.qos = qos;
         this.processor = processor;
@@ -80,8 +80,7 @@ public class GatewayRpcReceiver {
         this.retryEnabled = retryEnabled;
         this.replyTtlMs = replyTtlMs;
         this.maxBufferedPerClient = maxBufferedPerClient;
-        this.subscribeRetry = subscribeRetry;
-        this.rng = rng;
+        this.ackTimeoutMs = ackTimeoutMs;
     }
 
     public void attach(List<MqttClient> clients) {
@@ -91,60 +90,74 @@ public class GatewayRpcReceiver {
         log.info("Subscribed {} gateways to RPC topic {}", clients.size(), topic);
     }
 
-    /** Re-issue the RPC-topic subscription for one client after it reconnects (subscription is lost on
-     *  channel close with cleanSession=true). */
+    /** Re-issue the RPC-topic subscription for one client after it reconnects (netty-mqtt clears all
+     *  subscriptions on channel close and does NOT auto-restore them). */
     public void resubscribe(MqttClient client) {
         subscribe(client);
     }
 
+    /**
+     * Subscribe (observe-only, no app-level retry). Reliability comes from netty-mqtt's own SUBSCRIBE
+     * retransmission on a live channel plus our per-reconnect resubscribe; here we only confirm the
+     * SUBACK and record health. A retry loop would risk registering a second subscription (double
+     * delivery), so it is intentionally absent — a subscribe that does not confirm is re-issued on the
+     * next reconnect.
+     */
     private void subscribe(MqttClient client) {
-        // SUBACK-confirmed and retried on the client's event loop: a silent resubscribe failure drops
-        // RPC delivery just as surely as a lost announce, so success must be the broker ack, not a send.
-        // Build the handler ONCE and reuse it across retry attempts: netty-mqtt keys pending-subscription
-        // handlers by (handler, once) record-equality, so re-issuing on() with the SAME handler instance
-        // dedups; a fresh handler per attempt would register twice and double-deliver every RPC.
-        MqttHandler handler = buildHandler(client);
-        AckedRetry.run(client.getEventLoop(), () -> client.on(topic, handler, qos),
-                subscribeRetry, rng, new AckedRetry.Callbacks() {
-                    @Override
-                    public void onAcked() {
-                        stats.incSubscribeAcked();
-                    }
-
-                    @Override
-                    public void onAttemptFailed() {
-                        stats.incSubscribeFailed();
-                    }
-
-                    @Override
-                    public void onRetry() {
-                        stats.incSubscribeRetried();
-                    }
-
-                    @Override
-                    public void onUnconfirmed() {
-                        stats.incSubscribeUnconfirmed();
-                        log.error("RPC resubscribe unconfirmed after {} attempts on topic {}", subscribeRetry.maxAttempts(), topic);
-                    }
-                });
+        MqttHandler handler = handlers.computeIfAbsent(client, this::buildHandler);
+        AtomicBoolean settled = new AtomicBoolean();
+        Future<Void> f = client.on(topic, handler, qos);
+        ScheduledFuture<?> timeout = client.getEventLoop().schedule(() -> {
+            if (settled.compareAndSet(false, true)) {
+                stats.incSubscribeUnconfirmed();
+                log.warn("RPC subscribe unconfirmed within {}ms on topic {} (no SUBACK); will re-subscribe on next reconnect",
+                        ackTimeoutMs, topic);
+            }
+        }, ackTimeoutMs, TimeUnit.MILLISECONDS);
+        f.addListener(fut -> {
+            if (settled.compareAndSet(false, true)) {
+                timeout.cancel(false);
+                if (fut.isSuccess()) {
+                    stats.incSubscribeAcked();
+                } else {
+                    stats.incSubscribeFailed();
+                    log.error("RPC subscribe failed on topic {}", topic, fut.cause());
+                }
+            }
+        });
     }
 
     MqttHandler buildHandler(MqttClient client) {
         return (receivedTopic, payload) -> {
             long now = System.currentTimeMillis();
             try {
-                byte[] response = processor.process(payload, now);
-                if (response != null) {
-                    BufferedReply reply = new BufferedReply(response, now + replyTtlMs);
+                ProcessedRpc r = processor.process(payload, now);
+                stats.incReceived(now); // raw, every delivery (incl. redeliveries)
+                if (r == null) {
+                    return CompletableFuture.completedFuture(null); // malformed — cannot key/dedup
+                }
+                if (r.reply() != null) {
+                    RpcKey key = new RpcKey(r.deviceName(), r.requestId());
+                    if (!outstanding.firstReceipt(key, now)) {
+                        // Server redelivery of a still-pending RPC on reconnect. The reply-retry flush
+                        // re-sends it at that same reconnect, so just count it — no re-answer, no re-track.
+                        stats.incDuplicate();
+                        return CompletableFuture.completedFuture(null);
+                    }
+                    if (r.latencyMs() != null) {
+                        stats.recordLatency(r.latencyMs());
+                    }
+                    BufferedReply reply = new BufferedReply(r.reply(), now + replyTtlMs, key);
                     if (responseDelayMs > 0) {
-                        // Defer the response to exercise the delayed-reply case. Scheduled on the
-                        // client's netty event loop, so no extra threads and no blocking of the
-                        // inbound handler.
+                        // Defer the response to exercise the delayed-reply case. On the client's netty
+                        // event loop: no extra threads, inbound handler not blocked.
                         client.getEventLoop().schedule(
                                 () -> publishReply(client, reply), responseDelayMs, TimeUnit.MILLISECONDS);
                     } else {
                         publishReply(client, reply);
                     }
+                } else if (r.latencyMs() != null) {
+                    stats.recordLatency(r.latencyMs()); // respond disabled: measure latency, nothing to track
                 }
             } catch (Exception e) {
                 log.warn("Failed to handle inbound RPC", e);
@@ -153,27 +166,47 @@ public class GatewayRpcReceiver {
         };
     }
 
-    /** Publish (or re-publish) one reply. First-try success counts sent, a retry success counts
-     *  recovered; any failure routes to {@link #enqueueForRetry} (buffer or lost). */
+    /**
+     * Publish (or re-publish) one reply. Success on the broker PUBACK: first attempt counts {@code sent},
+     * a retry counts {@code recovered}, and the RPC is marked answered. If the publish fails OR its
+     * future never completes within {@code ackTimeoutMs} (the netty-mqtt orphan — see TODO), it is
+     * treated as not-confirmed-sent and routed to the retry buffer. Exactly-once via {@code settled}.
+     */
     private void publishReply(MqttClient client, BufferedReply reply) {
         reply.attempts++;
-        client.publish(topic, Unpooled.wrappedBuffer(reply.payload), qos)
-                .addListener(f -> {
-                    if (f.isSuccess()) {
-                        if (reply.attempts == 1) {
-                            stats.incResponsesSent();
-                        } else {
-                            stats.incRecovered();
-                        }
-                    } else {
-                        enqueueForRetry(client, reply);
-                    }
-                });
+        AtomicBoolean settled = new AtomicBoolean();
+        Future<Void> f = client.publish(topic, Unpooled.wrappedBuffer(reply.payload), qos);
+        // TODO(netty-mqtt): a QoS-1 publish whose bytes flushed before the channel dropped is never
+        // completed by netty-mqtt (lambda$connect$3 stops its retransmit + clears pendingPublishes,
+        // without failing the promise). The proper fix is to tryFailure() those promises on close in
+        // netty-mqtt, then this timeout is unnecessary; deferred because it requires bumping this repo
+        // onto TB deps 4.3.1.x. Until then this timeout is our workaround for the orphaned reply.
+        ScheduledFuture<?> timeout = client.getEventLoop().schedule(() -> {
+            if (settled.compareAndSet(false, true)) {
+                onReplyNotConfirmed(client, reply);
+            }
+        }, ackTimeoutMs, TimeUnit.MILLISECONDS);
+        f.addListener(fut -> {
+            if (!settled.compareAndSet(false, true)) {
+                return;
+            }
+            timeout.cancel(false);
+            if (fut.isSuccess()) {
+                if (reply.attempts == 1) {
+                    stats.incResponsesSent();
+                } else {
+                    stats.incRecovered();
+                }
+                outstanding.markAnswered(reply.key, System.currentTimeMillis());
+            } else {
+                onReplyNotConfirmed(client, reply);
+            }
+        });
     }
 
-    /** Buffer a failed reply for retry on reconnect, unless retry is off, it has expired, or the
-     *  per-client buffer is full — in which case it is terminally lost. */
-    private void enqueueForRetry(MqttClient client, BufferedReply reply) {
+    /** A reply that did not confirm sent (publish failed or orphaned): buffer it for retry on reconnect,
+     *  unless retry is off, it has expired, or the per-client buffer is full — then it is terminally lost. */
+    private void onReplyNotConfirmed(MqttClient client, BufferedReply reply) {
         if (!retryEnabled || System.currentTimeMillis() >= reply.expiryMs) {
             stats.incLost();
             return;
@@ -212,15 +245,30 @@ public class GatewayRpcReceiver {
         }
     }
 
-    /** A reply awaiting (re)publish. {@code expiryMs} = receipt time + the RPC's server-side timeout. */
+    /** Log every distinct RPC still unanswered at drain, so it can be matched to the DB EXPIRED rows. */
+    public void logOutstanding() {
+        List<RpcKey> keys = outstanding.outstandingKeys();
+        if (keys.isEmpty()) {
+            return;
+        }
+        log.warn("Gateway RPC: {} distinct RPC(s) unanswered at drain end:", keys.size());
+        for (RpcKey k : keys) {
+            log.warn("  unanswered RPC: device={} requestId={}", k.deviceName(), k.requestId());
+        }
+    }
+
+    /** A reply awaiting (re)publish. {@code expiryMs} = receipt time + the RPC's server-side expiry;
+     *  {@code key} identifies the RPC so its success can clear the outstanding set. */
     private static final class BufferedReply {
         final byte[] payload;
         final long expiryMs;
+        final RpcKey key;
         int attempts;
 
-        BufferedReply(byte[] payload, long expiryMs) {
+        BufferedReply(byte[] payload, long expiryMs, RpcKey key) {
             this.payload = payload;
             this.expiryMs = expiryMs;
+            this.key = key;
         }
     }
 
@@ -249,15 +297,26 @@ public class GatewayRpcReceiver {
         }
     }
 
-    public String statsSummaryAndReset(int intervalSec) {
-        return stats.summaryAndReset(intervalSec);
+    // --- stats sources (registered as three StatsBlocks) ---
+
+    public String subscriptionSummary(int intervalSec) {
+        return stats.subscriptionSummary(intervalSec);
+    }
+
+    public String receiveSummary(int intervalSec) {
+        outstanding.evictAnsweredOlderThan(System.currentTimeMillis(), replyTtlMs); // bound memory
+        return stats.receiveSummary(intervalSec);
+    }
+
+    public String publishSummary(int intervalSec) {
+        return stats.publishSummary(intervalSec, outstanding.outstandingCount());
     }
 
     /**
      * After the load window ends and the burst sender is stopped, wait for the last burst's in-flight
      * RPCs to settle. Observation only — responses flow asynchronously via the publish listener; this
-     * loop just watches the shared stats. Exits early ({@code quiesced=true}) once inbound has been idle
-     * for {@code quietMs} and, when {@code respond} is true, every received RPC has been answered; or at
+     * loop watches the outstanding set. Exits early ({@code quiesced=true}) once inbound has been idle
+     * for {@code quietMs} and, when {@code respond} is true, no RPC is still outstanding; or at
      * {@code maxMs} ({@code quiesced=false}) so it can never hang.
      */
     public DrainResult drain(long quietMs, long maxMs, boolean respond) {
@@ -266,8 +325,8 @@ public class GatewayRpcReceiver {
         while (true) {
             long now = System.currentTimeMillis();
             long idle = now - stats.getLastInboundMs();
-            long pending = stats.getReceivedTotal() - stats.getRespondedTotal();
-            if (idle >= quietMs && (!respond || pending <= 0)) {
+            long pending = respond ? outstanding.outstandingCount() : 0;
+            if (idle >= quietMs && pending <= 0) {
                 return new DrainResult(true, now - start);
             }
             if (now >= deadline) {
@@ -286,7 +345,7 @@ public class GatewayRpcReceiver {
     }
 
     public String drainSummary(long elapsedMs, boolean quiesced) {
-        return stats.drainSummary(elapsedMs, quiesced);
+        return stats.drainSummary(elapsedMs, quiesced, outstanding.outstandingCount());
     }
 
     /**

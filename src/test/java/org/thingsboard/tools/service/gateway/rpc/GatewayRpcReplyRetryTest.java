@@ -18,11 +18,13 @@ package org.thingsboard.tools.service.gateway.rpc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.codec.mqtt.MqttQoS;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.ImmediateEventExecutor;
 import io.netty.util.concurrent.Promise;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.thingsboard.common.util.ListeningExecutor;
 import org.thingsboard.mqtt.MqttClient;
@@ -36,6 +38,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -49,12 +52,21 @@ class GatewayRpcReplyRetryTest {
 
     private static final String TOPIC = "v1/gateway/rpc";
 
+    private final EventLoopGroup loop = new DefaultEventLoopGroup(1);
+
+    @AfterEach
+    void tearDown() {
+        loop.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS);
+    }
+
     private GatewayRpcReceiver receiver(RpcLatencyStats stats, long ttlMs, int cap) {
         RpcResponseTemplate template = new RpcResponseTemplate(
                 "{\"device\":\"${device}\",\"id\":${data.id},\"data\":{\"status\":\"ACCEPTED\"}}");
         RpcMessageProcessor processor = new RpcMessageProcessor(
-                new ObjectMapper(), "data.params.sendTs", true, template, stats);
-        return new GatewayRpcReceiver(TOPIC, MqttQoS.AT_LEAST_ONCE, processor, stats, 0L, true, ttlMs, cap);
+                new ObjectMapper(), "data.params.sendTs", true, template);
+        // Large ack timeout: publish futures complete synchronously in these tests, so the orphan-capture
+        // timeout is always cancelled before it could fire.
+        return new GatewayRpcReceiver(TOPIC, MqttQoS.AT_LEAST_ONCE, processor, stats, 0L, true, ttlMs, cap, 60_000L);
     }
 
     private static ByteBuf rpc(int id) {
@@ -67,7 +79,7 @@ class GatewayRpcReplyRetryTest {
     void failedReplyIsBufferedThenRecoveredOnReconnectFlush() throws Exception {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats, 60_000L, 100);
-        RetryFakeClient c = new RetryFakeClient();
+        RetryFakeClient c = client();
         c.publishOutcomes.add(false); // first publish fails -> buffered
 
         r.buildHandler(c).onMessage(TOPIC, rpc(1));
@@ -84,7 +96,7 @@ class GatewayRpcReplyRetryTest {
     void expiredReplyIsDroppedAsLostNotRetried() throws Exception {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats, 0L, 100); // ttl 0 => expiry == receipt time
-        RetryFakeClient c = new RetryFakeClient();
+        RetryFakeClient c = client();
         c.publishOutcomes.add(false);
 
         r.buildHandler(c).onMessage(TOPIC, rpc(1));
@@ -101,7 +113,7 @@ class GatewayRpcReplyRetryTest {
     void bufferIsBoundedAndOvercapCountedLost() throws Exception {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats, 60_000L, 2); // cap 2 per client
-        RetryFakeClient c = new RetryFakeClient();
+        RetryFakeClient c = client();
         for (int i = 0; i < 5; i++) {
             c.publishOutcomes.add(false); // all 5 first-publishes fail
         }
@@ -118,7 +130,7 @@ class GatewayRpcReplyRetryTest {
     void finalizeCountsStillBufferedAsLost() throws Exception {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats, 60_000L, 100);
-        RetryFakeClient c = new RetryFakeClient();
+        RetryFakeClient c = client();
         c.publishOutcomes.add(false);
         r.buildHandler(c).onMessage(TOPIC, rpc(1)); // buffered, client never reconnects
 
@@ -126,10 +138,19 @@ class GatewayRpcReplyRetryTest {
         assertThat(stats.getLost()).isEqualTo(1);
     }
 
+    private RetryFakeClient client() {
+        return new RetryFakeClient(loop);
+    }
+
     /** Fake whose publish result is dequeued from publishOutcomes (true=success); default success. */
     static class RetryFakeClient implements MqttClient {
         final Deque<Boolean> publishOutcomes = new ArrayDeque<>();
         final List<String> publishedPayloads = new ArrayList<>();
+        private final EventLoopGroup eventLoop;
+
+        RetryFakeClient(EventLoopGroup eventLoop) {
+            this.eventLoop = eventLoop;
+        }
 
         @Override
         public Future<Void> publish(String topic, ByteBuf payload, MqttQoS qos) {
@@ -145,12 +166,12 @@ class GatewayRpcReplyRetryTest {
         }
 
         @Override public boolean isConnected() { return true; }
+        @Override public EventLoopGroup getEventLoop() { return eventLoop; }
 
         // --- unused interface methods ---
         @Override public Promise<MqttConnectResult> connect(String host) { throw new UnsupportedOperationException(); }
         @Override public Promise<MqttConnectResult> connect(String host, int port) { throw new UnsupportedOperationException(); }
         @Override public Promise<MqttConnectResult> reconnect() { throw new UnsupportedOperationException(); }
-        @Override public EventLoopGroup getEventLoop() { throw new UnsupportedOperationException(); }
         @Override public void setEventLoop(EventLoopGroup group) { throw new UnsupportedOperationException(); }
         @Override public ListeningExecutor getHandlerExecutor() { throw new UnsupportedOperationException(); }
         @Override public Future<Void> on(String topic, MqttHandler handler) { throw new UnsupportedOperationException(); }

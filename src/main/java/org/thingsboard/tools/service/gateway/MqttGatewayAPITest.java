@@ -261,6 +261,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
                         rpcDrainQuietSec, maxMs / 1000);
                 GatewayRpcReceiver.DrainResult result = rpcReceiver.drain(quietMs, maxMs, rpcRespond);
                 rpcReceiver.finalizeLostReplies(); // replies still buffered (client never reconnected) are lost
+                rpcReceiver.logOutstanding();      // name the distinct still-unanswered RPCs for DB EXPIRED correlation
                 String summary = rpcReceiver.drainSummary(result.elapsedMs, result.quiesced);
                 if (result.quiesced) {
                     log.info(summary);
@@ -324,14 +325,17 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     protected void attachRpcReceiver() {
         ObjectMapper mapper = new ObjectMapper();
         RpcResponseTemplate template = rpcRespond ? RpcResponseTemplate.load(rpcResponseTemplate) : null;
-        RpcMessageProcessor processor = new RpcMessageProcessor(mapper, rpcSendTsPath, rpcRespond, template, rpcLatencyStats);
+        RpcMessageProcessor processor = new RpcMessageProcessor(mapper, rpcSendTsPath, rpcRespond, template);
         AckedRetryConfig ackCfg = new AckedRetryConfig(gatewayAckMaxAttempts, gatewayAckTimeoutMs, gatewayAckBackoffMinMs, gatewayAckBackoffMaxMs);
         Random ackRng = new Random(seed + instanceIdx);
         rpcReceiver = new GatewayRpcReceiver(rpcTopic, MqttQoS.AT_LEAST_ONCE, processor, rpcLatencyStats, rpcResponseDelayMs,
-                rpcReplyRetryEnabled, rpcExpiryMs, rpcReplyRetryMaxBuffered, ackCfg, ackRng);
+                rpcReplyRetryEnabled, rpcExpiryMs, rpcReplyRetryMaxBuffered, gatewayAckTimeoutMs);
         deviceAnnouncer = new GatewayDeviceAnnouncer(announceStats, ackCfg, ackRng,
                 gatewayAnnounceMaxConcurrent, gatewayAnnouncePermitWaitMs);
         statsReporter().register(StatsBlock.GATEWAY_DEVICE_ANNOUNCE, announceStats::summaryAndReset);
+        statsReporter().register(StatsBlock.RPC_SUBSCRIPTION, rpcReceiver::subscriptionSummary);
+        statsReporter().register(StatsBlock.RPC_RECEIVE, rpcReceiver::receiveSummary);
+        statsReporter().register(StatsBlock.RPC_PUBLISH, rpcReceiver::publishSummary);
         rpcReceiver.attach(mqttClients);
         // On reconnect, a gateway loses its RPC subscription (cleanSession) and its server-side
         // sub-device routing; restore both so RPC delivery resumes instead of silently dropping.
@@ -343,7 +347,6 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
                 rpcReceiver.flushReplies(client);
             });
         }
-        statsReporter().register(StatsBlock.RPC, rpcReceiver::statsSummaryAndReset);
     }
 
     @Override

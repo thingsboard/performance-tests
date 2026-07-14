@@ -17,20 +17,20 @@ package org.thingsboard.tools.service.gateway.rpc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.thingsboard.tools.service.gateway.rpc.RpcMessageProcessor.ProcessedRpc;
 
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
 
 class RpcMessageProcessorTest {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
-    private RpcMessageProcessor processor(boolean respond, RpcLatencyStats stats) {
+    private RpcMessageProcessor processor(boolean respond) {
         RpcResponseTemplate template = new RpcResponseTemplate(
                 "{\"device\":\"${device}\",\"id\":${data.id},\"data\":{\"status\":\"ACCEPTED\",\"receivedAt\":${now}}}");
-        return new RpcMessageProcessor(mapper, "data.params.sendTs", respond, template, stats);
+        return new RpcMessageProcessor(mapper, "data.params.sendTs", respond, template);
     }
 
     private byte[] bytes(String s) {
@@ -38,79 +38,59 @@ class RpcMessageProcessorTest {
     }
 
     @Test
-    void recordsLatencyAndRendersResponse() {
-        RpcLatencyStats stats = new RpcLatencyStats();
-        RpcMessageProcessor p = processor(true, stats);
-        byte[] in = bytes("{\"device\":\"GW1\",\"data\":{\"id\":5,\"params\":{\"sendTs\":1000}}}");
-        byte[] out = p.process(in, 1150L);
-        assertThat(stats.getCount()).isEqualTo(1);
-        assertThat(stats.getMean()).isCloseTo(150.0, within(0.001));
-        assertThat(new String(out, StandardCharsets.UTF_8))
+    void extractsKeyLatencyAndRendersResponse() {
+        RpcMessageProcessor p = processor(true);
+        ProcessedRpc r = p.process(bytes("{\"device\":\"GW1\",\"data\":{\"id\":5,\"params\":{\"sendTs\":1000}}}"), 1150L);
+        assertThat(r.deviceName()).isEqualTo("GW1");
+        assertThat(r.requestId()).isEqualTo("5");
+        assertThat(r.latencyMs()).isEqualTo(150L);
+        assertThat(new String(r.reply(), StandardCharsets.UTF_8))
                 .isEqualTo("{\"device\":\"GW1\",\"id\":5,\"data\":{\"status\":\"ACCEPTED\",\"receivedAt\":1150}}");
     }
 
     @Test
-    void missingSendTsStillResponds() {
-        RpcLatencyStats stats = new RpcLatencyStats();
-        RpcMessageProcessor p = processor(true, stats);
-        byte[] in = bytes("{\"device\":\"GW1\",\"data\":{\"id\":5,\"params\":{}}}");
-        byte[] out = p.process(in, 1150L);
-        assertThat(stats.getCount()).isEqualTo(0); // no readable sendTs -> no latency sample
-        assertThat(out).isNotNull();
+    void missingSendTsStillRespondsWithNullLatency() {
+        RpcMessageProcessor p = processor(true);
+        ProcessedRpc r = p.process(bytes("{\"device\":\"GW1\",\"data\":{\"id\":5,\"params\":{}}}"), 1150L);
+        assertThat(r.latencyMs()).isNull();
+        assertThat(r.reply()).isNotNull();
+        assertThat(r.requestId()).isEqualTo("5");
     }
 
     @Test
     void malformedJsonReturnsNull() {
-        RpcLatencyStats stats = new RpcLatencyStats();
-        RpcMessageProcessor p = processor(true, stats);
-        byte[] out = p.process(bytes("not json"), 1150L);
-        assertThat(out).isNull();
-        assertThat(stats.getCount()).isEqualTo(0);
+        assertThat(processor(true).process(bytes("not json"), 1150L)).isNull();
     }
 
     @Test
-    void noResponseWhenRespondDisabled() {
-        RpcLatencyStats stats = new RpcLatencyStats();
-        RpcMessageProcessor p = processor(false, stats);
-        byte[] in = bytes("{\"device\":\"GW1\",\"data\":{\"id\":5,\"params\":{\"sendTs\":1000}}}");
-        byte[] out = p.process(in, 1150L);
-        assertThat(out).isNull();
-        assertThat(stats.getCount()).isEqualTo(1); // latency still measured
+    void noReplyWhenRespondDisabledButKeyAndLatencyStillParsed() {
+        RpcMessageProcessor p = processor(false);
+        ProcessedRpc r = p.process(bytes("{\"device\":\"GW1\",\"data\":{\"id\":5,\"params\":{\"sendTs\":1000}}}"), 1150L);
+        assertThat(r.reply()).isNull();
+        assertThat(r.latencyMs()).isEqualTo(150L);
+        assertThat(r.deviceName()).isEqualTo("GW1");
     }
 
     @Test
     void acceptsStringSendTs() {
-        RpcLatencyStats stats = new RpcLatencyStats();
-        RpcMessageProcessor p = processor(true, stats);
-        byte[] in = bytes("{\"device\":\"GW1\",\"data\":{\"id\":5,\"params\":{\"sendTs\":\"1000\"}}}");
-        byte[] out = p.process(in, 1150L);
-        assertThat(out).isNotNull();
-        assertThat(stats.getCount()).isEqualTo(1);
+        ProcessedRpc r = processor(true)
+                .process(bytes("{\"device\":\"GW1\",\"data\":{\"id\":5,\"params\":{\"sendTs\":\"1000\"}}}"), 1150L);
+        assertThat(r.reply()).isNotNull();
+        assertThat(r.latencyMs()).isEqualTo(150L);
     }
 
     @Test
-    void nullTemplateReturnsNull() {
-        RpcLatencyStats stats = new RpcLatencyStats();
-        RpcMessageProcessor p = new RpcMessageProcessor(mapper, "data.params.sendTs", true, null, stats);
-        byte[] in = bytes("{\"device\":\"GW1\",\"data\":{\"id\":5,\"params\":{\"sendTs\":1000}}}");
-        byte[] out = p.process(in, 1150L);
-        assertThat(out).isNull();
-        assertThat(stats.getCount()).isEqualTo(1);
+    void nullTemplateReturnsNullReply() {
+        RpcMessageProcessor p = new RpcMessageProcessor(mapper, "data.params.sendTs", true, null);
+        ProcessedRpc r = p.process(bytes("{\"device\":\"GW1\",\"data\":{\"id\":5,\"params\":{\"sendTs\":1000}}}"), 1150L);
+        assertThat(r.reply()).isNull();
+        assertThat(r.latencyMs()).isEqualTo(150L);
     }
 
     @Test
-    void processCountsEveryInboundAndStampsLastInbound() {
-        RpcLatencyStats stats = new RpcLatencyStats();
-        RpcResponseTemplate template = new RpcResponseTemplate("{\"ok\":true}");
-        RpcMessageProcessor p = new RpcMessageProcessor(
-                mapper, "data.params.sendTs", true, template, stats);
-
-        // valid message with sendTs
-        p.process("{\"device\":\"GW1\",\"data\":{\"params\":{\"sendTs\":1000}}}".getBytes(StandardCharsets.UTF_8), 9000L);
-        // malformed payload still counts as received
-        p.process("not json".getBytes(StandardCharsets.UTF_8), 9500L);
-
-        assertThat(stats.getReceivedTotal()).isEqualTo(2);
-        assertThat(stats.getLastInboundMs()).isEqualTo(9500L);
+    void missingDeviceOrIdYieldsNullKeyParts() {
+        ProcessedRpc r = processor(true).process(bytes("{\"data\":{\"params\":{}}}"), 9000L);
+        assertThat(r.deviceName()).isNull();
+        assertThat(r.requestId()).isNull();
     }
 }

@@ -24,30 +24,38 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * Pure parser for an inbound gateway RPC ({@code {"device":..,"data":{"id":..,..}}}): extracts the
+ * dedup key parts ({@code device}, {@code data.id}), the one-way delivery latency (if the rule chain
+ * stamped a send-timestamp), and renders the reply. No stats/side effects — the receiver drives all
+ * accounting so it can dedup by {@code (device, requestId)} before counting.
+ */
 @Slf4j
 public class RpcMessageProcessor {
+
+    /** Parsed result. {@code reply} is null when responding is disabled or there is no template. */
+    public record ProcessedRpc(String deviceName, String requestId, Long latencyMs, byte[] reply) {
+    }
 
     private final ObjectMapper mapper;
     private final String sendTsPath;
     private final boolean respond;
     private final RpcResponseTemplate template;
-    private final RpcLatencyStats stats;
 
     public RpcMessageProcessor(ObjectMapper mapper, String sendTsPath, boolean respond,
-                               RpcResponseTemplate template, RpcLatencyStats stats) {
+                               RpcResponseTemplate template) {
         this.mapper = mapper;
         this.sendTsPath = sendTsPath;
         this.respond = respond;
         this.template = template;
-        this.stats = stats;
     }
 
-    public byte[] process(ByteBuf payload, long nowMs) {
+    public ProcessedRpc process(ByteBuf payload, long nowMs) {
         return process(ByteBufUtil.getBytes(payload), nowMs);
     }
 
-    public byte[] process(byte[] payload, long nowMs) {
-        stats.incReceived(nowMs);
+    /** Returns null only for a malformed (unparseable) payload. */
+    public ProcessedRpc process(byte[] payload, long nowMs) {
         JsonNode request;
         try {
             request = mapper.readTree(payload);
@@ -55,14 +63,24 @@ public class RpcMessageProcessor {
             log.debug("Failed to parse inbound RPC payload", e);
             return null;
         }
+        String deviceName = text(request.get("device"));
+        String requestId = text(JsonPaths.resolve(request, "data.id"));
+        Long latencyMs = null;
         Long sendTs = asLong(JsonPaths.resolve(request, sendTsPath));
         if (sendTs != null) {
-            stats.recordLatency(nowMs - sendTs);
+            latencyMs = nowMs - sendTs;
         }
-        if (respond && template != null) {
-            return template.render(request, nowMs).getBytes(StandardCharsets.UTF_8);
+        byte[] reply = (respond && template != null)
+                ? template.render(request, nowMs).getBytes(StandardCharsets.UTF_8)
+                : null;
+        return new ProcessedRpc(deviceName, requestId, latencyMs, reply);
+    }
+
+    private static String text(JsonNode node) {
+        if (node == null || node.isNull() || node.isMissingNode()) {
+            return null;
         }
-        return null;
+        return node.asText();
     }
 
     private static Long asLong(JsonNode node) {

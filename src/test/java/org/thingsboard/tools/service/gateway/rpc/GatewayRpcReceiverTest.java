@@ -32,14 +32,12 @@ import org.thingsboard.mqtt.MqttClientCallback;
 import org.thingsboard.mqtt.MqttClientConfig;
 import org.thingsboard.mqtt.MqttConnectResult;
 import org.thingsboard.mqtt.MqttHandler;
-import org.thingsboard.tools.service.gateway.AckedRetryConfig;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
-import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -54,12 +52,21 @@ class GatewayRpcReceiverTest {
         loop.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS);
     }
 
-    private GatewayRpcReceiver receiver(RpcLatencyStats stats) {
+    private RpcMessageProcessor processor() {
         RpcResponseTemplate template = new RpcResponseTemplate(
                 "{\"device\":\"${device}\",\"id\":${data.id},\"data\":{\"status\":\"ACCEPTED\",\"receivedAt\":${now}}}");
-        RpcMessageProcessor processor = new RpcMessageProcessor(
-                new ObjectMapper(), "data.params.sendTs", true, template, stats);
-        return new GatewayRpcReceiver("v1/gateway/rpc", MqttQoS.AT_LEAST_ONCE, processor, stats, 0L);
+        return new RpcMessageProcessor(new ObjectMapper(), "data.params.sendTs", true, template);
+    }
+
+    private GatewayRpcReceiver receiver(RpcLatencyStats stats) {
+        return new GatewayRpcReceiver("v1/gateway/rpc", MqttQoS.AT_LEAST_ONCE, processor(), stats, 0L,
+                true, 60_000L, 64, 5000L);
+    }
+
+    private static ByteBuf rpc(String device, int id) {
+        return Unpooled.wrappedBuffer(
+                ("{\"device\":\"" + device + "\",\"data\":{\"id\":" + id + ",\"params\":{\"sendTs\":1}}}")
+                        .getBytes(StandardCharsets.UTF_8));
     }
 
     @Test
@@ -68,19 +75,32 @@ class GatewayRpcReceiverTest {
         GatewayRpcReceiver r = receiver(stats);
         FakeMqttClient fake = new FakeMqttClient(loop);
 
-        MqttHandler handler = r.buildHandler(fake);
-        ByteBuf in = Unpooled.wrappedBuffer(
-                "{\"device\":\"GW1\",\"data\":{\"id\":5,\"params\":{\"sendTs\":1000}}}".getBytes(StandardCharsets.UTF_8));
-        handler.onMessage("v1/gateway/rpc", in);
+        r.buildHandler(fake).onMessage("v1/gateway/rpc", rpc("GW1", 5));
 
         assertThat(fake.publishedTopics).containsExactly("v1/gateway/rpc");
         assertThat(fake.publishedPayloads.get(0)).contains("\"device\":\"GW1\"").contains("\"id\":5");
         assertThat(stats.getResponsesSent()).isEqualTo(1);
-        assertThat(stats.getCount()).isEqualTo(1);
+        assertThat(stats.getReceived()).isEqualTo(1);
     }
 
     @Test
-    void attachSubscribesEachClient() {
+    void duplicateDeliveryCountedOnceAndNotReAnswered() throws Exception {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        GatewayRpcReceiver r = receiver(stats);
+        FakeMqttClient fake = new FakeMqttClient(loop);
+        MqttHandler handler = r.buildHandler(fake);
+
+        handler.onMessage("v1/gateway/rpc", rpc("GW1", 5)); // first receipt: answered
+        handler.onMessage("v1/gateway/rpc", rpc("GW1", 5)); // server redelivery of the same RPC
+
+        assertThat(stats.getReceived()).isEqualTo(2);    // raw counts both deliveries
+        assertThat(stats.getDuplicate()).isEqualTo(1);   // second recognised as a duplicate
+        assertThat(stats.getResponsesSent()).isEqualTo(1); // answered exactly once
+        assertThat(fake.publishedPayloads).hasSize(1);     // no re-publish for the duplicate
+    }
+
+    @Test
+    void attachSubscribesEachClientAndCountsAck() {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats);
         FakeMqttClient a = new FakeMqttClient(loop);
@@ -88,95 +108,102 @@ class GatewayRpcReceiverTest {
         r.attach(List.of(a, b));
         assertThat(a.subscribedTopics).containsExactly("v1/gateway/rpc");
         assertThat(b.subscribedTopics).containsExactly("v1/gateway/rpc");
+        assertThat(stats.getSubscribeAcked()).isEqualTo(2);
+    }
+
+    @Test
+    void subscribeCountsFailedWhenSubackFails() {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        GatewayRpcReceiver r = receiver(stats);
+        FakeMqttClient fake = new FakeMqttClient(loop);
+        fake.onOutcomes.add(false); // SUBACK fails
+        r.resubscribe(fake);
+        assertThat(stats.getSubscribeFailed()).isEqualTo(1);
+        assertThat(stats.getSubscribeAcked()).isZero();
+    }
+
+    @Test
+    void subscribeCountsUnconfirmedOnTimeoutNoRetry() throws Exception {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        GatewayRpcReceiver r = new GatewayRpcReceiver("v1/gateway/rpc", MqttQoS.AT_LEAST_ONCE, processor(), stats, 0L,
+                true, 60_000L, 64, 100L); // short ack timeout
+        FakeMqttClient fake = new FakeMqttClient(loop);
+        fake.onHangs = true; // SUBACK never arrives (orphan)
+
+        r.resubscribe(fake);
+
+        long deadline = System.currentTimeMillis() + 2000L;
+        while (stats.getSubscribeUnconfirmed() == 0 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+        assertThat(stats.getSubscribeUnconfirmed()).isEqualTo(1);
+        assertThat(stats.getSubscribeAcked()).isZero();
+        assertThat(fake.subscribedTopics).containsExactly("v1/gateway/rpc"); // one attempt only — no retry loop
     }
 
     @Test
     void handlerSwallowsProcessorException() {
         RpcLatencyStats stats = new RpcLatencyStats();
-        RpcResponseTemplate template = new RpcResponseTemplate("{}");
         RpcMessageProcessor throwing = new RpcMessageProcessor(
-                new ObjectMapper(), "data.params.sendTs", true, template, stats) {
+                new ObjectMapper(), "data.params.sendTs", true, new RpcResponseTemplate("{}")) {
             @Override
-            public byte[] process(byte[] payload, long nowMs) {
+            public ProcessedRpc process(byte[] payload, long nowMs) {
                 throw new RuntimeException("boom");
             }
         };
         GatewayRpcReceiver r = new GatewayRpcReceiver("v1/gateway/rpc", MqttQoS.AT_LEAST_ONCE, throwing, stats, 0L);
         FakeMqttClient fake = new FakeMqttClient(loop);
-        MqttHandler handler = r.buildHandler(fake);
         ByteBuf in = Unpooled.wrappedBuffer("{}".getBytes(StandardCharsets.UTF_8));
-        assertThatNoException().isThrownBy(() -> handler.onMessage("v1/gateway/rpc", in));
+        assertThatNoException().isThrownBy(() -> r.buildHandler(fake).onMessage("v1/gateway/rpc", in));
         assertThat(fake.publishedTopics).isEmpty();
     }
 
     @Test
-    void resubscribeSubscribesTheClientAgain() {
+    void resubscribeReusesTheSameHandlerInstance() {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats);
         FakeMqttClient fake = new FakeMqttClient(loop);
         r.attach(List.of(fake));
-        assertThat(fake.subscribedTopics).containsExactly("v1/gateway/rpc");
         r.resubscribe(fake);
         assertThat(fake.subscribedTopics).containsExactly("v1/gateway/rpc", "v1/gateway/rpc");
-    }
-
-    @Test
-    void resubscribeRetriesUntilSuback() throws Exception {
-        RpcLatencyStats stats = new RpcLatencyStats();
-        RpcMessageProcessor processor = new RpcMessageProcessor(
-                new ObjectMapper(), "data.params.sendTs", true, new RpcResponseTemplate("{}"), stats);
-        GatewayRpcReceiver r = new GatewayRpcReceiver("v1/gateway/rpc", MqttQoS.AT_LEAST_ONCE, processor, stats, 0L,
-                false, 0L, 0, new AckedRetryConfig(5, 100, 1, 2), new Random(1L)); // fast retry for the test
-        FakeMqttClient fake = new FakeMqttClient(loop);
-        fake.onOutcomes.add(false); // first SUBSCRIBE fails (no SUBACK); the retry succeeds
-
-        r.resubscribe(fake);
-
-        long deadline = System.currentTimeMillis() + 3000L;
-        while (stats.getSubscribeAcked() == 0 && System.currentTimeMillis() < deadline) {
-            Thread.sleep(20);
-        }
-        assertThat(stats.getSubscribeAcked()).isEqualTo(1);
-        assertThat(stats.getSubscribeFailed()).isGreaterThanOrEqualTo(1);
-        assertThat(stats.getSubscribeRetried()).isGreaterThanOrEqualTo(1);
+        assertThat(fake.subscribedHandlers.get(0)).isSameAs(fake.subscribedHandlers.get(1)); // dedup-safe
     }
 
     @Test
     void drainQuiescesImmediatelyWhenNothingReceived() {
-        RpcLatencyStats stats = new RpcLatencyStats();
-        GatewayRpcReceiver r = receiver(stats);
+        GatewayRpcReceiver r = receiver(new RpcLatencyStats());
         GatewayRpcReceiver.DrainResult res = r.drain(1000L, 5000L, true);
         assertThat(res.quiesced).isTrue();
         assertThat(res.elapsedMs).isLessThan(1000L);
     }
 
     @Test
-    void drainSettlesWhenIdleAndRepliesCaughtUp() {
+    void drainSettlesWhenIdleAndNothingOutstanding() {
         RpcLatencyStats stats = new RpcLatencyStats();
-        stats.incReceived(System.currentTimeMillis() - 10_000L); // inbound 10s ago
-        stats.incResponsesSent();                                // reply already sent
+        stats.incReceived(System.currentTimeMillis() - 10_000L); // inbound 10s ago, but answered (nothing outstanding)
         GatewayRpcReceiver r = receiver(stats);
-        GatewayRpcReceiver.DrainResult res = r.drain(1000L, 5000L, true);
-        assertThat(res.quiesced).isTrue();
+        assertThat(r.drain(1000L, 5000L, true).quiesced).isTrue();
     }
 
     @Test
-    void drainReturnsCappedWhenInboundStaysActive() {
+    void drainReturnsCappedWhileAnRpcStaysOutstanding() throws Exception {
         RpcLatencyStats stats = new RpcLatencyStats();
-        stats.incReceived(System.currentTimeMillis()); // just received, reply still pending
         GatewayRpcReceiver r = receiver(stats);
-        GatewayRpcReceiver.DrainResult res = r.drain(10_000L, 300L, true);
+        FakeMqttClient fake = new FakeMqttClient(loop);
+        fake.publishHangs = true; // reply never confirms -> RPC stays outstanding
+        r.buildHandler(fake).onMessage("v1/gateway/rpc", rpc("GW1", 5));
+
+        GatewayRpcReceiver.DrainResult res = r.drain(50L, 400L, true);
         assertThat(res.quiesced).isFalse();
-        assertThat(res.elapsedMs).isGreaterThanOrEqualTo(300L);
+        assertThat(res.elapsedMs).isGreaterThanOrEqualTo(400L);
     }
 
     @Test
-    void drainIgnoresPendingWhenRespondFalse() {
+    void drainIgnoresOutstandingWhenRespondFalse() {
         RpcLatencyStats stats = new RpcLatencyStats();
-        stats.incReceived(System.currentTimeMillis() - 10_000L); // idle, but no reply sent
+        stats.incReceived(System.currentTimeMillis() - 10_000L);
         GatewayRpcReceiver r = receiver(stats);
-        GatewayRpcReceiver.DrainResult res = r.drain(1000L, 5000L, false);
-        assertThat(res.quiesced).isTrue();
+        assertThat(r.drain(1000L, 5000L, false).quiesced).isTrue();
     }
 
     @Test
@@ -199,13 +226,17 @@ class GatewayRpcReceiverTest {
         assertThat(GatewayRpcReceiver.resolveDrainMaxMs(0, true, 100, 0, 60)).isEqualTo(60_000L);
     }
 
-    /** Minimal MqttClient test double: on(3-arg), publish(3-arg), getEventLoop and isConnected are
-     *  functional. {@code onOutcomes} controls per-attempt subscribe success (default success). */
+    /** Minimal MqttClient test double: on(3-arg), publish(3-arg), getEventLoop, isConnected functional.
+     *  onOutcomes controls per-call subscribe success; onHangs/publishHangs return a never-completing
+     *  future (models the netty-mqtt orphan). */
     static class FakeMqttClient implements MqttClient {
         final List<String> subscribedTopics = new ArrayList<>();
+        final List<MqttHandler> subscribedHandlers = new ArrayList<>();
         final List<String> publishedTopics = new ArrayList<>();
         final List<String> publishedPayloads = new ArrayList<>();
         final Deque<Boolean> onOutcomes = new ArrayDeque<>();
+        boolean onHangs;
+        boolean publishHangs;
         private final EventLoopGroup eventLoop;
 
         FakeMqttClient(EventLoopGroup eventLoop) {
@@ -215,6 +246,10 @@ class GatewayRpcReceiverTest {
         @Override
         public Future<Void> on(String topic, MqttHandler handler, MqttQoS qos) {
             subscribedTopics.add(topic);
+            subscribedHandlers.add(handler);
+            if (onHangs) {
+                return ImmediateEventExecutor.INSTANCE.newPromise();
+            }
             boolean ok = onOutcomes.isEmpty() || onOutcomes.poll();
             return ok ? ImmediateEventExecutor.INSTANCE.newSucceededFuture(null)
                     : ImmediateEventExecutor.INSTANCE.newFailedFuture(new RuntimeException("suback fail"));
@@ -224,7 +259,9 @@ class GatewayRpcReceiverTest {
         public Future<Void> publish(String topic, ByteBuf payload, MqttQoS qos) {
             publishedTopics.add(topic);
             publishedPayloads.add(payload.toString(StandardCharsets.UTF_8));
-            return ImmediateEventExecutor.INSTANCE.newSucceededFuture(null);
+            return publishHangs
+                    ? ImmediateEventExecutor.INSTANCE.newPromise()
+                    : ImmediateEventExecutor.INSTANCE.newSucceededFuture(null);
         }
 
         @Override public boolean isConnected() { return true; }
