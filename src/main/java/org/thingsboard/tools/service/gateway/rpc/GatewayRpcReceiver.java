@@ -100,7 +100,11 @@ public class GatewayRpcReceiver {
     private void subscribe(MqttClient client) {
         // SUBACK-confirmed and retried on the client's event loop: a silent resubscribe failure drops
         // RPC delivery just as surely as a lost announce, so success must be the broker ack, not a send.
-        AckedRetry.run(client.getEventLoop(), () -> client.on(topic, buildHandler(client), qos),
+        // Build the handler ONCE and reuse it across retry attempts: netty-mqtt keys pending-subscription
+        // handlers by (handler, once) record-equality, so re-issuing on() with the SAME handler instance
+        // dedups; a fresh handler per attempt would register twice and double-deliver every RPC.
+        MqttHandler handler = buildHandler(client);
+        AckedRetry.run(client.getEventLoop(), () -> client.on(topic, handler, qos),
                 subscribeRetry, rng, new AckedRetry.Callbacks() {
                     @Override
                     public void onAcked() {
