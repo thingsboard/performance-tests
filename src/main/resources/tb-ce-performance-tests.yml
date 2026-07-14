@@ -180,7 +180,7 @@ gateway:
       quietSec: "${GATEWAY_RPC_DRAIN_QUIET_SEC:5}" # inbound RPC must be idle this long before the tail is called settled (drain exits early)
       maxSec: "${GATEWAY_RPC_DRAIN_MAX_SEC:0}" # hard cap on the post-window drain. >0 = explicit seconds; 0 = auto (sender on: timeoutMs+responseDelayMs+5s; sender off: 30s), floored to >= quietSec
     replyRetryEnabled: "${GATEWAY_RPC_REPLY_RETRY_ENABLED:true}" # true = buffer a gateway RPC reply whose publish failed (channel dropped mid-reply) and re-publish it when that client reconnects; false = legacy immediate 'lost'
-    replyRetryMaxBuffered: "${GATEWAY_RPC_REPLY_RETRY_MAX_BUFFERED:10000}" # per-client cap on buffered replies awaiting reconnect; overflow is dropped and counted lost. Reply expiry = GATEWAY_RPC_SENDER_TIMEOUT_MS
+    replyRetryMaxBuffered: "${GATEWAY_RPC_REPLY_RETRY_MAX_BUFFERED:64}" # per-client cap on buffered replies awaiting reconnect (steady buffer ~= sub-devices per gateway); overflow is dropped and counted lost. Reply expiry = GATEWAY_RPC_SENDER_TIMEOUT_MS
     sender:
       enabled: "${GATEWAY_RPC_SENDER_ENABLED:false}" # true = this instance fires boundary-aligned rule-engine RPC bursts for its device range (requires gateway.rpc.enabled; use MESSAGES_PER_SECOND=0)
       template: "${GATEWAY_RPC_SENDER_TEMPLATE:}" # filesystem path to a {method, params} JSON command body; empty = built-in neutral default

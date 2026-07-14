@@ -80,7 +80,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
 
     @Value("${gateway.rpc.replyRetryEnabled:true}")
     boolean rpcReplyRetryEnabled;
-    @Value("${gateway.rpc.replyRetryMaxBuffered:10000}")
+    @Value("${gateway.rpc.replyRetryMaxBuffered:64}")
     int rpcReplyRetryMaxBuffered;
 
     @Value("${gateway.rpc.sender.enabled:false}")
