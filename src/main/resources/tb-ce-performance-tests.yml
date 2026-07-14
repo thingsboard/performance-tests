@@ -180,7 +180,16 @@ gateway:
       quietSec: "${GATEWAY_RPC_DRAIN_QUIET_SEC:5}" # inbound RPC must be idle this long before the tail is called settled (drain exits early)
       maxSec: "${GATEWAY_RPC_DRAIN_MAX_SEC:0}" # hard cap on the post-window drain. >0 = explicit seconds; 0 = auto (sender on: timeoutMs+responseDelayMs+5s; sender off: 30s), floored to >= quietSec
     replyRetryEnabled: "${GATEWAY_RPC_REPLY_RETRY_ENABLED:true}" # true = buffer a gateway RPC reply whose publish failed (channel dropped mid-reply) and re-publish it when that client reconnects; false = legacy immediate 'lost'
-    replyRetryMaxBuffered: "${GATEWAY_RPC_REPLY_RETRY_MAX_BUFFERED:64}" # per-client cap on buffered replies awaiting reconnect (steady buffer ~= sub-devices per gateway); overflow is dropped and counted lost. Reply expiry = GATEWAY_RPC_SENDER_TIMEOUT_MS
+    replyRetryMaxBuffered: "${GATEWAY_RPC_REPLY_RETRY_MAX_BUFFERED:64}" # per-client cap on buffered replies awaiting reconnect (steady buffer ~= sub-devices per gateway); overflow is dropped and counted lost. Reply expiry = GATEWAY_RPC_EXPIRY_MS
+    expiryMs: "${GATEWAY_RPC_EXPIRY_MS:120000}" # server-side RPC expiry (ms): the reply-retry TTL, and the deadline the re-announce/resubscribe retry cap is sized to fit under
+    ack: # reliability of the RPC-routing (re)establishment ops on (re)connect — announce PUBACK / resubscribe SUBACK
+      timeoutMs: "${GATEWAY_RPC_ACK_TIMEOUT_MS:5000}" # per-attempt wait for PUBACK/SUBACK before the attempt is retried (also bounds a channel-null publish whose future never completes)
+      maxAttempts: "${GATEWAY_RPC_ACK_MAX_ATTEMPTS:5}" # bounded retries until broker-confirmed; exhausted => unconfirmed (device/subscription at risk of losing RPC)
+      backoffMinMs: "${GATEWAY_RPC_ACK_BACKOFF_MIN_MS:1000}" # jittered-exponential retry backoff floor
+      backoffMaxMs: "${GATEWAY_RPC_ACK_BACKOFF_MAX_MS:5000}" # ...and cap (sized so maxAttempts*(timeout+backoffMax) < expiryMs)
+    announce:
+      maxConcurrent: "${GATEWAY_RPC_ANNOUNCE_MAX_CONCURRENT:1000}" # global in-flight cap on device announces so a reconnect storm can't self-amplify
+      permitWaitMs: "${GATEWAY_RPC_ANNOUNCE_PERMIT_WAIT_MS:250}" # non-blocking re-queue wait when the cap is saturated (never blocks the event loop)
     sender:
       enabled: "${GATEWAY_RPC_SENDER_ENABLED:false}" # true = this instance fires boundary-aligned rule-engine RPC bursts for its device range (requires gateway.rpc.enabled; use MESSAGES_PER_SECOND=0)
       template: "${GATEWAY_RPC_SENDER_TEMPLATE:}" # filesystem path to a {method, params} JSON command body; empty = built-in neutral default

@@ -97,8 +97,14 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `GATEWAY_RPC_SEND_TS_PATH` | `data.params.sendTs` | Dot-path to the send-timestamp (epoch ms) the rule chain stamps into the RPC payload; the gateway computes latency = receiveTs − sendTs |
 | `GATEWAY_RPC_DRAIN_QUIET_SEC` | `5` | After the load window ends, inbound RPC must be idle this long before the tail is considered settled (drain exits early). Only relevant with `GATEWAY_RPC_ENABLED=true` |
 | `GATEWAY_RPC_DRAIN_MAX_SEC` | `0` (auto) | Hard cap on the post-window drain phase so it can never hang. `>0` = explicit seconds; `0` = auto (sender on: `GATEWAY_RPC_SENDER_TIMEOUT_MS + GATEWAY_RPC_RESPONSE_DELAY_MS + 5s`; sender off: `30s`), floored to `>= QUIET_SEC` |
-| `GATEWAY_RPC_REPLY_RETRY_ENABLED` | `true` | Buffer a gateway RPC reply whose publish failed because the client's channel dropped mid-reply (e.g. a transport roll) and re-publish it when that client reconnects, so replies recoverable within the RPC's server-side expiry are delivered instead of expiring. Reply expiry = `GATEWAY_RPC_SENDER_TIMEOUT_MS`. `false` = legacy behaviour (a failed reply is immediately counted `lost`) |
+| `GATEWAY_RPC_REPLY_RETRY_ENABLED` | `true` | Buffer a gateway RPC reply whose publish failed because the client's channel dropped mid-reply (e.g. a transport roll) and re-publish it when that client reconnects, so replies recoverable within the RPC's server-side expiry are delivered instead of expiring. Reply expiry = `GATEWAY_RPC_EXPIRY_MS`. `false` = legacy behaviour (a failed reply is immediately counted `lost`) |
 | `GATEWAY_RPC_REPLY_RETRY_MAX_BUFFERED` | `64` | Per-client cap on replies buffered awaiting reconnect; overflow is dropped and counted `lost`. Steady buffer ≈ sub-devices per gateway (a client receives no new RPCs while its channel is down), so the default is generous headroom; it only bounds worst-case memory |
+| `GATEWAY_RPC_EXPIRY_MS` | `120000` | Server-side RPC expiry (ms). Used as the reply-retry TTL and as the deadline the re-announce/resubscribe retry cap is sized to fit under. A reply/announce that lands after this is useless server-side |
+| `GATEWAY_RPC_ACK_TIMEOUT_MS` | `5000` | Per-attempt wait for the broker ack (announce PUBACK / resubscribe SUBACK) before that attempt is retried. Also bounds a publish issued while the channel is momentarily `null` (whose future never completes) |
+| `GATEWAY_RPC_ACK_MAX_ATTEMPTS` | `5` | Bounded retries of announce/resubscribe until broker-confirmed; exhausted → `unconfirmed` (sub-device/subscription at risk of losing RPC routing) |
+| `GATEWAY_RPC_ACK_BACKOFF_MIN_MS` / `GATEWAY_RPC_ACK_BACKOFF_MAX_MS` | `1000` / `5000` | Jittered-exponential backoff between announce/resubscribe retries. Sized so `MAX_ATTEMPTS × (ACK_TIMEOUT + BACKOFF_MAX)` stays under `GATEWAY_RPC_EXPIRY_MS` |
+| `GATEWAY_RPC_ANNOUNCE_MAX_CONCURRENT` | `1000` | Global in-flight cap on device announces so a reconnect storm cannot self-amplify. Acquired non-blockingly (re-queued on the event loop when saturated — never a blocking acquire) |
+| `GATEWAY_RPC_ANNOUNCE_PERMIT_WAIT_MS` | `250` | Jittered `[1,this]` ms re-queue wait when the announce concurrency cap is saturated |
 | `GATEWAY_RPC_SENDER_ENABLED` | `false` | In-tool load driver: after warmup, fire boundary-aligned rule-engine RPC bursts for this instance's device range. Requires `GATEWAY_RPC_ENABLED`; use `MESSAGES_PER_SECOND=0` |
 | `GATEWAY_RPC_SENDER_TEMPLATE` | _(empty)_ | Filesystem path to a `{method, params}` JSON command body (the sender appends the chunked `devices[]`); empty = built-in neutral default |
 | `GATEWAY_RPC_SENDER_INTERVAL_SEC` | `60` | Burst cadence (s). Bursts fire on round clock times (multiples of this, e.g. every whole minute), so separate instances with accurate clocks fire together without coordinating |
@@ -166,7 +172,7 @@ cumulative received/sent/recovered/lost/pending; the periodic `RPC` stats block 
 channel drops between receiving an RPC and publishing its reply (e.g. a `tb-mqtt-transport` roll), the
 reply publish fails. Rather than count that an immediate error and let the RPC expire server-side,
 `GatewayRpcReceiver` buffers the rendered reply per-client with the RPC's expiry (`receivedAt +
-GATEWAY_RPC_SENDER_TIMEOUT_MS`) and re-publishes it on the same client's existing reconnect action
+GATEWAY_RPC_EXPIRY_MS`) and re-publishes it on the same client's existing reconnect action
 (alongside `resubscribe` + re-announce). Replies past expiry on reconnect, over the per-client cap
 (`GATEWAY_RPC_REPLY_RETRY_MAX_BUFFERED`), or still buffered when the drain phase ends are counted
 `lost`. Re-publishing is dup-safe (QoS 1; the server accepts only the first response per request id).
@@ -175,6 +181,28 @@ Accordingly `RpcLatencyStats` reports honest terminal states — `sent` (first-t
 terminal states) reaches 0 on a clean run. The buffer is per-client (`ConcurrentHashMap`) with short
 `synchronized` critical sections, safe under concurrent add/flush on the netty event loop and finalize
 on the drain thread.
+
+**Reliable re-announce + resubscribe (RPC only):** a sub-device's server-side RPC subscription is
+created as a side effect of the gateway's *announce* (`v1/gateway/connect`, `onDeviceConnect` →
+`SubscribeToRPC`), not the `v1/gateway/rpc` topic subscribe (that is only the delivery channel). On a
+reconnect the old session and all sub-device registrations are gone, so RPC routing is restored only if
+**both** the per-device announce and the resubscribe succeed. Previously both were fire-and-forget
+QoS-0/untracked, so a drop mid-reconnect silently lost routing and the RPC `EXPIRED`. Now (only when
+`GATEWAY_RPC_ENABLED=true`) both go through `AckedRetry` (package `service/gateway/`) on the client's
+netty event loop: the announce is QoS 1 (`GatewayDeviceAnnouncer`) and success is the **PUBACK**, the
+resubscribe success is the **SUBACK** — never a QoS-0 "flushed to socket". Each attempt is guarded by a
+scheduled `GATEWAY_RPC_ACK_TIMEOUT_MS` timeout (a publish issued while the channel is momentarily
+`null` returns a future that never completes — the timeout catches it), retried with jittered-exponential
+backoff up to `GATEWAY_RPC_ACK_MAX_ATTEMPTS`, then counted `unconfirmed` (device/subscription at risk).
+Announces are bounded by a non-blocking global in-flight semaphore (`GATEWAY_RPC_ANNOUNCE_MAX_CONCURRENT`,
+`tryAcquire` + event-loop re-queue — never a blocking acquire, per the ephemeral deadlock lesson) so a
+reconnect storm cannot self-amplify. The same announcer serves the initial warm-up (via a `warmUpPublish`
+seam in `BaseMqttAPITest`; device/ephemeral modes keep the default QoS-0 warm-up) and reconnect
+re-announce. Observability: a dedicated `GATEWAY_DEVICE_ANNOUNCE` stats block (`AnnounceStats`, label
+"Gateway device announce") reports `acked / failed / retried / unconfirmed` per window (`unconfirmed`
+must stay 0), and the `Gateway RPC` line gains `subscribe acked/failed/retried/unconfirmed`. Caveat: a
+broker ack (PUBACK/SUBACK) confirms the transport received the op, not that the RPC was ultimately
+answered before server expiry — the authoritative loss signal remains the platform-side `EXPIRED` count.
 
 **Gateway RPC burst sender (`GATEWAY_RPC_SENDER_ENABLED`):** an in-tool load driver layered on the
 persistent gateway mode (same instance receives + measures what it triggers). After warmup,
