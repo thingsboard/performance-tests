@@ -38,7 +38,7 @@ public class RpcOutstandingTracker {
     public record RpcKey(String deviceName, String requestId) {
     }
 
-    private enum State { OUTSTANDING, ANSWERED }
+    private enum State { OUTSTANDING, ANSWERED, LOST }
 
     private record Entry(State state, long tsMs) {
     }
@@ -65,6 +65,32 @@ public class RpcOutstandingTracker {
             }
             return new Entry(State.ANSWERED, nowMs);
         });
+    }
+
+    /** Mark the key terminally lost (reply given up: past TTL or buffer full). Removes it from the
+     *  outstanding count so {@code pending} means "still recoverable" and drain can quiesce. A key that
+     *  was already answered is left answered (a lost path must not override a delivered reply). */
+    public void markLost(RpcKey key, long nowMs) {
+        map.compute(key, (k, e) -> {
+            if (e != null && e.state() == State.ANSWERED) {
+                return e; // already delivered — do not downgrade to lost
+            }
+            if (e != null && e.state() == State.OUTSTANDING) {
+                outstanding.decrementAndGet();
+            }
+            return new Entry(State.LOST, nowMs);
+        });
+    }
+
+    /** The terminally-lost keys, for drain-time logging / DB EXPIRED correlation. */
+    public List<RpcKey> lostKeys() {
+        List<RpcKey> out = new ArrayList<>();
+        map.forEach((k, e) -> {
+            if (e.state() == State.LOST) {
+                out.add(k);
+            }
+        });
+        return out;
     }
 
     /** Distinct RPCs received but never confirmed answered = honest {@code pending}. */

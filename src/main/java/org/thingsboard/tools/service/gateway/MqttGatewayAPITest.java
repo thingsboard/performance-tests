@@ -330,7 +330,8 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         AckedRetryConfig ackCfg = new AckedRetryConfig(gatewayAckMaxAttempts, gatewayAckTimeoutMs, gatewayAckBackoffMinMs, gatewayAckBackoffMaxMs);
         Random ackRng = new Random(seed + instanceIdx);
         rpcReceiver = new GatewayRpcReceiver(rpcTopic, MqttQoS.AT_LEAST_ONCE, processor, rpcLatencyStats, rpcResponseDelayMs,
-                rpcReplyRetryEnabled, rpcExpiryMs, rpcReplyRetryMaxBuffered, gatewayAckTimeoutMs);
+                rpcReplyRetryEnabled, rpcExpiryMs, rpcReplyRetryMaxBuffered, gatewayAckTimeoutMs,
+                gatewayAckBackoffMinMs, gatewayAckBackoffMaxMs);
         deviceAnnouncer = new GatewayDeviceAnnouncer(announceStats, ackCfg, ackRng,
                 gatewayAnnounceMaxConcurrent, gatewayAnnouncePermitWaitMs);
         statsReporter().register(StatsBlock.GATEWAY_DEVICE_ANNOUNCE, announceStats::summaryAndReset);

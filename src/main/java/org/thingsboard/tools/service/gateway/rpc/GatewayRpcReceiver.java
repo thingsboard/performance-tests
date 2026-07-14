@@ -22,15 +22,18 @@ import io.netty.util.concurrent.ScheduledFuture;
 import lombok.extern.slf4j.Slf4j;
 import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.mqtt.MqttHandler;
+import org.thingsboard.tools.service.gateway.EphemeralRetryBackoff;
 import org.thingsboard.tools.service.gateway.rpc.RpcMessageProcessor.ProcessedRpc;
 import org.thingsboard.tools.service.gateway.rpc.RpcOutstandingTracker.RpcKey;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -53,6 +56,10 @@ public class GatewayRpcReceiver {
     // orphan (netty-mqtt never completes a publish whose channel closed mid-flight) and re-buffer it.
     // Subscribe does NOT use this — its 'unconfirmed' is an observe-only live gauge (see subscribe()).
     private final long ackTimeoutMs;
+    // Jittered backoff for the timer-driven reply retry (re-send on the live channel during the run,
+    // not only on reconnect/drain), bounded by the reply's TTL.
+    private final long backoffMinMs;
+    private final long backoffMaxMs;
 
     private final Map<MqttClient, ClientRetryBuffer> retryBuffers = new ConcurrentHashMap<>();
     // One stable inbound handler per client, reused across every (re)subscribe. netty-mqtt keys pending
@@ -70,12 +77,13 @@ public class GatewayRpcReceiver {
     /** Legacy constructor: reply retry disabled (a not-confirmed reply is immediately counted lost). */
     public GatewayRpcReceiver(String topic, MqttQoS qos, RpcMessageProcessor processor,
                               RpcLatencyStats stats, long responseDelayMs) {
-        this(topic, qos, processor, stats, responseDelayMs, false, 0L, 0, 5000L);
+        this(topic, qos, processor, stats, responseDelayMs, false, 0L, 0, 5000L, 1000L, 5000L);
     }
 
     public GatewayRpcReceiver(String topic, MqttQoS qos, RpcMessageProcessor processor,
                               RpcLatencyStats stats, long responseDelayMs,
-                              boolean retryEnabled, long replyTtlMs, int maxBufferedPerClient, long ackTimeoutMs) {
+                              boolean retryEnabled, long replyTtlMs, int maxBufferedPerClient, long ackTimeoutMs,
+                              long backoffMinMs, long backoffMaxMs) {
         this.topic = topic;
         this.qos = qos;
         this.processor = processor;
@@ -85,6 +93,8 @@ public class GatewayRpcReceiver {
         this.replyTtlMs = replyTtlMs;
         this.maxBufferedPerClient = maxBufferedPerClient;
         this.ackTimeoutMs = ackTimeoutMs;
+        this.backoffMinMs = backoffMinMs;
+        this.backoffMaxMs = backoffMaxMs;
     }
 
     public void attach(List<MqttClient> clients) {
@@ -203,24 +213,58 @@ public class GatewayRpcReceiver {
         });
     }
 
-    /** A reply that did not confirm sent (publish failed or orphaned): buffer it for retry on reconnect,
-     *  unless retry is off, it has expired, or the per-client buffer is full — then it is terminally lost. */
+    /** A reply that did not confirm sent (publish failed or orphaned): buffer it and schedule a
+     *  timer-driven re-send on the live channel (not only on reconnect/drain), until it confirms or its
+     *  TTL passes. Terminal when retry is off, past expiry, or the per-client buffer is full → lost. */
     private void onReplyNotConfirmed(MqttClient client, BufferedReply reply) {
         if (!retryEnabled || System.currentTimeMillis() >= reply.expiryMs) {
-            stats.incLost();
+            markReplyLost(reply);
             return;
         }
         ClientRetryBuffer buf = retryBuffers.computeIfAbsent(client, c -> new ClientRetryBuffer(maxBufferedPerClient));
-        if (buf.offer(reply)) {
-            stats.incRetryQueued();
-        } else {
-            stats.incLost();
+        if (!buf.offer(reply)) {
+            markReplyLost(reply); // buffer full — give up so it can't grow unbounded
+            return;
+        }
+        stats.incRetryQueued();
+        scheduleReplyRetry(client, reply);
+    }
+
+    /** Schedule the buffered reply's re-send on the client's event loop after a jittered backoff. Fires
+     *  during the load window regardless of reconnects, so an orphaned reply recovers well inside its TTL. */
+    private void scheduleReplyRetry(MqttClient client, BufferedReply reply) {
+        long backoff = EphemeralRetryBackoff.resolveMillis(reply.attempts, backoffMinMs, backoffMaxMs, ThreadLocalRandom.current());
+        try {
+            client.getEventLoop().schedule(() -> retryBufferedReply(client, reply), backoff, TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException ignored) {
+            // event loop shutting down: leave it buffered for drain's flushAllReplies / finalize
         }
     }
 
-    /** Re-publish a client's buffered replies; drop + count lost any already past expiry. Called on the
-     *  client's reconnect action AND proactively from the drain loop (the channel is live there, so a
-     *  reply that missed its reconnect flush still gets re-sent instead of stranding {@code pending}). */
+    /** Timer callback: claim the reply from the buffer (so a concurrent flush can't also send it) and
+     *  re-publish, unless it has expired meanwhile. If it was already flushed, this is a no-op. */
+    private void retryBufferedReply(MqttClient client, BufferedReply reply) {
+        ClientRetryBuffer buf = retryBuffers.get(client);
+        if (buf == null || buf.remove(reply.key) == null) {
+            return; // already sent/removed by a reconnect or drain flush — no double send
+        }
+        if (System.currentTimeMillis() >= reply.expiryMs) {
+            markReplyLost(reply);
+            return;
+        }
+        publishReply(client, reply);
+    }
+
+    /** Terminal give-up for one reply: count it lost and drop its key from the outstanding set so
+     *  {@code pending} tracks only still-recoverable RPCs and drain can quiesce. */
+    private void markReplyLost(BufferedReply reply) {
+        stats.incLost();
+        outstanding.markLost(reply.key, System.currentTimeMillis());
+    }
+
+    /** Re-publish a client's buffered replies now; drop + count lost any already past expiry. Called on
+     *  the client's reconnect action AND from the drain loop (immediate push alongside the retry timers);
+     *  claims each entry via drainAll so a pending timer for the same key becomes a no-op. */
     public void flushReplies(MqttClient client) {
         ClientRetryBuffer buf = retryBuffers.get(client);
         if (buf == null) {
@@ -229,7 +273,7 @@ public class GatewayRpcReceiver {
         long now = System.currentTimeMillis();
         for (BufferedReply reply : buf.drainAll()) {
             if (now >= reply.expiryMs) {
-                stats.incLost();
+                markReplyLost(reply);
             } else {
                 publishReply(client, reply);
             }
@@ -243,24 +287,28 @@ public class GatewayRpcReceiver {
         }
     }
 
-    /** After the drain phase: any replies still buffered (client never reconnected in time) are lost. */
+    /** After the drain phase: any replies still buffered (never recovered in time) are terminally lost. */
     public void finalizeLostReplies() {
         for (ClientRetryBuffer buf : retryBuffers.values()) {
-            for (BufferedReply ignored : buf.drainAll()) {
-                stats.incLost();
+            for (BufferedReply reply : buf.drainAll()) {
+                markReplyLost(reply);
             }
         }
     }
 
-    /** Log every distinct RPC still unanswered at drain, so it can be matched to the DB EXPIRED rows. */
+    /** Log every distinct RPC given up as lost, so it can be matched to the DB EXPIRED rows. Any keys
+     *  still merely outstanding (a reply in flight at shutdown) are reported separately. */
     public void logOutstanding() {
-        List<RpcKey> keys = outstanding.outstandingKeys();
-        if (keys.isEmpty()) {
-            return;
+        List<RpcKey> lost = outstanding.lostKeys();
+        if (!lost.isEmpty()) {
+            log.warn("Gateway RPC: {} distinct RPC(s) given up as lost (match against DB EXPIRED):", lost.size());
+            for (RpcKey k : lost) {
+                log.warn("  lost RPC: device={} requestId={}", k.deviceName(), k.requestId());
+            }
         }
-        log.warn("Gateway RPC: {} distinct RPC(s) unanswered at drain end:", keys.size());
-        for (RpcKey k : keys) {
-            log.warn("  unanswered RPC: device={} requestId={}", k.deviceName(), k.requestId());
+        List<RpcKey> stillOutstanding = outstanding.outstandingKeys();
+        if (!stillOutstanding.isEmpty()) {
+            log.warn("Gateway RPC: {} distinct RPC(s) still in flight at shutdown (not yet confirmed or lost)", stillOutstanding.size());
         }
     }
 
@@ -279,26 +327,34 @@ public class GatewayRpcReceiver {
         }
     }
 
-    /** Per-client bounded buffer. Its own monitor guards O(1) offer / full-drain — short critical
-     *  sections safe to run on a netty event loop; also read from the drain thread at finalize. */
+    /** Per-client bounded buffer, keyed by {@link RpcKey} so a reply can be claimed by exactly one of
+     *  {timer retry, reconnect flush, drain flush} via {@link #remove}. Its own monitor guards O(1)
+     *  offer/remove and full-drain — short critical sections safe on a netty event loop; also read from
+     *  the drain thread at finalize. */
     static final class ClientRetryBuffer {
-        private final ArrayDeque<BufferedReply> q = new ArrayDeque<>();
+        private final Map<RpcKey, BufferedReply> q = new LinkedHashMap<>();
         private final int cap;
 
         ClientRetryBuffer(int cap) {
             this.cap = cap;
         }
 
+        /** Buffer the reply (idempotent by key); false only if the cap is hit for a new key. */
         synchronized boolean offer(BufferedReply r) {
-            if (q.size() >= cap) {
+            if (!q.containsKey(r.key) && q.size() >= cap) {
                 return false;
             }
-            q.addLast(r);
+            q.put(r.key, r);
             return true;
         }
 
+        /** Claim (remove) the reply for a key; null if it is not buffered (already claimed elsewhere). */
+        synchronized BufferedReply remove(RpcKey key) {
+            return q.remove(key);
+        }
+
         synchronized List<BufferedReply> drainAll() {
-            List<BufferedReply> out = new ArrayList<>(q);
+            List<BufferedReply> out = new ArrayList<>(q.values());
             q.clear();
             return out;
         }

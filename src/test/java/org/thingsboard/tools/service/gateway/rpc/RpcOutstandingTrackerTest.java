@@ -69,6 +69,27 @@ class RpcOutstandingTrackerTest {
     }
 
     @Test
+    void markLostRemovesFromOutstandingAndIsReported() {
+        RpcOutstandingTracker t = new RpcOutstandingTracker();
+        t.firstReceipt(K1, 1000);
+        t.firstReceipt(K2, 1000);
+        t.markLost(K1, 1100);
+        assertThat(t.outstandingCount()).isEqualTo(1);   // only K2 still recoverable
+        assertThat(t.lostKeys()).containsExactly(K1);
+        assertThat(t.outstandingKeys()).containsExactly(K2);
+    }
+
+    @Test
+    void markLostDoesNotOverrideAnAlreadyAnsweredKey() {
+        RpcOutstandingTracker t = new RpcOutstandingTracker();
+        t.firstReceipt(K1, 1000);
+        t.markAnswered(K1, 1100);
+        t.markLost(K1, 1200);                            // late/spurious lost after delivery
+        assertThat(t.outstandingCount()).isZero();
+        assertThat(t.lostKeys()).isEmpty();              // stays answered, not downgraded to lost
+    }
+
+    @Test
     void outstandingKeysListsOnlyUnanswered() {
         RpcOutstandingTracker t = new RpcOutstandingTracker();
         t.firstReceipt(K1, 1000);

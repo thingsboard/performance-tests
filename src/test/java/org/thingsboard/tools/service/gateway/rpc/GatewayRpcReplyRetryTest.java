@@ -59,14 +59,23 @@ class GatewayRpcReplyRetryTest {
         loop.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS);
     }
 
-    private GatewayRpcReceiver receiver(RpcLatencyStats stats, long ttlMs, int cap) {
+    private RpcMessageProcessor processor() {
         RpcResponseTemplate template = new RpcResponseTemplate(
                 "{\"device\":\"${device}\",\"id\":${data.id},\"data\":{\"status\":\"ACCEPTED\"}}");
-        RpcMessageProcessor processor = new RpcMessageProcessor(
-                new ObjectMapper(), "data.params.sendTs", true, template);
-        // Large ack timeout: publish futures complete synchronously in these tests, so the orphan-capture
-        // timeout is always cancelled before it could fire.
-        return new GatewayRpcReceiver(TOPIC, MqttQoS.AT_LEAST_ONCE, processor, stats, 0L, true, ttlMs, cap, 60_000L);
+        return new RpcMessageProcessor(new ObjectMapper(), "data.params.sendTs", true, template);
+    }
+
+    /** Large ack timeout + large backoff: publish futures complete synchronously and the retry timer
+     *  stays dormant, so these tests exercise the reconnect/drain flush paths deterministically. */
+    private GatewayRpcReceiver receiver(RpcLatencyStats stats, long ttlMs, int cap) {
+        return new GatewayRpcReceiver(TOPIC, MqttQoS.AT_LEAST_ONCE, processor(), stats, 0L,
+                true, ttlMs, cap, 60_000L, 60_000L, 60_000L);
+    }
+
+    /** Fast backoff so the timer-driven retry actually fires within the test. */
+    private GatewayRpcReceiver receiverFastRetry(RpcLatencyStats stats, long ttlMs, int cap) {
+        return new GatewayRpcReceiver(TOPIC, MqttQoS.AT_LEAST_ONCE, processor(), stats, 0L,
+                true, ttlMs, cap, 60_000L, 1L, 2L);
     }
 
     private static ByteBuf rpc(int id) {
@@ -146,6 +155,57 @@ class GatewayRpcReplyRetryTest {
     }
 
     @Test
+    void timerDrivenRetryRecoversWithoutReconnectOrDrain() throws Exception {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        GatewayRpcReceiver r = receiverFastRetry(stats, 60_000L, 100);
+        RetryFakeClient c = client();
+        c.publishOutcomes.add(false); // first publish fails -> buffered -> retry timer scheduled
+
+        r.buildHandler(c).onMessage(TOPIC, rpc(1));
+        // NO reconnect, NO drain call: the timer alone must re-send on the live channel and recover
+        long deadline = System.currentTimeMillis() + 2000L;
+        while (stats.getRecovered() == 0 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+        assertThat(stats.getRecovered()).isEqualTo(1);
+        assertThat(stats.getLost()).isZero();
+        assertThat(c.publishedPayloads.size()).isGreaterThanOrEqualTo(2); // original + timer re-send
+    }
+
+    @Test
+    void timerDrivenRetryGivesUpAtExpiryDropsFromPendingAndIsReportedLost() throws Exception {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        GatewayRpcReceiver r = receiverFastRetry(stats, 50L, 100); // 50ms TTL
+        RetryFakeClient c = client();
+        c.alwaysFail = true; // every (re)publish fails -> keeps retrying until the TTL passes
+
+        r.buildHandler(c).onMessage(TOPIC, rpc(1));
+        long deadline = System.currentTimeMillis() + 2000L;
+        while (stats.getLost() == 0 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+        assertThat(stats.getLost()).isEqualTo(1);
+        assertThat(stats.getRecovered()).isZero();
+        // given-up RPC left the outstanding set (pending recoverable = 0) so drain can quiesce
+        assertThat(r.publishSummary(10)).contains("pending=0");
+    }
+
+    @Test
+    void drainQuiescesWhenOnlyUnrecoverableRepliesRemain() {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        GatewayRpcReceiver r = receiver(stats, 0L, 100); // TTL 0 -> a failed reply is instantly terminal
+        RetryFakeClient c = client();
+        c.alwaysFail = true;
+
+        r.buildHandler(c).onMessage(TOPIC, rpc(1)); // publish fails -> past-expiry -> lost, removed from pending
+
+        GatewayRpcReceiver.DrainResult res = r.drain(50L, 5000L, true);
+        assertThat(res.quiesced).isTrue();               // does NOT burn maxMs waiting on a dead RPC
+        assertThat(res.elapsedMs).isLessThan(5000L);
+        assertThat(stats.getLost()).isEqualTo(1);
+    }
+
+    @Test
     void finalizeCountsStillBufferedAsLost() throws Exception {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats, 60_000L, 100);
@@ -161,10 +221,12 @@ class GatewayRpcReplyRetryTest {
         return new RetryFakeClient(loop);
     }
 
-    /** Fake whose publish result is dequeued from publishOutcomes (true=success); default success. */
+    /** Fake whose publish result is dequeued from publishOutcomes (true=success); default success unless
+     *  {@code alwaysFail} is set. */
     static class RetryFakeClient implements MqttClient {
         final Deque<Boolean> publishOutcomes = new ArrayDeque<>();
         final List<String> publishedPayloads = new ArrayList<>();
+        volatile boolean alwaysFail;
         private final EventLoopGroup eventLoop;
 
         RetryFakeClient(EventLoopGroup eventLoop) {
@@ -174,7 +236,7 @@ class GatewayRpcReplyRetryTest {
         @Override
         public Future<Void> publish(String topic, ByteBuf payload, MqttQoS qos) {
             publishedPayloads.add(payload.toString(StandardCharsets.UTF_8));
-            boolean ok = publishOutcomes.isEmpty() || publishOutcomes.poll();
+            boolean ok = !alwaysFail && (publishOutcomes.isEmpty() || publishOutcomes.poll());
             return ok ? ImmediateEventExecutor.INSTANCE.newSucceededFuture(null)
                     : ImmediateEventExecutor.INSTANCE.newFailedFuture(new RuntimeException("pub fail"));
         }

@@ -59,8 +59,9 @@ class GatewayRpcReceiverTest {
     }
 
     private GatewayRpcReceiver receiver(RpcLatencyStats stats) {
+        // large backoff -> the reply-retry timer stays dormant during these synchronous tests
         return new GatewayRpcReceiver("v1/gateway/rpc", MqttQoS.AT_LEAST_ONCE, processor(), stats, 0L,
-                true, 60_000L, 64, 5000L);
+                true, 60_000L, 64, 5000L, 60_000L, 60_000L);
     }
 
     private static ByteBuf rpc(String device, int id) {

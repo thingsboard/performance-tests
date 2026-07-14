@@ -162,11 +162,12 @@ TB and the tool host. With `MESSAGES_PER_SECOND=0` (pure RPC) the publish metron
 skipped and connections are just held open for the test duration. Clients that subscribe use a
 dedicated off-event-loop MQTT handler executor. When the load window ends, the test stops the burst
 sender and enters a bounded **drain** phase (`GatewayRpcReceiver.drain`) that holds the receiver open
-until inbound RPC has been idle for `GATEWAY_RPC_DRAIN_QUIET_SEC` and no RPC is still outstanding
-(or a hard cap `GATEWAY_RPC_DRAIN_MAX_SEC` elapses), so the last burst's two-way RPCs are answered
-instead of being cut off. A final `Gateway RPC drain complete [...] quiesced=<bool>` line reports
-received-total/answered/lost/pending, and each still-unanswered `(device, requestId)` is logged for
-DB `EXPIRED` correlation.
+until inbound RPC has been idle for `GATEWAY_RPC_DRAIN_QUIET_SEC` and no RPC is still
+**recoverable-pending** (or a hard cap `GATEWAY_RPC_DRAIN_MAX_SEC` elapses), so the last burst's two-way
+RPCs are answered instead of being cut off. Because a given-up (lost) RPC leaves the outstanding set,
+drain quiesces promptly instead of burning the cap waiting on a dead RPC. A final `Gateway RPC drain
+complete [...] quiesced=<bool>` line reports received-total/answered/lost/pending, and each RPC **given
+up as lost** is logged `(device, requestId)` for DB `EXPIRED` correlation.
 
 **Per-unique-RPC accounting + three stat lines.** The server legitimately re-pushes still-pending RPCs
 on reconnect, so the same command arrives more than once. `RpcOutstandingTracker` keys inbound by
@@ -176,27 +177,33 @@ double-answer). `received` stays the raw per-delivery count; `unique = received 
 **`pending` is the outstanding-set size** (distinct RPCs received but never confirmed answered) — not
 `received − answered`, so redelivery duplicates can't poison it; `drain()` quiescence keys off it too.
 Answered keys are evicted past `GATEWAY_RPC_EXPIRY_MS` to bound memory (no redelivery can arrive after
-expiry); unanswered keys are kept and named at drain. The stats are split into three lines per
+expiry); a definitively-**lost** RPC (past TTL or over the retry cap) is removed from the outstanding
+set (so `pending` counts only still-recoverable RPCs and drain can quiesce) and recorded for the drain
+lost-report. The stats are split into three lines per
 `STATS_LOG_INTERVAL_SEC`: **`RPC Subscription`** (`acked/failed/unconfirmed`), **`RPC Receive`**
 (`received`, `duplicate`, `unique`, latency percentiles), **`RPC Publish`**
 (`sent/recovered/lost/retryQueued` window + `answered/pending/retryQueued` totals).
 
-**Reply retry on reconnect (`GATEWAY_RPC_REPLY_RETRY_ENABLED`, default on):** a reply that is **not
+**Reply retry (`GATEWAY_RPC_REPLY_RETRY_ENABLED`, default on) — timer-driven.** A reply that is **not
 confirmed sent** — either the publish future fails, or it **never completes** (the netty-mqtt orphan:
 on channel close `lambda$connect$3` stops the publish's retransmit and clears `pendingPublishes`
 without failing its promise, so a QoS-1 publish whose bytes flushed just before the drop is abandoned
-forever) — is buffered per-client with the RPC's expiry (`receivedAt + GATEWAY_RPC_EXPIRY_MS`) and
-re-published on the same client's existing reconnect action (alongside `resubscribe` + re-announce).
-`publishReply` therefore arms a `GATEWAY_RPC_ACK_TIMEOUT_MS` timeout to catch the orphan (there is a
-`TODO` in code for the proper netty-mqtt `tryFailure` fix, deferred because it needs a TB-dep bump).
-Replies past expiry on reconnect, over the per-client cap (`GATEWAY_RPC_REPLY_RETRY_MAX_BUFFERED`), or
-still buffered when the drain phase ends are counted `lost`. Re-publishing is dup-safe (QoS 1; the
-server accepts only the first response per request id); on the confirming PUBACK the RPC is marked
-answered (removed from the outstanding set). The buffer is per-client (`ConcurrentHashMap`) with short
-`synchronized` critical sections, safe under concurrent add/flush on the netty event loop and finalize
-on the drain thread. **Not resolved here:** a reply whose orphaned publish the server actually received
-(PUBACK lost) stays `pending` until drain — a `pending` false-positive vs the DB `SUCCESSFUL`; the DB
-remains authoritative.
+forever) — is buffered per-client with the RPC's expiry (`receivedAt + GATEWAY_RPC_EXPIRY_MS`).
+`publishReply` arms a `GATEWAY_RPC_ACK_TIMEOUT_MS` timeout to catch the orphan (there is a `TODO` in
+code for the proper netty-mqtt `tryFailure` fix, deferred because it needs a TB-dep bump). Crucially the
+re-send is **scheduled on the client's event loop after a jittered backoff (`gateway.rpc.ack.backoff*`),
+firing during the load window on the live channel** — not waiting for a reconnect — repeating until the
+reply confirms or its TTL passes. This matters because an orphan is usually buffered *after* the client
+has already reconnected and run its one reconnect flush, so a reconnect-only retry would strand it until
+it expired. Reconnect `flushReplies` and the drain loop's `flushAllReplies` remain as **backstops**;
+all three paths claim a reply by removing it from the keyed per-client buffer, so exactly one re-sends
+it (no double-send). Re-publishing is dup-safe (QoS 1; server keeps the first per request id); on the
+confirming PUBACK the RPC is marked answered (idempotent, removed from the outstanding set). A reply
+past expiry, over the per-client cap (`GATEWAY_RPC_REPLY_RETRY_MAX_BUFFERED`), or still buffered at
+drain end is **terminally lost**: counted `lost` and its key removed from the outstanding set (so it
+stops holding `pending`). **Not resolved here:** a reply whose orphaned publish the server actually
+received (PUBACK lost) is re-sent as a harmless dup but, being a fresh success, is still counted
+answered — the DB remains authoritative for the true `SUCCESSFUL`/`EXPIRED` split.
 
 **Reliable re-announce + resubscribe (RPC only):** a sub-device's server-side RPC subscription is
 created as a side effect of the gateway's *announce* (`v1/gateway/connect`, `onDeviceConnect` →
