@@ -48,9 +48,13 @@ class RpcLatencyStatsTest {
         RpcLatencyStats s = new RpcLatencyStats();
         s.incResponsesSent();
         s.incResponsesSent();
-        s.incResponseErrors();
+        s.incRecovered();
+        s.incLost();
+        s.incRetryQueued();
         assertThat(s.getResponsesSent()).isEqualTo(2);
-        assertThat(s.getResponseErrors()).isEqualTo(1);
+        assertThat(s.getRecovered()).isEqualTo(1);
+        assertThat(s.getLost()).isEqualTo(1);
+        assertThat(s.getRetryQueued()).isEqualTo(1);
     }
 
     @Test
@@ -84,10 +88,11 @@ class RpcLatencyStatsTest {
         RpcLatencyStats s = new RpcLatencyStats();
         s.incReceived(1000L);
         s.incResponsesSent();
-        s.incResponseErrors();
+        s.incRecovered();
+        s.incLost();
         s.summaryAndReset(60); // clears interval counters, not cumulative
         assertThat(s.getReceivedTotal()).isEqualTo(1);
-        assertThat(s.getRespondedTotal()).isEqualTo(2); // sent + errors
+        assertThat(s.getRespondedTotal()).isEqualTo(3); // sent + recovered + lost
         assertThat(s.getResponsesSent()).isEqualTo(0);  // interval counter did reset
     }
 
@@ -98,7 +103,7 @@ class RpcLatencyStatsTest {
         s.recordLatency(150);
         s.incResponsesSent();
         String line = s.summaryAndReset(10);
-        assertThat(line).contains("totals: received 1, responded 1, errors 0");
+        assertThat(line).contains("totals: received 1, sent 1, recovered 0, lost 0, pending 0");
     }
 
     @Test
@@ -109,8 +114,8 @@ class RpcLatencyStatsTest {
         s.incResponsesSent();
         String ok = s.drainSummary(6200L, true);
         assertThat(ok).contains("drained 6.2s").contains("quiesced=true")
-                .contains("received total 2").contains("responded total 1")
-                .contains("errors 0").contains("pending 1");
+                .contains("received total 2").contains("sent 1")
+                .contains("recovered 0").contains("lost 0").contains("pending 1");
         String capped = s.drainSummary(15000L, false);
         assertThat(capped).contains("drained 15.0s").contains("quiesced=false");
     }
