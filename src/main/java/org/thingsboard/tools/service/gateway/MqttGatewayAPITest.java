@@ -78,6 +78,11 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     @Value("${gateway.rpc.drain.maxSec:0}")
     long rpcDrainMaxSecConfig;
 
+    @Value("${gateway.rpc.replyRetryEnabled:true}")
+    boolean rpcReplyRetryEnabled;
+    @Value("${gateway.rpc.replyRetryMaxBuffered:10000}")
+    int rpcReplyRetryMaxBuffered;
+
     @Value("${gateway.rpc.sender.enabled:false}")
     boolean rpcSenderEnabled;
     @Value("${gateway.rpc.sender.template:}")
@@ -222,6 +227,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
                 log.info("Gateway RPC drain: waiting for in-flight RPCs to settle (quietSec={}, maxSec={})...",
                         rpcDrainQuietSec, maxMs / 1000);
                 GatewayRpcReceiver.DrainResult result = rpcReceiver.drain(quietMs, maxMs, rpcRespond);
+                rpcReceiver.finalizeLostReplies(); // replies still buffered (client never reconnected) are lost
                 String summary = rpcReceiver.drainSummary(result.elapsedMs, result.quiesced);
                 if (result.quiesced) {
                     log.info(summary);
@@ -286,14 +292,17 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         ObjectMapper mapper = new ObjectMapper();
         RpcResponseTemplate template = rpcRespond ? RpcResponseTemplate.load(rpcResponseTemplate) : null;
         RpcMessageProcessor processor = new RpcMessageProcessor(mapper, rpcSendTsPath, rpcRespond, template, rpcLatencyStats);
-        rpcReceiver = new GatewayRpcReceiver(rpcTopic, MqttQoS.AT_LEAST_ONCE, processor, rpcLatencyStats, rpcResponseDelayMs);
+        rpcReceiver = new GatewayRpcReceiver(rpcTopic, MqttQoS.AT_LEAST_ONCE, processor, rpcLatencyStats, rpcResponseDelayMs,
+                rpcReplyRetryEnabled, rpcSenderTimeoutMs, rpcReplyRetryMaxBuffered);
         rpcReceiver.attach(mqttClients);
         // On reconnect, a gateway loses its RPC subscription (cleanSession) and its server-side
         // sub-device routing; restore both so RPC delivery resumes instead of silently dropping.
+        // Also flush any replies buffered while the channel was down so they land within the RPC expiry.
         for (MqttClient client : mqttClients) {
             setReconnectAction(client, () -> {
                 rpcReceiver.resubscribe(client);
                 reannounceDevices(client);
+                rpcReceiver.flushReplies(client);
             });
         }
         statsReporter().register(StatsBlock.RPC, rpcReceiver::statsSummaryAndReset);
