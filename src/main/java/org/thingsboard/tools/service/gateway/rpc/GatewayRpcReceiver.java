@@ -60,6 +60,9 @@ public class GatewayRpcReceiver {
     private final Map<MqttClient, MqttHandler> handlers = new ConcurrentHashMap<>();
     // Per-unique-RPC accounting; pending = outstanding.size(), immune to redelivery duplicates.
     private final RpcOutstandingTracker outstanding = new RpcOutstandingTracker();
+    // Clients whose current v1/gateway/rpc subscription is not (yet) SUBACK-confirmed — a live gauge,
+    // so a slow-but-real SUBACK is never a false positive (it self-clears whenever the SUBACK lands).
+    private final java.util.Set<MqttClient> unconfirmedSubscriptions = ConcurrentHashMap.newKeySet();
 
     private static final long DRAIN_POLL_MS = 500L;
 
@@ -101,28 +104,19 @@ public class GatewayRpcReceiver {
      * retransmission on a live channel plus our per-reconnect resubscribe; here we only confirm the
      * SUBACK and record health. A retry loop would risk registering a second subscription (double
      * delivery), so it is intentionally absent — a subscribe that does not confirm is re-issued on the
-     * next reconnect.
+     * next reconnect. {@code unconfirmed} is tracked as a live set (not a timeout counter) so a
+     * slow-but-real SUBACK never becomes a false positive.
      */
     private void subscribe(MqttClient client) {
         MqttHandler handler = handlers.computeIfAbsent(client, this::buildHandler);
-        AtomicBoolean settled = new AtomicBoolean();
-        Future<Void> f = client.on(topic, handler, qos);
-        ScheduledFuture<?> timeout = client.getEventLoop().schedule(() -> {
-            if (settled.compareAndSet(false, true)) {
-                stats.incSubscribeUnconfirmed();
-                log.warn("RPC subscribe unconfirmed within {}ms on topic {} (no SUBACK); will re-subscribe on next reconnect",
-                        ackTimeoutMs, topic);
-            }
-        }, ackTimeoutMs, TimeUnit.MILLISECONDS);
-        f.addListener(fut -> {
-            if (settled.compareAndSet(false, true)) {
-                timeout.cancel(false);
-                if (fut.isSuccess()) {
-                    stats.incSubscribeAcked();
-                } else {
-                    stats.incSubscribeFailed();
-                    log.error("RPC subscribe failed on topic {}", topic, fut.cause());
-                }
+        unconfirmedSubscriptions.add(client); // cleared when (if) the SUBACK arrives
+        client.on(topic, handler, qos).addListener(fut -> {
+            if (fut.isSuccess()) {
+                unconfirmedSubscriptions.remove(client);
+                stats.incSubscribeAcked();
+            } else {
+                stats.incSubscribeFailed(); // stays unconfirmed until a later resubscribe confirms it
+                log.error("RPC subscribe failed on topic {}", topic, fut.cause());
             }
         });
     }
@@ -304,7 +298,7 @@ public class GatewayRpcReceiver {
     // --- stats sources (registered as three StatsBlocks) ---
 
     public String subscriptionSummary(int intervalSec) {
-        return stats.subscriptionSummary(intervalSec);
+        return stats.subscriptionSummary(intervalSec, unconfirmedSubscriptions.size());
     }
 
     public String receiveSummary(int intervalSec) {

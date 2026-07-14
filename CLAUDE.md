@@ -222,8 +222,11 @@ QoS-0/untracked, so a drop mid-reconnect silently lost routing and the RPC `EXPI
   fresh handler would register a *second* subscription and double-deliver every RPC). A retry loop is
   intentionally absent: re-issuing `on()` for an already-confirmed topic also creates a duplicate
   subscription, and reliability is already covered by netty-mqtt's own SUBSCRIBE retransmission on a
-  live channel plus our per-reconnect resubscribe. We just track the SUBACK (`acked` / `failed`) and a
-  fire-once `GATEWAY_RPC_ACK_TIMEOUT_MS` timeout (`unconfirmed`, no retry).
+  live channel plus our per-reconnect resubscribe. We track the SUBACK (`acked` / `failed`); `unconfirmed`
+  is a **live gauge** — the count of clients whose current subscription has not been SUBACK-confirmed —
+  **not** a timeout counter, so a slow-but-real SUBACK never becomes a false positive (the gauge
+  self-clears when the SUBACK lands, whenever that is). `GATEWAY_RPC_ACK_TIMEOUT_MS` is used only by the
+  reply orphan-capture, not by subscribe.
 
 Observability: a dedicated `GATEWAY_DEVICE_ANNOUNCE` stats block (`AnnounceStats`, label "Gateway
 device announce") reports `acked / failed / retried / unconfirmed` per window (`unconfirmed` must stay

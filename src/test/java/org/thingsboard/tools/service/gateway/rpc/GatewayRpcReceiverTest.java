@@ -100,7 +100,7 @@ class GatewayRpcReceiverTest {
     }
 
     @Test
-    void attachSubscribesEachClientAndCountsAck() {
+    void attachSubscribesEachClientAndClearsUnconfirmedOnAck() {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats);
         FakeMqttClient a = new FakeMqttClient(loop);
@@ -108,37 +108,30 @@ class GatewayRpcReceiverTest {
         r.attach(List.of(a, b));
         assertThat(a.subscribedTopics).containsExactly("v1/gateway/rpc");
         assertThat(b.subscribedTopics).containsExactly("v1/gateway/rpc");
-        assertThat(stats.getSubscribeAcked()).isEqualTo(2);
+        // both SUBACKed -> acked=2 and the unconfirmed gauge is back to 0
+        assertThat(r.subscriptionSummary(10)).isEqualTo("RPC Subscription [window 10s]: acked=2, failed=0, unconfirmed=0");
     }
 
     @Test
-    void subscribeCountsFailedWhenSubackFails() {
+    void subscribeFailureCountsFailedAndStaysUnconfirmed() {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats);
         FakeMqttClient fake = new FakeMqttClient(loop);
-        fake.onOutcomes.add(false); // SUBACK fails
+        fake.onOutcomes.add(false); // SUBACK fails -> not confirmed
         r.resubscribe(fake);
-        assertThat(stats.getSubscribeFailed()).isEqualTo(1);
-        assertThat(stats.getSubscribeAcked()).isZero();
+        assertThat(r.subscriptionSummary(10)).isEqualTo("RPC Subscription [window 10s]: acked=0, failed=1, unconfirmed=1");
     }
 
     @Test
-    void subscribeCountsUnconfirmedOnTimeoutNoRetry() throws Exception {
+    void slowSubackIsNotAFalsePositive_gaugeSelfClears() {
         RpcLatencyStats stats = new RpcLatencyStats();
-        GatewayRpcReceiver r = new GatewayRpcReceiver("v1/gateway/rpc", MqttQoS.AT_LEAST_ONCE, processor(), stats, 0L,
-                true, 60_000L, 64, 100L); // short ack timeout
+        GatewayRpcReceiver r = receiver(stats);
         FakeMqttClient fake = new FakeMqttClient(loop);
-        fake.onHangs = true; // SUBACK never arrives (orphan)
-
+        fake.onHangs = true; // SUBACK not yet arrived (models a slow / never-completing subscribe)
         r.resubscribe(fake);
-
-        long deadline = System.currentTimeMillis() + 2000L;
-        while (stats.getSubscribeUnconfirmed() == 0 && System.currentTimeMillis() < deadline) {
-            Thread.sleep(20);
-        }
-        assertThat(stats.getSubscribeUnconfirmed()).isEqualTo(1);
-        assertThat(stats.getSubscribeAcked()).isZero();
-        assertThat(fake.subscribedTopics).containsExactly("v1/gateway/rpc"); // one attempt only — no retry loop
+        // gauge shows the client as unconfirmed — no timeout, no false 'failed', one attempt only
+        assertThat(r.subscriptionSummary(10)).isEqualTo("RPC Subscription [window 10s]: acked=0, failed=0, unconfirmed=1");
+        assertThat(fake.subscribedTopics).containsExactly("v1/gateway/rpc"); // no retry loop
     }
 
     @Test

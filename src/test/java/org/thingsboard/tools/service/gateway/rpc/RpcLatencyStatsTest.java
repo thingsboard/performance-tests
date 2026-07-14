@@ -90,14 +90,13 @@ class RpcLatencyStatsTest {
     }
 
     @Test
-    void subscriptionSummaryReportsHealthAndResets() {
+    void subscriptionSummaryReportsHealthWithGaugeUnconfirmedAndResetsWindow() {
         RpcLatencyStats s = new RpcLatencyStats();
         s.incSubscribeAcked();
         s.incSubscribeFailed();
-        s.incSubscribeUnconfirmed();
-        assertThat(s.subscriptionSummary(10)).isEqualTo(
-                "RPC Subscription [window 10s]: acked=1, failed=1, unconfirmed=1");
-        assertThat(s.getSubscribeAcked()).isZero(); // reset
+        assertThat(s.subscriptionSummary(10, 3)).isEqualTo( // unconfirmed is a live gauge passed in
+                "RPC Subscription [window 10s]: acked=1, failed=1, unconfirmed=3");
+        assertThat(s.getSubscribeAcked()).isZero(); // window counters reset
     }
 
     @Test

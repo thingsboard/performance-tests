@@ -39,10 +39,11 @@ public class RpcLatencyStats {
     private final AtomicLong lost = new AtomicLong();          // expired / over-cap / never reconnected
     private final AtomicLong retryQueued = new AtomicLong();   // buffered for retry (informational, not terminal)
 
-    // --- subscribe health (window): observe-only, no app retry (netty retransmits; we resubscribe per reconnect) ---
-    private final AtomicLong subscribeAcked = new AtomicLong();       // SUBACK-confirmed
+    // --- subscribe health (window): observe-only, no app retry (netty retransmits; we resubscribe per reconnect).
+    // 'unconfirmed' is NOT a counter here — it is a live gauge (clients not currently SUBACK-confirmed),
+    // passed into subscriptionSummary, so a slow-but-real SUBACK never becomes a false positive. ---
+    private final AtomicLong subscribeAcked = new AtomicLong();       // SUBACK-confirmed (per window)
     private final AtomicLong subscribeFailed = new AtomicLong();      // future failed (e.g. max retransmissions)
-    private final AtomicLong subscribeUnconfirmed = new AtomicLong(); // no SUBACK within the ack timeout (orphan)
 
     // --- cumulative totals (never reset) ---
     private final AtomicLong receivedTotal = new AtomicLong();
@@ -73,7 +74,6 @@ public class RpcLatencyStats {
     public void incRetryQueued() { retryQueued.incrementAndGet(); retryQueuedTotal.incrementAndGet(); }
     public void incSubscribeAcked() { subscribeAcked.incrementAndGet(); }
     public void incSubscribeFailed() { subscribeFailed.incrementAndGet(); }
-    public void incSubscribeUnconfirmed() { subscribeUnconfirmed.incrementAndGet(); }
 
     public long getCount() { return latency.getN(); }
     public double getMean() { return latency.getMean(); }
@@ -89,13 +89,13 @@ public class RpcLatencyStats {
     public long getReceivedTotal() { return receivedTotal.get(); }
     public long getSubscribeAcked() { return subscribeAcked.get(); }
     public long getSubscribeFailed() { return subscribeFailed.get(); }
-    public long getSubscribeUnconfirmed() { return subscribeUnconfirmed.get(); }
 
-    /** {@code v1/gateway/rpc} (re)subscribe health — the RPC delivery channel. */
-    public String subscriptionSummary(int intervalSec) {
+    /** {@code v1/gateway/rpc} (re)subscribe health — the RPC delivery channel. {@code unconfirmed} is a
+     *  live gauge (clients whose current subscription is not SUBACK-confirmed), supplied by the caller. */
+    public String subscriptionSummary(int intervalSec, long unconfirmed) {
         return String.format(
                 "RPC Subscription [window %ds]: acked=%d, failed=%d, unconfirmed=%d",
-                intervalSec, subscribeAcked.getAndSet(0), subscribeFailed.getAndSet(0), subscribeUnconfirmed.getAndSet(0));
+                intervalSec, subscribeAcked.getAndSet(0), subscribeFailed.getAndSet(0), unconfirmed);
     }
 
     /**
