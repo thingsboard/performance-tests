@@ -46,7 +46,6 @@ public class RpcLatencyStats {
 
     // --- cumulative totals (never reset) ---
     private final AtomicLong receivedTotal = new AtomicLong();
-    private final AtomicLong duplicateTotal = new AtomicLong();
     private final AtomicLong responsesSentTotal = new AtomicLong();
     private final AtomicLong recoveredTotal = new AtomicLong();
     private final AtomicLong lostTotal = new AtomicLong();
@@ -66,7 +65,7 @@ public class RpcLatencyStats {
     }
 
     /** A delivery of a request-id already seen (server redelivery on reconnect). */
-    public void incDuplicate() { duplicate.incrementAndGet(); duplicateTotal.incrementAndGet(); }
+    public void incDuplicate() { duplicate.incrementAndGet(); }
 
     public void incResponsesSent() { responsesSent.incrementAndGet(); responsesSentTotal.incrementAndGet(); }
     public void incRecovered() { recovered.incrementAndGet(); recoveredTotal.incrementAndGet(); }

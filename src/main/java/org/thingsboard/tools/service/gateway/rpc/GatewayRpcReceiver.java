@@ -187,18 +187,22 @@ public class GatewayRpcReceiver {
             }
         }, ackTimeoutMs, TimeUnit.MILLISECONDS);
         f.addListener(fut -> {
-            if (!settled.compareAndSet(false, true)) {
-                return;
-            }
-            timeout.cancel(false);
             if (fut.isSuccess()) {
-                if (reply.attempts == 1) {
-                    stats.incResponsesSent();
-                } else {
-                    stats.incRecovered();
-                }
+                // Mark answered on ANY success — even a PUBACK that lands after the timeout already
+                // fired (a slow-but-real send). markAnswered is idempotent, so this clears a
+                // false-pending; we only count sent/recovered + cancel the timeout if we win the CAS
+                // (a timed-out reply was already buffered — its later flush would double-count).
                 outstanding.markAnswered(reply.key, System.currentTimeMillis());
-            } else {
+                if (settled.compareAndSet(false, true)) {
+                    timeout.cancel(false);
+                    if (reply.attempts == 1) {
+                        stats.incResponsesSent();
+                    } else {
+                        stats.incRecovered();
+                    }
+                }
+            } else if (settled.compareAndSet(false, true)) {
+                timeout.cancel(false);
                 onReplyNotConfirmed(client, reply);
             }
         });
