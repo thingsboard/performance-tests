@@ -145,8 +145,9 @@ shared by every mode. Each active mode registers only the `StatsBlock`s relevant
 reporter logs every registered block once per interval, in a fixed order, on the shared log scheduler
 (never the test metronome): `CONNECTIONS` for fixed-fleet MQTT gateways/devices (live/target vs.
 disconnects/reconnects), `THROUGHPUT` whenever publishing is active (registered by the shared
-`AbstractAPITest.runApiTests` metronome, so it also covers `HttpDeviceAPITest`), `RPC` when
-`GATEWAY_RPC_ENABLED=true`, and `EPHEMERAL` for churn-mode gateways. A block that throws is skipped for
+`AbstractAPITest.runApiTests` metronome, so it also covers `HttpDeviceAPITest`), the three RPC lines
+`RPC_SUBSCRIPTION` / `RPC_RECEIVE` / `RPC_PUBLISH` when `GATEWAY_RPC_ENABLED=true`, and `EPHEMERAL` for
+churn-mode gateways. A block that throws is skipped for
 that tick without affecting the others or the schedule. The old per-gateway `TB` `{"msgCount":0}`
 publish is gone — stats reporting is log-only now.
 
@@ -157,52 +158,78 @@ latency (`receiveTs − sendTs`, send-timestamp stamped by the rule chain) is re
 commons-math3 `DescriptiveStatistics` accumulator (`RpcLatencyStats`, reported as mean/p50/p95/p99/max),
 and a configurable response (`RpcResponseTemplate`) is published to close the two-way RPC. Ephemeral
 mode rejects the flag (it can't hold a subscription). Measurement assumes NTP-synced clocks between
-TB and the tool host. RPC latency is logged as the `RPC` block of the unified `StatsReporter` above,
-every `STATS_LOG_INTERVAL_SEC`. With `MESSAGES_PER_SECOND=0` (pure RPC) the publish metronome is
+TB and the tool host. With `MESSAGES_PER_SECOND=0` (pure RPC) the publish metronome is
 skipped and connections are just held open for the test duration. Clients that subscribe use a
 dedicated off-event-loop MQTT handler executor. When the load window ends, the test stops the burst
 sender and enters a bounded **drain** phase (`GatewayRpcReceiver.drain`) that holds the receiver open
-until inbound RPC has been idle for `GATEWAY_RPC_DRAIN_QUIET_SEC` and outstanding replies have flushed
+until inbound RPC has been idle for `GATEWAY_RPC_DRAIN_QUIET_SEC` and no RPC is still outstanding
 (or a hard cap `GATEWAY_RPC_DRAIN_MAX_SEC` elapses), so the last burst's two-way RPCs are answered
 instead of being cut off. A final `Gateway RPC drain complete [...] quiesced=<bool>` line reports
-cumulative received/sent/recovered/lost/pending; the periodic `RPC` stats block also carries running
-`totals:`.
+received-total/answered/lost/pending, and each still-unanswered `(device, requestId)` is logged for
+DB `EXPIRED` correlation.
 
-**Reply retry on reconnect (`GATEWAY_RPC_REPLY_RETRY_ENABLED`, default on):** when a gateway client's
-channel drops between receiving an RPC and publishing its reply (e.g. a `tb-mqtt-transport` roll), the
-reply publish fails. Rather than count that an immediate error and let the RPC expire server-side,
-`GatewayRpcReceiver` buffers the rendered reply per-client with the RPC's expiry (`receivedAt +
-GATEWAY_RPC_EXPIRY_MS`) and re-publishes it on the same client's existing reconnect action
-(alongside `resubscribe` + re-announce). Replies past expiry on reconnect, over the per-client cap
-(`GATEWAY_RPC_REPLY_RETRY_MAX_BUFFERED`), or still buffered when the drain phase ends are counted
-`lost`. Re-publishing is dup-safe (QoS 1; the server accepts only the first response per request id).
-Accordingly `RpcLatencyStats` reports honest terminal states — `sent` (first-try) / `recovered`
-(retry) / `lost` — replacing the old single `errors` counter, and `pending` (received minus all
-terminal states) reaches 0 on a clean run. The buffer is per-client (`ConcurrentHashMap`) with short
+**Per-unique-RPC accounting + three stat lines.** The server legitimately re-pushes still-pending RPCs
+on reconnect, so the same command arrives more than once. `RpcOutstandingTracker` keys inbound by
+`(deviceName, requestId)` (atomic `putIfAbsent`): first receipt is tracked + answered, a repeat is
+counted `duplicate` and dropped (the reply-retry flush already re-sends it on that reconnect — no
+double-answer). `received` stays the raw per-delivery count; `unique = received − duplicate`.
+**`pending` is the outstanding-set size** (distinct RPCs received but never confirmed answered) — not
+`received − answered`, so redelivery duplicates can't poison it; `drain()` quiescence keys off it too.
+Answered keys are evicted past `GATEWAY_RPC_EXPIRY_MS` to bound memory (no redelivery can arrive after
+expiry); unanswered keys are kept and named at drain. The stats are split into three lines per
+`STATS_LOG_INTERVAL_SEC`: **`RPC Subscription`** (`acked/failed/unconfirmed`), **`RPC Receive`**
+(`received`, `duplicate`, `unique`, latency percentiles), **`RPC Publish`**
+(`sent/recovered/lost/retryQueued` window + `answered/pending/retryQueued` totals).
+
+**Reply retry on reconnect (`GATEWAY_RPC_REPLY_RETRY_ENABLED`, default on):** a reply that is **not
+confirmed sent** — either the publish future fails, or it **never completes** (the netty-mqtt orphan:
+on channel close `lambda$connect$3` stops the publish's retransmit and clears `pendingPublishes`
+without failing its promise, so a QoS-1 publish whose bytes flushed just before the drop is abandoned
+forever) — is buffered per-client with the RPC's expiry (`receivedAt + GATEWAY_RPC_EXPIRY_MS`) and
+re-published on the same client's existing reconnect action (alongside `resubscribe` + re-announce).
+`publishReply` therefore arms a `GATEWAY_RPC_ACK_TIMEOUT_MS` timeout to catch the orphan (there is a
+`TODO` in code for the proper netty-mqtt `tryFailure` fix, deferred because it needs a TB-dep bump).
+Replies past expiry on reconnect, over the per-client cap (`GATEWAY_RPC_REPLY_RETRY_MAX_BUFFERED`), or
+still buffered when the drain phase ends are counted `lost`. Re-publishing is dup-safe (QoS 1; the
+server accepts only the first response per request id); on the confirming PUBACK the RPC is marked
+answered (removed from the outstanding set). The buffer is per-client (`ConcurrentHashMap`) with short
 `synchronized` critical sections, safe under concurrent add/flush on the netty event loop and finalize
-on the drain thread.
+on the drain thread. **Not resolved here:** a reply whose orphaned publish the server actually received
+(PUBACK lost) stays `pending` until drain — a `pending` false-positive vs the DB `SUCCESSFUL`; the DB
+remains authoritative.
 
 **Reliable re-announce + resubscribe (RPC only):** a sub-device's server-side RPC subscription is
 created as a side effect of the gateway's *announce* (`v1/gateway/connect`, `onDeviceConnect` →
 `SubscribeToRPC`), not the `v1/gateway/rpc` topic subscribe (that is only the delivery channel). On a
-reconnect the old session and all sub-device registrations are gone, so RPC routing is restored only if
+reconnect the old session and all sub-device registrations are gone (netty-mqtt clears every
+subscription on channel close and does **not** auto-restore them), so RPC routing is restored only if
 **both** the per-device announce and the resubscribe succeed. Previously both were fire-and-forget
 QoS-0/untracked, so a drop mid-reconnect silently lost routing and the RPC `EXPIRED`. Now (only when
-`GATEWAY_RPC_ENABLED=true`) both go through `AckedRetry` (package `service/gateway/`) on the client's
-netty event loop: the announce is QoS 1 (`GatewayDeviceAnnouncer`) and success is the **PUBACK**, the
-resubscribe success is the **SUBACK** — never a QoS-0 "flushed to socket". Each attempt is guarded by a
-scheduled `GATEWAY_RPC_ACK_TIMEOUT_MS` timeout (a publish issued while the channel is momentarily
-`null` returns a future that never completes — the timeout catches it), retried with jittered-exponential
-backoff up to `GATEWAY_RPC_ACK_MAX_ATTEMPTS`, then counted `unconfirmed` (device/subscription at risk).
-Announces are bounded by a non-blocking global in-flight semaphore (`GATEWAY_RPC_ANNOUNCE_MAX_CONCURRENT`,
-`tryAcquire` + event-loop re-queue — never a blocking acquire, per the ephemeral deadlock lesson) so a
-reconnect storm cannot self-amplify. The same announcer serves the initial warm-up (via a `warmUpPublish`
-seam in `BaseMqttAPITest`; device/ephemeral modes keep the default QoS-0 warm-up) and reconnect
-re-announce. Observability: a dedicated `GATEWAY_DEVICE_ANNOUNCE` stats block (`AnnounceStats`, label
-"Gateway device announce") reports `acked / failed / retried / unconfirmed` per window (`unconfirmed`
-must stay 0), and the `Gateway RPC` line gains `subscribe acked/failed/retried/unconfirmed`. Caveat: a
-broker ack (PUBACK/SUBACK) confirms the transport received the op, not that the RPC was ultimately
-answered before server expiry — the authoritative loss signal remains the platform-side `EXPIRED` count.
+`GATEWAY_RPC_ENABLED=true`):
+
+- **Announce** (`v1/gateway/connect`) goes through `AckedRetry` (package `service/gateway/`) on the
+  client's netty event loop: QoS 1 (`GatewayDeviceAnnouncer`), success is the **PUBACK** (never a QoS-0
+  "flushed to socket"), each attempt guarded by a scheduled `GATEWAY_RPC_ACK_TIMEOUT_MS` timeout (which
+  also catches a publish issued while the channel is momentarily `null` — its future never completes),
+  retried with jittered-exponential backoff up to `GATEWAY_RPC_ACK_MAX_ATTEMPTS`, then counted
+  `unconfirmed`. Retry is safe here because an announce is an idempotent publish. Announces are bounded
+  by a non-blocking global in-flight semaphore (`GATEWAY_RPC_ANNOUNCE_MAX_CONCURRENT`, `tryAcquire` +
+  event-loop re-queue — never a blocking acquire, per the ephemeral deadlock lesson) so a reconnect
+  storm cannot self-amplify. The same announcer serves the initial warm-up (via a `warmUpPublish` seam
+  in `BaseMqttAPITest`; device/ephemeral modes keep the default QoS-0 warm-up) and reconnect re-announce.
+- **Resubscribe** is **observe-only, no retry loop.** It uses **one stable handler per client** (reused
+  across every reconnect — netty-mqtt keys pending handlers by `(handler, once)` record-equality, so a
+  fresh handler would register a *second* subscription and double-deliver every RPC). A retry loop is
+  intentionally absent: re-issuing `on()` for an already-confirmed topic also creates a duplicate
+  subscription, and reliability is already covered by netty-mqtt's own SUBSCRIBE retransmission on a
+  live channel plus our per-reconnect resubscribe. We just track the SUBACK (`acked` / `failed`) and a
+  fire-once `GATEWAY_RPC_ACK_TIMEOUT_MS` timeout (`unconfirmed`, no retry).
+
+Observability: a dedicated `GATEWAY_DEVICE_ANNOUNCE` stats block (`AnnounceStats`, label "Gateway
+device announce") reports `acked / failed / retried / unconfirmed` per window (`unconfirmed` must stay
+0), and the `RPC Subscription` line reports `acked / failed / unconfirmed`. Caveat: a broker ack
+(PUBACK/SUBACK) confirms the transport received the op, not that the RPC was ultimately answered before
+server expiry — the authoritative loss signal remains the platform-side `EXPIRED` count.
 
 **Gateway RPC burst sender (`GATEWAY_RPC_SENDER_ENABLED`):** an in-tool load driver layered on the
 persistent gateway mode (same instance receives + measures what it triggers). After warmup,
