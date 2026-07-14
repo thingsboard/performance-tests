@@ -27,6 +27,12 @@ public class RpcLatencyStats {
     private final AtomicLong lost = new AtomicLong();          // expired / over-cap / never reconnected
     private final AtomicLong retryQueued = new AtomicLong();   // buffered for retry (informational, not terminal)
 
+    // v1/gateway/rpc subscription health (the RPC delivery channel), per window.
+    private final AtomicLong subscribeAcked = new AtomicLong();       // SUBACK-confirmed
+    private final AtomicLong subscribeFailed = new AtomicLong();      // per-attempt subscribe failures/timeouts
+    private final AtomicLong subscribeRetried = new AtomicLong();
+    private final AtomicLong subscribeUnconfirmed = new AtomicLong(); // exhausted retries without SUBACK (RPC delivery at risk)
+
     // Cumulative counters — never reset by summaryAndReset (unlike the interval counters above).
     private final AtomicLong receivedTotal = new AtomicLong();
     private final AtomicLong responsesSentTotal = new AtomicLong();
@@ -50,6 +56,10 @@ public class RpcLatencyStats {
     public void incRecovered() { recovered.incrementAndGet(); recoveredTotal.incrementAndGet(); }
     public void incLost() { lost.incrementAndGet(); lostTotal.incrementAndGet(); }
     public void incRetryQueued() { retryQueued.incrementAndGet(); retryQueuedTotal.incrementAndGet(); }
+    public void incSubscribeAcked() { subscribeAcked.incrementAndGet(); }
+    public void incSubscribeFailed() { subscribeFailed.incrementAndGet(); }
+    public void incSubscribeRetried() { subscribeRetried.incrementAndGet(); }
+    public void incSubscribeUnconfirmed() { subscribeUnconfirmed.incrementAndGet(); }
 
     public long getCount() { return latency.getN(); }
     public double getMean() { return latency.getMean(); }
@@ -61,6 +71,10 @@ public class RpcLatencyStats {
     public long getRetryQueued() { return retryQueued.get(); }
     public long getLastInboundMs() { return lastInboundMs; }
     public long getReceivedTotal() { return receivedTotal.get(); }
+    public long getSubscribeAcked() { return subscribeAcked.get(); }
+    public long getSubscribeFailed() { return subscribeFailed.get(); }
+    public long getSubscribeRetried() { return subscribeRetried.get(); }
+    public long getSubscribeUnconfirmed() { return subscribeUnconfirmed.get(); }
     // All terminal reply states; drives drain() quiescence (a buffered-not-yet-terminal reply keeps this below received).
     public long getRespondedTotal() { return responsesSentTotal.get() + recoveredTotal.get() + lostTotal.get(); }
 
@@ -76,7 +90,8 @@ public class RpcLatencyStats {
                 "Gateway RPC stats [window %ds]: measured %d RPCs; one-way delivery latency: "
                         + "avg %.1f ms, p50 %.1f ms, p95 %.1f ms, p99 %.1f ms, max %.1f ms; "
                         + "responses sent %d, recovered %d, lost %d, retryQueued %d"
-                        + "; totals: received %d, sent %d, recovered %d, lost %d, pending %d",
+                        + "; totals: received %d, sent %d, recovered %d, lost %d, pending %d"
+                        + "; subscribe acked=%d, failed=%d, retried=%d, unconfirmed=%d",
                 intervalSec, n,
                 n > 0 ? latency.getMean() : 0.0,
                 n > 0 ? latency.getPercentile(50) : 0.0,
@@ -85,7 +100,9 @@ public class RpcLatencyStats {
                 n > 0 ? latency.getMax() : 0.0,
                 responsesSent.getAndSet(0), recovered.getAndSet(0), lost.getAndSet(0), retryQueued.getAndSet(0),
                 receivedTotal.get(), responsesSentTotal.get(), recoveredTotal.get(), lostTotal.get(),
-                receivedTotal.get() - responsesSentTotal.get() - recoveredTotal.get() - lostTotal.get());
+                receivedTotal.get() - responsesSentTotal.get() - recoveredTotal.get() - lostTotal.get(),
+                subscribeAcked.getAndSet(0), subscribeFailed.getAndSet(0),
+                subscribeRetried.getAndSet(0), subscribeUnconfirmed.getAndSet(0));
         latency.clear();
         return line;
     }

@@ -97,6 +97,14 @@ class RpcLatencyStatsTest {
     }
 
     @Test
+    void summaryIncludesSubscribeHealth() {
+        RpcLatencyStats s = new RpcLatencyStats();
+        s.incSubscribeAcked();
+        s.incSubscribeRetried();
+        assertThat(s.summaryAndReset(10)).contains("subscribe acked=1, failed=0, retried=1, unconfirmed=0");
+    }
+
+    @Test
     void summaryIncludesRunningTotals() {
         RpcLatencyStats s = new RpcLatencyStats();
         s.incReceived(1000L);

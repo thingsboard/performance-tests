@@ -18,11 +18,13 @@ package org.thingsboard.tools.service.gateway.rpc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.codec.mqtt.MqttQoS;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.ImmediateEventExecutor;
 import io.netty.util.concurrent.Promise;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.thingsboard.common.util.ListeningExecutor;
 import org.thingsboard.mqtt.MqttClient;
@@ -30,15 +32,27 @@ import org.thingsboard.mqtt.MqttClientCallback;
 import org.thingsboard.mqtt.MqttClientConfig;
 import org.thingsboard.mqtt.MqttConnectResult;
 import org.thingsboard.mqtt.MqttHandler;
+import org.thingsboard.tools.service.gateway.AckedRetryConfig;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
+import java.util.Random;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
 
 class GatewayRpcReceiverTest {
+
+    private final EventLoopGroup loop = new DefaultEventLoopGroup(1);
+
+    @AfterEach
+    void tearDown() {
+        loop.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS);
+    }
 
     private GatewayRpcReceiver receiver(RpcLatencyStats stats) {
         RpcResponseTemplate template = new RpcResponseTemplate(
@@ -52,7 +66,7 @@ class GatewayRpcReceiverTest {
     void handlerPublishesResponseAndCountsSent() throws Exception {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats);
-        FakeMqttClient fake = new FakeMqttClient();
+        FakeMqttClient fake = new FakeMqttClient(loop);
 
         MqttHandler handler = r.buildHandler(fake);
         ByteBuf in = Unpooled.wrappedBuffer(
@@ -69,8 +83,8 @@ class GatewayRpcReceiverTest {
     void attachSubscribesEachClient() {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats);
-        FakeMqttClient a = new FakeMqttClient();
-        FakeMqttClient b = new FakeMqttClient();
+        FakeMqttClient a = new FakeMqttClient(loop);
+        FakeMqttClient b = new FakeMqttClient(loop);
         r.attach(List.of(a, b));
         assertThat(a.subscribedTopics).containsExactly("v1/gateway/rpc");
         assertThat(b.subscribedTopics).containsExactly("v1/gateway/rpc");
@@ -88,7 +102,7 @@ class GatewayRpcReceiverTest {
             }
         };
         GatewayRpcReceiver r = new GatewayRpcReceiver("v1/gateway/rpc", MqttQoS.AT_LEAST_ONCE, throwing, stats, 0L);
-        FakeMqttClient fake = new FakeMqttClient();
+        FakeMqttClient fake = new FakeMqttClient(loop);
         MqttHandler handler = r.buildHandler(fake);
         ByteBuf in = Unpooled.wrappedBuffer("{}".getBytes(StandardCharsets.UTF_8));
         assertThatNoException().isThrownBy(() -> handler.onMessage("v1/gateway/rpc", in));
@@ -99,11 +113,32 @@ class GatewayRpcReceiverTest {
     void resubscribeSubscribesTheClientAgain() {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats);
-        FakeMqttClient fake = new FakeMqttClient();
+        FakeMqttClient fake = new FakeMqttClient(loop);
         r.attach(List.of(fake));
         assertThat(fake.subscribedTopics).containsExactly("v1/gateway/rpc");
         r.resubscribe(fake);
         assertThat(fake.subscribedTopics).containsExactly("v1/gateway/rpc", "v1/gateway/rpc");
+    }
+
+    @Test
+    void resubscribeRetriesUntilSuback() throws Exception {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        RpcMessageProcessor processor = new RpcMessageProcessor(
+                new ObjectMapper(), "data.params.sendTs", true, new RpcResponseTemplate("{}"), stats);
+        GatewayRpcReceiver r = new GatewayRpcReceiver("v1/gateway/rpc", MqttQoS.AT_LEAST_ONCE, processor, stats, 0L,
+                false, 0L, 0, new AckedRetryConfig(5, 100, 1, 2), new Random(1L)); // fast retry for the test
+        FakeMqttClient fake = new FakeMqttClient(loop);
+        fake.onOutcomes.add(false); // first SUBSCRIBE fails (no SUBACK); the retry succeeds
+
+        r.resubscribe(fake);
+
+        long deadline = System.currentTimeMillis() + 3000L;
+        while (stats.getSubscribeAcked() == 0 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+        assertThat(stats.getSubscribeAcked()).isEqualTo(1);
+        assertThat(stats.getSubscribeFailed()).isGreaterThanOrEqualTo(1);
+        assertThat(stats.getSubscribeRetried()).isGreaterThanOrEqualTo(1);
     }
 
     @Test
@@ -164,16 +199,25 @@ class GatewayRpcReceiverTest {
         assertThat(GatewayRpcReceiver.resolveDrainMaxMs(0, true, 100, 0, 60)).isEqualTo(60_000L);
     }
 
-    /** Minimal MqttClient test double: only on(3-arg), publish(3-arg) and isConnected are functional. */
+    /** Minimal MqttClient test double: on(3-arg), publish(3-arg), getEventLoop and isConnected are
+     *  functional. {@code onOutcomes} controls per-attempt subscribe success (default success). */
     static class FakeMqttClient implements MqttClient {
         final List<String> subscribedTopics = new ArrayList<>();
         final List<String> publishedTopics = new ArrayList<>();
         final List<String> publishedPayloads = new ArrayList<>();
+        final Deque<Boolean> onOutcomes = new ArrayDeque<>();
+        private final EventLoopGroup eventLoop;
+
+        FakeMqttClient(EventLoopGroup eventLoop) {
+            this.eventLoop = eventLoop;
+        }
 
         @Override
         public Future<Void> on(String topic, MqttHandler handler, MqttQoS qos) {
             subscribedTopics.add(topic);
-            return ImmediateEventExecutor.INSTANCE.newSucceededFuture(null);
+            boolean ok = onOutcomes.isEmpty() || onOutcomes.poll();
+            return ok ? ImmediateEventExecutor.INSTANCE.newSucceededFuture(null)
+                    : ImmediateEventExecutor.INSTANCE.newFailedFuture(new RuntimeException("suback fail"));
         }
 
         @Override
@@ -184,12 +228,12 @@ class GatewayRpcReceiverTest {
         }
 
         @Override public boolean isConnected() { return true; }
+        @Override public EventLoopGroup getEventLoop() { return eventLoop; }
 
         // --- unused interface methods ---
         @Override public Promise<MqttConnectResult> connect(String host) { throw new UnsupportedOperationException(); }
         @Override public Promise<MqttConnectResult> connect(String host, int port) { throw new UnsupportedOperationException(); }
         @Override public Promise<MqttConnectResult> reconnect() { throw new UnsupportedOperationException(); }
-        @Override public EventLoopGroup getEventLoop() { throw new UnsupportedOperationException(); }
         @Override public void setEventLoop(EventLoopGroup group) { throw new UnsupportedOperationException(); }
         @Override public ListeningExecutor getHandlerExecutor() { throw new UnsupportedOperationException(); }
         @Override public Future<Void> on(String topic, MqttHandler handler) { throw new UnsupportedOperationException(); }

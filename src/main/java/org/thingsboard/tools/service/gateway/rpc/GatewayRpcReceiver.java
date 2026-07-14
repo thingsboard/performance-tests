@@ -20,11 +20,14 @@ import io.netty.handler.codec.mqtt.MqttQoS;
 import lombok.extern.slf4j.Slf4j;
 import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.mqtt.MqttHandler;
+import org.thingsboard.tools.service.gateway.AckedRetry;
+import org.thingsboard.tools.service.gateway.AckedRetryConfig;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -45,17 +48,30 @@ public class GatewayRpcReceiver {
     private final int maxBufferedPerClient;
     private final Map<MqttClient, ClientRetryBuffer> retryBuffers = new ConcurrentHashMap<>();
 
+    // Resubscribe reliability: SUBACK-tracked, retried until confirmed on the client's event loop.
+    private final AckedRetryConfig subscribeRetry;
+    private final Random rng;
+
     private static final long DRAIN_POLL_MS = 500L;
+    private static final AckedRetryConfig DEFAULT_SUBSCRIBE_RETRY = new AckedRetryConfig(5, 5000, 1000, 5000);
 
     /** Legacy constructor: reply retry disabled (a failed reply is immediately counted lost). */
     public GatewayRpcReceiver(String topic, MqttQoS qos, RpcMessageProcessor processor,
                               RpcLatencyStats stats, long responseDelayMs) {
-        this(topic, qos, processor, stats, responseDelayMs, false, 0L, 0);
+        this(topic, qos, processor, stats, responseDelayMs, false, 0L, 0, DEFAULT_SUBSCRIBE_RETRY, new Random());
     }
 
     public GatewayRpcReceiver(String topic, MqttQoS qos, RpcMessageProcessor processor,
                               RpcLatencyStats stats, long responseDelayMs,
                               boolean retryEnabled, long replyTtlMs, int maxBufferedPerClient) {
+        this(topic, qos, processor, stats, responseDelayMs, retryEnabled, replyTtlMs, maxBufferedPerClient,
+                DEFAULT_SUBSCRIBE_RETRY, new Random());
+    }
+
+    public GatewayRpcReceiver(String topic, MqttQoS qos, RpcMessageProcessor processor,
+                              RpcLatencyStats stats, long responseDelayMs,
+                              boolean retryEnabled, long replyTtlMs, int maxBufferedPerClient,
+                              AckedRetryConfig subscribeRetry, Random rng) {
         this.topic = topic;
         this.qos = qos;
         this.processor = processor;
@@ -64,6 +80,8 @@ public class GatewayRpcReceiver {
         this.retryEnabled = retryEnabled;
         this.replyTtlMs = replyTtlMs;
         this.maxBufferedPerClient = maxBufferedPerClient;
+        this.subscribeRetry = subscribeRetry;
+        this.rng = rng;
     }
 
     public void attach(List<MqttClient> clients) {
@@ -80,10 +98,29 @@ public class GatewayRpcReceiver {
     }
 
     private void subscribe(MqttClient client) {
-        client.on(topic, buildHandler(client), qos)
-                .addListener(f -> {
-                    if (!f.isSuccess()) {
-                        log.error("Failed to subscribe a gateway to RPC topic {}", topic, f.cause());
+        // SUBACK-confirmed and retried on the client's event loop: a silent resubscribe failure drops
+        // RPC delivery just as surely as a lost announce, so success must be the broker ack, not a send.
+        AckedRetry.run(client.getEventLoop(), () -> client.on(topic, buildHandler(client), qos),
+                subscribeRetry, rng, new AckedRetry.Callbacks() {
+                    @Override
+                    public void onAcked() {
+                        stats.incSubscribeAcked();
+                    }
+
+                    @Override
+                    public void onAttemptFailed() {
+                        stats.incSubscribeFailed();
+                    }
+
+                    @Override
+                    public void onRetry() {
+                        stats.incSubscribeRetried();
+                    }
+
+                    @Override
+                    public void onUnconfirmed() {
+                        stats.incSubscribeUnconfirmed();
+                        log.error("RPC resubscribe unconfirmed after {} attempts on topic {}", subscribeRetry.maxAttempts(), topic);
                     }
                 });
     }

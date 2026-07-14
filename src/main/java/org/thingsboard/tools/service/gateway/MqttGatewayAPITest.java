@@ -82,6 +82,8 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     boolean rpcReplyRetryEnabled;
     @Value("${gateway.rpc.replyRetryMaxBuffered:64}")
     int rpcReplyRetryMaxBuffered;
+    @Value("${gateway.rpc.expiryMs:120000}")
+    long rpcExpiryMs;
 
     // Reliable re-announce / resubscribe (only active when RPC is enabled — it protects RPC routing).
     @Value("${gateway.rpc.ack.timeoutMs:5000}")
@@ -323,11 +325,12 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         ObjectMapper mapper = new ObjectMapper();
         RpcResponseTemplate template = rpcRespond ? RpcResponseTemplate.load(rpcResponseTemplate) : null;
         RpcMessageProcessor processor = new RpcMessageProcessor(mapper, rpcSendTsPath, rpcRespond, template, rpcLatencyStats);
+        AckedRetryConfig ackCfg = new AckedRetryConfig(gatewayAckMaxAttempts, gatewayAckTimeoutMs, gatewayAckBackoffMinMs, gatewayAckBackoffMaxMs);
+        Random ackRng = new Random(seed + instanceIdx);
         rpcReceiver = new GatewayRpcReceiver(rpcTopic, MqttQoS.AT_LEAST_ONCE, processor, rpcLatencyStats, rpcResponseDelayMs,
-                rpcReplyRetryEnabled, rpcSenderTimeoutMs, rpcReplyRetryMaxBuffered);
-        deviceAnnouncer = new GatewayDeviceAnnouncer(announceStats,
-                new AckedRetryConfig(gatewayAckMaxAttempts, gatewayAckTimeoutMs, gatewayAckBackoffMinMs, gatewayAckBackoffMaxMs),
-                new Random(seed + instanceIdx), gatewayAnnounceMaxConcurrent, gatewayAnnouncePermitWaitMs);
+                rpcReplyRetryEnabled, rpcExpiryMs, rpcReplyRetryMaxBuffered, ackCfg, ackRng);
+        deviceAnnouncer = new GatewayDeviceAnnouncer(announceStats, ackCfg, ackRng,
+                gatewayAnnounceMaxConcurrent, gatewayAnnouncePermitWaitMs);
         statsReporter().register(StatsBlock.GATEWAY_DEVICE_ANNOUNCE, announceStats::summaryAndReset);
         rpcReceiver.attach(mqttClients);
         // On reconnect, a gateway loses its RPC subscription (cleanSession) and its server-side
