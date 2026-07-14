@@ -26,11 +26,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 /**
- * Runs an MQTT op that returns a broker-ack {@link Future} (QoS-1 publish → PUBACK, subscribe →
- * SUBACK), tracking each attempt with a scheduled timeout and retrying with jittered-exponential
- * backoff until confirmed or the attempt cap is hit. Success is the broker ack, never a QoS-0-style
- * "flushed to socket". Non-blocking: all waiting/retrying happens on the supplied scheduler (the
- * client's netty event loop in production), so a caller on an event loop is never parked.
+ * Runs an idempotent MQTT op that returns a broker-ack {@link Future} (e.g. a QoS-1 publish → PUBACK),
+ * tracking each attempt with a scheduled timeout and retrying with jittered-exponential backoff until
+ * confirmed or the attempt cap is hit. Success is the broker ack, never a QoS-0-style "flushed to
+ * socket". Non-blocking: all waiting/retrying happens on the supplied scheduler (the client's netty
+ * event loop in production), so a caller on an event loop is never parked. Current sole user is the
+ * gateway device announce; resubscribe intentionally does NOT use this (retrying a subscribe can
+ * register a duplicate handler — it is observe-only, see {@code GatewayRpcReceiver}).
  *
  * <p>The timeout guard is essential because publishing while the client's channel is momentarily
  * {@code null} returns a future that never completes — a bare await would hang; here the timeout fires

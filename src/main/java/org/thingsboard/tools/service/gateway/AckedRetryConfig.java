@@ -16,9 +16,10 @@
 package org.thingsboard.tools.service.gateway;
 
 /**
- * Retry policy for an ack-confirmed MQTT op (announce PUBACK / resubscribe SUBACK). Sized so the
- * worst case ({@code maxAttempts * (ackTimeoutMs + backoffMaxMs)}) stays under the RPC server-side
- * expiry, so a re-announce/resubscribe still lands in time to recover a mid-outage RPC.
+ * Retry policy for an ack-confirmed MQTT op — currently the gateway device announce (QoS-1 PUBACK).
+ * Sized so the worst case ({@code maxAttempts * (ackTimeoutMs + backoffMaxMs)}) stays under the RPC
+ * server-side expiry, so a re-announce still lands in time to recover a mid-outage RPC. (Resubscribe
+ * is observe-only and does not use this — it neither retries nor times out; see {@code GatewayRpcReceiver}.)
  */
 public record AckedRetryConfig(int maxAttempts, long ackTimeoutMs, long backoffMinMs, long backoffMaxMs) {
 }

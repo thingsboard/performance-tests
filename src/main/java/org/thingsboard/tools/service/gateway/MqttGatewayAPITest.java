@@ -85,7 +85,8 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     @Value("${gateway.rpc.expiryMs:120000}")
     long rpcExpiryMs;
 
-    // Reliable re-announce / resubscribe (only active when RPC is enabled — it protects RPC routing).
+    // Ack timing for the device-announce retry and the reply orphan-capture (only active with RPC).
+    // NOTE: resubscribe is observe-only and does not use these — it neither retries nor times out.
     @Value("${gateway.rpc.ack.timeoutMs:5000}")
     long gatewayAckTimeoutMs;
     @Value("${gateway.rpc.ack.maxAttempts:5}")

@@ -182,8 +182,8 @@ gateway:
     replyRetryEnabled: "${GATEWAY_RPC_REPLY_RETRY_ENABLED:true}" # true = buffer a gateway RPC reply whose publish failed (channel dropped mid-reply) and re-publish it when that client reconnects; false = legacy immediate 'lost'
     replyRetryMaxBuffered: "${GATEWAY_RPC_REPLY_RETRY_MAX_BUFFERED:64}" # per-client cap on buffered replies awaiting reconnect (steady buffer ~= sub-devices per gateway); overflow is dropped and counted lost. Reply expiry = GATEWAY_RPC_EXPIRY_MS
     expiryMs: "${GATEWAY_RPC_EXPIRY_MS:120000}" # server-side RPC expiry (ms): the reply-retry TTL, and the deadline the re-announce/resubscribe retry cap is sized to fit under
-    ack: # reliability of the RPC-routing (re)establishment ops on (re)connect — announce PUBACK / resubscribe SUBACK
-      timeoutMs: "${GATEWAY_RPC_ACK_TIMEOUT_MS:5000}" # per-attempt wait for PUBACK/SUBACK before the attempt is retried (also bounds a channel-null publish whose future never completes)
+    ack: # reliability of the device-announce PUBACK on (re)connect (resubscribe is observe-only, not retried)
+      timeoutMs: "${GATEWAY_RPC_ACK_TIMEOUT_MS:5000}" # per-attempt wait for the announce PUBACK before retry (also bounds a channel-null publish whose future never completes); also the reply orphan-capture deadline. Not used by subscribe
       maxAttempts: "${GATEWAY_RPC_ACK_MAX_ATTEMPTS:5}" # bounded retries until broker-confirmed; exhausted => unconfirmed (device/subscription at risk of losing RPC)
       backoffMinMs: "${GATEWAY_RPC_ACK_BACKOFF_MIN_MS:1000}" # jittered-exponential retry backoff floor
       backoffMaxMs: "${GATEWAY_RPC_ACK_BACKOFF_MAX_MS:5000}" # ...and cap (sized so maxAttempts*(timeout+backoffMax) < expiryMs)

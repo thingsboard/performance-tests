@@ -100,7 +100,7 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `GATEWAY_RPC_REPLY_RETRY_ENABLED` | `true` | Buffer a gateway RPC reply whose publish failed because the client's channel dropped mid-reply (e.g. a transport roll) and re-publish it when that client reconnects, so replies recoverable within the RPC's server-side expiry are delivered instead of expiring. Reply expiry = `GATEWAY_RPC_EXPIRY_MS`. `false` = legacy behaviour (a failed reply is immediately counted `lost`) |
 | `GATEWAY_RPC_REPLY_RETRY_MAX_BUFFERED` | `64` | Per-client cap on replies buffered awaiting reconnect; overflow is dropped and counted `lost`. Steady buffer ≈ sub-devices per gateway (a client receives no new RPCs while its channel is down), so the default is generous headroom; it only bounds worst-case memory |
 | `GATEWAY_RPC_EXPIRY_MS` | `120000` | Server-side RPC expiry (ms). Used as the reply-retry TTL and as the deadline the re-announce/resubscribe retry cap is sized to fit under. A reply/announce that lands after this is useless server-side |
-| `GATEWAY_RPC_ACK_TIMEOUT_MS` | `5000` | Per-attempt wait for the broker ack (announce PUBACK / resubscribe SUBACK) before that attempt is retried. Also bounds a publish issued while the channel is momentarily `null` (whose future never completes) |
+| `GATEWAY_RPC_ACK_TIMEOUT_MS` | `5000` | Per-attempt wait for the **device-announce** PUBACK before that attempt is retried (also bounds a publish issued while the channel is momentarily `null`, whose future never completes); and the **reply orphan-capture** deadline. **Not used by subscribe** (observe-only, no timeout) |
 | `GATEWAY_RPC_ACK_MAX_ATTEMPTS` | `5` | Bounded retries of announce/resubscribe until broker-confirmed; exhausted → `unconfirmed` (sub-device/subscription at risk of losing RPC routing) |
 | `GATEWAY_RPC_ACK_BACKOFF_MIN_MS` / `GATEWAY_RPC_ACK_BACKOFF_MAX_MS` | `1000` / `5000` | Jittered-exponential backoff between announce/resubscribe retries. Sized so `MAX_ATTEMPTS × (ACK_TIMEOUT + BACKOFF_MAX)` stays under `GATEWAY_RPC_EXPIRY_MS` |
 | `GATEWAY_RPC_ANNOUNCE_MAX_CONCURRENT` | `1000` | Global in-flight cap on device announces so a reconnect storm cannot self-amplify. Acquired non-blockingly (re-queued on the event loop when saturated — never a blocking acquire) |
@@ -225,8 +225,8 @@ QoS-0/untracked, so a drop mid-reconnect silently lost routing and the RPC `EXPI
   live channel plus our per-reconnect resubscribe. We track the SUBACK (`acked` / `failed`); `unconfirmed`
   is a **live gauge** — the count of clients whose current subscription has not been SUBACK-confirmed —
   **not** a timeout counter, so a slow-but-real SUBACK never becomes a false positive (the gauge
-  self-clears when the SUBACK lands, whenever that is). `GATEWAY_RPC_ACK_TIMEOUT_MS` is used only by the
-  reply orphan-capture, not by subscribe.
+  self-clears when the SUBACK lands, whenever that is). `GATEWAY_RPC_ACK_TIMEOUT_MS` is used by the
+  device-announce retry and the reply orphan-capture — **not** by subscribe.
 
 Observability: a dedicated `GATEWAY_DEVICE_ANNOUNCE` stats block (`AnnounceStats`, label "Gateway
 device announce") reports `acked / failed / retried / unconfirmed` per window (`unconfirmed` must stay

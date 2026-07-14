@@ -49,8 +49,9 @@ public class GatewayRpcReceiver {
     private final boolean retryEnabled;
     private final long replyTtlMs;
     private final int maxBufferedPerClient;
-    // Per-attempt wait for the broker ack (PUBACK / SUBACK). Used to detect an orphaned reply publish
-    // and to flag an unconfirmed subscribe for observability.
+    // Deadline for a reply publish's PUBACK: if the future has not completed by then, treat it as an
+    // orphan (netty-mqtt never completes a publish whose channel closed mid-flight) and re-buffer it.
+    // Subscribe does NOT use this — its 'unconfirmed' is an observe-only live gauge (see subscribe()).
     private final long ackTimeoutMs;
 
     private final Map<MqttClient, ClientRetryBuffer> retryBuffers = new ConcurrentHashMap<>();
