@@ -97,6 +97,8 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `GATEWAY_RPC_SEND_TS_PATH` | `data.params.sendTs` | Dot-path to the send-timestamp (epoch ms) the rule chain stamps into the RPC payload; the gateway computes latency = receiveTs − sendTs |
 | `GATEWAY_RPC_DRAIN_QUIET_SEC` | `5` | After the load window ends, inbound RPC must be idle this long before the tail is considered settled (drain exits early). Only relevant with `GATEWAY_RPC_ENABLED=true` |
 | `GATEWAY_RPC_DRAIN_MAX_SEC` | `0` (auto) | Hard cap on the post-window drain phase so it can never hang. `>0` = explicit seconds; `0` = auto (sender on: `GATEWAY_RPC_SENDER_TIMEOUT_MS + GATEWAY_RPC_RESPONSE_DELAY_MS + 5s`; sender off: `30s`), floored to `>= QUIET_SEC` |
+| `GATEWAY_RPC_REPLY_RETRY_ENABLED` | `true` | Buffer a gateway RPC reply whose publish failed because the client's channel dropped mid-reply (e.g. a transport roll) and re-publish it when that client reconnects, so replies recoverable within the RPC's server-side expiry are delivered instead of expiring. Reply expiry = `GATEWAY_RPC_SENDER_TIMEOUT_MS`. `false` = legacy behaviour (a failed reply is immediately counted `lost`) |
+| `GATEWAY_RPC_REPLY_RETRY_MAX_BUFFERED` | `10000` | Per-client cap on replies buffered awaiting reconnect; overflow is dropped and counted `lost`. Bounds memory when a client never reconnects |
 | `GATEWAY_RPC_SENDER_ENABLED` | `false` | In-tool load driver: after warmup, fire boundary-aligned rule-engine RPC bursts for this instance's device range. Requires `GATEWAY_RPC_ENABLED`; use `MESSAGES_PER_SECOND=0` |
 | `GATEWAY_RPC_SENDER_TEMPLATE` | _(empty)_ | Filesystem path to a `{method, params}` JSON command body (the sender appends the chunked `devices[]`); empty = built-in neutral default |
 | `GATEWAY_RPC_SENDER_INTERVAL_SEC` | `60` | Burst cadence (s). Bursts fire on round clock times (multiples of this, e.g. every whole minute), so separate instances with accurate clocks fire together without coordinating |
@@ -157,8 +159,22 @@ sender and enters a bounded **drain** phase (`GatewayRpcReceiver.drain`) that ho
 until inbound RPC has been idle for `GATEWAY_RPC_DRAIN_QUIET_SEC` and outstanding replies have flushed
 (or a hard cap `GATEWAY_RPC_DRAIN_MAX_SEC` elapses), so the last burst's two-way RPCs are answered
 instead of being cut off. A final `Gateway RPC drain complete [...] quiesced=<bool>` line reports
-cumulative received/responded/errors/pending; the periodic `RPC` stats block also carries running
+cumulative received/sent/recovered/lost/pending; the periodic `RPC` stats block also carries running
 `totals:`.
+
+**Reply retry on reconnect (`GATEWAY_RPC_REPLY_RETRY_ENABLED`, default on):** when a gateway client's
+channel drops between receiving an RPC and publishing its reply (e.g. a `tb-mqtt-transport` roll), the
+reply publish fails. Rather than count that an immediate error and let the RPC expire server-side,
+`GatewayRpcReceiver` buffers the rendered reply per-client with the RPC's expiry (`receivedAt +
+GATEWAY_RPC_SENDER_TIMEOUT_MS`) and re-publishes it on the same client's existing reconnect action
+(alongside `resubscribe` + re-announce). Replies past expiry on reconnect, over the per-client cap
+(`GATEWAY_RPC_REPLY_RETRY_MAX_BUFFERED`), or still buffered when the drain phase ends are counted
+`lost`. Re-publishing is dup-safe (QoS 1; the server accepts only the first response per request id).
+Accordingly `RpcLatencyStats` reports honest terminal states — `sent` (first-try) / `recovered`
+(retry) / `lost` — replacing the old single `errors` counter, and `pending` (received minus all
+terminal states) reaches 0 on a clean run. The buffer is per-client (`ConcurrentHashMap`) with short
+`synchronized` critical sections, safe under concurrent add/flush on the netty event loop and finalize
+on the drain thread.
 
 **Gateway RPC burst sender (`GATEWAY_RPC_SENDER_ENABLED`):** an in-tool load driver layered on the
 persistent gateway mode (same instance receives + measures what it triggers). After warmup,
