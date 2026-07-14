@@ -131,8 +131,8 @@ public class GatewayRpcReceiver {
         return (receivedTopic, payload) -> {
             long now = System.currentTimeMillis();
             try {
+                stats.incReceived(now); // raw, every delivery (incl. redeliveries and unparseable)
                 ProcessedRpc r = processor.process(payload, now);
-                stats.incReceived(now); // raw, every delivery (incl. redeliveries)
                 if (r == null) {
                     return CompletableFuture.completedFuture(null); // malformed — cannot key/dedup
                 }
