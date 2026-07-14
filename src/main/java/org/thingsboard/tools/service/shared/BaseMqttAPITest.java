@@ -168,7 +168,7 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
         CountDownLatch packLatch = new CountDownLatch(pack.size());
         for (DeviceClient deviceClient : pack) {
             restClientService.getScheduler().submit(() -> {
-                deviceClient.getMqttClient().publish(getWarmUpTopic(), Unpooled.wrappedBuffer(getData(deviceClient.getDeviceName())), MqttQoS.AT_MOST_ONCE)
+                warmUpPublish(deviceClient)
                         .addListener(future -> {
                                     if (future.isSuccess()) {
                                         log.debug("Warm up Message was successfully published to device: {}", deviceClient.getDeviceName());
@@ -187,6 +187,14 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
         } else {
             log.error("[{}] devices warmed up failed: {}!", totalWarmedUpCount.get(), packLatch.getCount());
         }
+    }
+
+    /** Per-device warm-up publish. Default is the fire-and-forget QoS-0 warm-up; gateway mode with RPC
+     *  overrides this to a reliable, PUBACK-confirmed device announce so sub-device RPC routing is
+     *  actually established, not merely flushed to the socket. */
+    protected Future<Void> warmUpPublish(DeviceClient deviceClient) {
+        return deviceClient.getMqttClient().publish(getWarmUpTopic(),
+                Unpooled.wrappedBuffer(getData(deviceClient.getDeviceName())), MqttQoS.AT_MOST_ONCE);
     }
 
     protected abstract String getWarmUpTopic();

@@ -83,6 +83,23 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     @Value("${gateway.rpc.replyRetryMaxBuffered:64}")
     int rpcReplyRetryMaxBuffered;
 
+    // Reliable re-announce / resubscribe (only active when RPC is enabled — it protects RPC routing).
+    @Value("${gateway.rpc.ack.timeoutMs:5000}")
+    long gatewayAckTimeoutMs;
+    @Value("${gateway.rpc.ack.maxAttempts:5}")
+    int gatewayAckMaxAttempts;
+    @Value("${gateway.rpc.ack.backoffMinMs:1000}")
+    long gatewayAckBackoffMinMs;
+    @Value("${gateway.rpc.ack.backoffMaxMs:5000}")
+    long gatewayAckBackoffMaxMs;
+    @Value("${gateway.rpc.announce.maxConcurrent:1000}")
+    int gatewayAnnounceMaxConcurrent;
+    @Value("${gateway.rpc.announce.permitWaitMs:250}")
+    long gatewayAnnouncePermitWaitMs;
+
+    protected final AnnounceStats announceStats = new AnnounceStats();
+    protected GatewayDeviceAnnouncer deviceAnnouncer;
+
     @Value("${gateway.rpc.sender.enabled:false}")
     boolean rpcSenderEnabled;
     @Value("${gateway.rpc.sender.template:}")
@@ -203,9 +220,23 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
             return;
         }
         for (String deviceName : deviceNames) {
-            gatewayClient.publish(getWarmUpTopic(), Unpooled.wrappedBuffer(getData(deviceName)),
-                    MqttQoS.AT_MOST_ONCE);
+            if (deviceAnnouncer != null) {
+                // QoS-1, PUBACK-confirmed, retried until the sub-device's RPC routing is re-established.
+                deviceAnnouncer.announce(gatewayClient, getData(deviceName));
+            } else {
+                gatewayClient.publish(getWarmUpTopic(), Unpooled.wrappedBuffer(getData(deviceName)),
+                        MqttQoS.AT_MOST_ONCE);
+            }
         }
+    }
+
+    @Override
+    protected Future<Void> warmUpPublish(DeviceClient deviceClient) {
+        if (deviceAnnouncer != null) {
+            // Initial sub-device announce also goes through the reliable path when RPC is enabled.
+            return deviceAnnouncer.announce(deviceClient.getMqttClient(), getData(deviceClient.getDeviceName()));
+        }
+        return super.warmUpPublish(deviceClient); // RPC off: legacy QoS-0 warm-up
     }
 
     @Override
@@ -294,6 +325,10 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         RpcMessageProcessor processor = new RpcMessageProcessor(mapper, rpcSendTsPath, rpcRespond, template, rpcLatencyStats);
         rpcReceiver = new GatewayRpcReceiver(rpcTopic, MqttQoS.AT_LEAST_ONCE, processor, rpcLatencyStats, rpcResponseDelayMs,
                 rpcReplyRetryEnabled, rpcSenderTimeoutMs, rpcReplyRetryMaxBuffered);
+        deviceAnnouncer = new GatewayDeviceAnnouncer(announceStats,
+                new AckedRetryConfig(gatewayAckMaxAttempts, gatewayAckTimeoutMs, gatewayAckBackoffMinMs, gatewayAckBackoffMaxMs),
+                new Random(seed + instanceIdx), gatewayAnnounceMaxConcurrent, gatewayAnnouncePermitWaitMs);
+        statsReporter().register(StatsBlock.GATEWAY_DEVICE_ANNOUNCE, announceStats::summaryAndReset);
         rpcReceiver.attach(mqttClients);
         // On reconnect, a gateway loses its RPC subscription (cleanSession) and its server-side
         // sub-device routing; restore both so RPC delivery resumes instead of silently dropping.
