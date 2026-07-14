@@ -127,6 +127,25 @@ class GatewayRpcReplyRetryTest {
     }
 
     @Test
+    void drainActivelyRecoversBufferedReplyWithoutAReconnect() throws Exception {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        GatewayRpcReceiver r = receiver(stats, 60_000L, 100);
+        RetryFakeClient c = client();
+        c.publishOutcomes.add(false); // first publish fails -> buffered, RPC left pending
+
+        r.buildHandler(c).onMessage(TOPIC, rpc(1));
+        assertThat(stats.getRetryQueued()).isEqualTo(1);
+
+        // No reconnect / no explicit flush: the drain loop itself must re-send the buffered reply on
+        // the (live) client and settle, instead of waiting out maxMs doing nothing.
+        GatewayRpcReceiver.DrainResult res = r.drain(50L, 3000L, true);
+        assertThat(res.quiesced).isTrue();
+        assertThat(res.elapsedMs).isLessThan(3000L);
+        assertThat(stats.getRecovered()).isEqualTo(1);
+        assertThat(stats.getLost()).isZero();
+    }
+
+    @Test
     void finalizeCountsStillBufferedAsLost() throws Exception {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats, 60_000L, 100);

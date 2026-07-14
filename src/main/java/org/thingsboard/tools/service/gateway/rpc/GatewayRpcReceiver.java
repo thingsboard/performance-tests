@@ -218,8 +218,9 @@ public class GatewayRpcReceiver {
         }
     }
 
-    /** Re-publish a reconnected client's buffered replies; drop + count lost any already past expiry.
-     *  Hook this into the client's reconnect action. */
+    /** Re-publish a client's buffered replies; drop + count lost any already past expiry. Called on the
+     *  client's reconnect action AND proactively from the drain loop (the channel is live there, so a
+     *  reply that missed its reconnect flush still gets re-sent instead of stranding {@code pending}). */
     public void flushReplies(MqttClient client) {
         ClientRetryBuffer buf = retryBuffers.get(client);
         if (buf == null) {
@@ -232,6 +233,13 @@ public class GatewayRpcReceiver {
             } else {
                 publishReply(client, reply);
             }
+        }
+    }
+
+    /** Re-send every client's buffered replies (used by the drain loop to actively settle the tail). */
+    public void flushAllReplies() {
+        for (MqttClient client : retryBuffers.keySet()) {
+            flushReplies(client);
         }
     }
 
@@ -322,6 +330,12 @@ public class GatewayRpcReceiver {
         long start = System.currentTimeMillis();
         long deadline = start + maxMs;
         while (true) {
+            if (respond) {
+                // Actively re-send buffered replies on their now-live channels — a reply that missed
+                // its reconnect flush would otherwise strand pending until maxMs. Non-expired ones
+                // recover; expired ones are dropped (lost); re-failed ones re-buffer for the next pass.
+                flushAllReplies();
+            }
             long now = System.currentTimeMillis();
             long idle = now - stats.getLastInboundMs();
             long pending = respond ? outstanding.outstandingCount() : 0;
