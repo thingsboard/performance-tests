@@ -154,7 +154,7 @@ public class GatewayRpcReceiver {
                         // sent/recovered): the original tracked reply's publish lifecycle stays the single
                         // authority for answered/pending/lost, so this can never double-count or disturb drain.
                         stats.incRedelivered();
-                        republishReplyBestEffort(client, r.reply());
+                        replyToRedelivery(client, r.reply());
                         return CompletableFuture.completedFuture(null);
                     }
                     if (r.latencyMs() != null) {
@@ -180,18 +180,23 @@ public class GatewayRpcReceiver {
     }
 
     /**
-     * Re-publish a reply for a server REDELIVERY, best-effort: fire-and-forget on the client's channel —
-     * no PUBACK tracking, no retry buffer, no timeout, and it ignores {@code responseDelayMs} (a
-     * redelivery arrives later in the RPC's life, so we answer immediately to stay inside the server
-     * expiry). Deliberately lean: a redelivery storm can be >90% of an inbound window, and the server's
-     * own next redelivery is the retry loop if this publish is dropped. The reply was re-rendered from the
-     * redelivery's own payload, so it echoes whatever {@code data.id} the current delivery carried (the id
-     * the current device actor expects, even if it was reassigned across a core migration). Counts
-     * {@code redeliveryReplied} only — never {@code acked} (it is not a new distinct RPC completed).
+     * Re-publish a reply for a server REDELIVERY, best-effort: no retry buffer, no timeout, and it ignores
+     * {@code responseDelayMs} (a redelivery arrives later in the RPC's life, so we answer immediately to
+     * stay inside the server expiry). Deliberately lean: a redelivery storm can be >90% of an inbound
+     * window, and the server's own next redelivery is the retry loop if this publish is dropped — so we
+     * never build our own retry on top of the server's. {@code redeliveryReplied} is counted only on the
+     * broker PUBACK (consistent with {@code firstTry}/{@code afterRetry}), so it reflects re-replies that
+     * actually landed, not merely attempted; an orphaned/failed re-reply is simply not counted. The reply
+     * was re-rendered from the redelivery's own payload, so it echoes whatever {@code data.id} the current
+     * delivery carried (the id the current device actor expects, even if reassigned across a core
+     * migration). Never touches {@code acked} — it is not a new distinct RPC completed.
      */
-    private void republishReplyBestEffort(MqttClient client, byte[] reply) {
-        stats.incRedeliveryReplied();
-        client.publish(topic, Unpooled.wrappedBuffer(reply), qos);
+    private void replyToRedelivery(MqttClient client, byte[] reply) {
+        client.publish(topic, Unpooled.wrappedBuffer(reply), qos).addListener(f -> {
+            if (f.isSuccess()) {
+                stats.incRedeliveryReplied();
+            }
+        });
     }
 
     /**

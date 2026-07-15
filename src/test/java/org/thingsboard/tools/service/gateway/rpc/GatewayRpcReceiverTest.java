@@ -109,6 +109,23 @@ class GatewayRpcReceiverTest {
     }
 
     @Test
+    void redeliveryReplyIsCountedOnlyWhenTheBrokerConfirmsIt() throws Exception {
+        RpcLatencyStats stats = new RpcLatencyStats();
+        GatewayRpcReceiver r = receiver(stats);
+        FakeMqttClient fake = new FakeMqttClient(loop);
+        fake.publishHangs = true; // no PUBACK ever -> nothing confirms
+        MqttHandler handler = r.buildHandler(fake);
+
+        handler.onMessage("v1/gateway/rpc", rpc("GW1", 5)); // first receipt: reply orphans (buffered)
+        handler.onMessage("v1/gateway/rpc", rpc("GW1", 5)); // redelivery: re-reply also orphans
+
+        assertThat(stats.getRedelivered()).isEqualTo(1);
+        // PUBACK-gated (consistent with firstTry/afterRetry): an unconfirmed re-reply is NOT counted
+        assertThat(stats.getRedeliveryReplied()).isZero();
+        assertThat(stats.getAckedFirstTry()).isZero();
+    }
+
+    @Test
     void attachSubscribesEachClientAndClearsUnconfirmedOnAck() {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats);

@@ -176,8 +176,9 @@ counted `redelivered` **and re-answered best-effort** (`redeliveryReplied`). Re-
 is required, not optional: a **tb-core roll** recreates the device actor, which reloads a QUEUED RPC and
 **re-sends it with the same wire `data.id` but no MQTT reconnect and no buffered reply on our side** — so
 the only thing that completes the reloaded pending is answering the redelivery. Dropping it (the earlier
-behaviour) left it `EXPIRED`. The re-reply is best-effort (fire-and-forget QoS 1, no retry buffer,
-ignores `GATEWAY_RPC_RESPONSE_DELAY_MS`) and **never touches the outstanding set** — the outcome counts
+behaviour) left it `EXPIRED`. The re-reply is best-effort (QoS 1, no retry buffer/timeout — the server's
+own next redelivery is the retry loop; ignores `GATEWAY_RPC_RESPONSE_DELAY_MS`; `redeliveryReplied` is
+counted only on the PUBACK, so it reflects re-replies that landed) and **never touches the outstanding set** — the outcome counts
 (`acked`/`pending`/`undelivered`) stay driven solely by the first tracked reply's publish lifecycle, so a
 redelivery can neither double-count nor disturb drain. Idempotent server-side (server keeps the first per
 request id). `received` stays the raw per-delivery count; `unique = received − redelivered`. **`pending`
