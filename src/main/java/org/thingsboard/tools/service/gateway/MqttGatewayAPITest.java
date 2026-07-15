@@ -337,6 +337,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         statsReporter().register(StatsBlock.GATEWAY_DEVICE_ANNOUNCE, announceStats::summaryAndReset);
         statsReporter().register(StatsBlock.RPC_SUBSCRIPTION, rpcReceiver::subscriptionSummary);
         statsReporter().register(StatsBlock.RPC_RECEIVE, rpcReceiver::receiveSummary);
+        statsReporter().register(StatsBlock.RPC_ACK, rpcReceiver::ackSummary);
         statsReporter().register(StatsBlock.RPC_PUBLISH, rpcReceiver::publishSummary);
         rpcReceiver.attach(mqttClients);
         // On reconnect, a gateway loses its RPC subscription (cleanSession) and its server-side

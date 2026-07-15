@@ -144,9 +144,17 @@ public class GatewayRpcReceiver {
                 if (r.reply() != null) {
                     RpcKey key = new RpcKey(r.deviceName(), r.requestId());
                     if (!outstanding.firstReceipt(key, now)) {
-                        // Server redelivery of a still-pending RPC on reconnect. The reply-retry flush
-                        // re-sends it at that same reconnect, so just count it — no re-answer, no re-track.
-                        stats.incDuplicate();
+                        // Server REDELIVERY: the core still considers this RPC pending and re-sent it.
+                        // Two ways it happens: a transport roll -> reconnect redelivery, OR a core roll ->
+                        // the recreated device actor reloads a QUEUED RPC and re-sends it with NO reconnect
+                        // and NO buffered reply on our side. Re-publish the reply best-effort so a reloaded
+                        // pending is answered instead of expiring (the regression was dropping it here).
+                        // Idempotent server-side (QoS 1; an already-completed RPC has no pending and discards
+                        // it). We deliberately do NOT touch the outstanding set (no markAnswered / no
+                        // sent/recovered): the original tracked reply's publish lifecycle stays the single
+                        // authority for answered/pending/lost, so this can never double-count or disturb drain.
+                        stats.incRedelivered();
+                        republishReplyBestEffort(client, r.reply());
                         return CompletableFuture.completedFuture(null);
                     }
                     if (r.latencyMs() != null) {
@@ -169,6 +177,21 @@ public class GatewayRpcReceiver {
             }
             return CompletableFuture.completedFuture(null);
         };
+    }
+
+    /**
+     * Re-publish a reply for a server REDELIVERY, best-effort: fire-and-forget on the client's channel —
+     * no PUBACK tracking, no retry buffer, no timeout, and it ignores {@code responseDelayMs} (a
+     * redelivery arrives later in the RPC's life, so we answer immediately to stay inside the server
+     * expiry). Deliberately lean: a redelivery storm can be >90% of an inbound window, and the server's
+     * own next redelivery is the retry loop if this publish is dropped. The reply was re-rendered from the
+     * redelivery's own payload, so it echoes whatever {@code data.id} the current delivery carried (the id
+     * the current device actor expects, even if it was reassigned across a core migration). Counts
+     * {@code redeliveryReplied} only — never {@code acked} (it is not a new distinct RPC completed).
+     */
+    private void republishReplyBestEffort(MqttClient client, byte[] reply) {
+        stats.incRedeliveryReplied();
+        client.publish(topic, Unpooled.wrappedBuffer(reply), qos);
     }
 
     /**
@@ -195,15 +218,15 @@ public class GatewayRpcReceiver {
             if (fut.isSuccess()) {
                 // Mark answered on ANY success — even a PUBACK that lands after the timeout already
                 // fired (a slow-but-real send). markAnswered is idempotent, so this clears a
-                // false-pending; we only count sent/recovered + cancel the timeout if we win the CAS
+                // false-pending; we only count the ack + cancel the timeout if we win the CAS
                 // (a timed-out reply was already buffered — its later flush would double-count).
                 outstanding.markAnswered(reply.key, System.currentTimeMillis());
                 if (settled.compareAndSet(false, true)) {
                     timeout.cancel(false);
                     if (reply.attempts == 1) {
-                        stats.incResponsesSent();
+                        stats.incAckedFirstTry();
                     } else {
-                        stats.incRecovered();
+                        stats.incAckedAfterRetry();
                     }
                 }
             } else if (settled.compareAndSet(false, true)) {
@@ -226,7 +249,7 @@ public class GatewayRpcReceiver {
             markReplyLost(reply); // buffer full — give up so it can't grow unbounded
             return;
         }
-        stats.incRetryQueued();
+        stats.incBufferedForRetry();
         scheduleReplyRetry(client, reply);
     }
 
@@ -258,7 +281,7 @@ public class GatewayRpcReceiver {
     /** Terminal give-up for one reply: count it lost and drop its key from the outstanding set so
      *  {@code pending} tracks only still-recoverable RPCs and drain can quiesce. */
     private void markReplyLost(BufferedReply reply) {
-        stats.incLost();
+        stats.incUndelivered();
         outstanding.markLost(reply.key, System.currentTimeMillis());
     }
 
@@ -360,7 +383,7 @@ public class GatewayRpcReceiver {
         }
     }
 
-    // --- stats sources (registered as three StatsBlocks) ---
+    // --- stats sources (registered as four StatsBlocks) ---
 
     public String subscriptionSummary(int intervalSec) {
         return stats.subscriptionSummary(intervalSec, unconfirmedSubscriptions.size());
@@ -371,8 +394,13 @@ public class GatewayRpcReceiver {
         return stats.receiveSummary(intervalSec);
     }
 
+    /** Reply confirmations + the live {@code pending} gauge (outstanding-set size). */
+    public String ackSummary(int intervalSec) {
+        return stats.ackSummary(intervalSec, outstanding.outstandingCount());
+    }
+
     public String publishSummary(int intervalSec) {
-        return stats.publishSummary(intervalSec, outstanding.outstandingCount());
+        return stats.publishSummary(intervalSec);
     }
 
     /**

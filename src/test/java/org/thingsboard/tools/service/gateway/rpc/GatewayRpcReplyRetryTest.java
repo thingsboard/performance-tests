@@ -92,12 +92,12 @@ class GatewayRpcReplyRetryTest {
         c.publishOutcomes.add(false); // first publish fails -> buffered
 
         r.buildHandler(c).onMessage(TOPIC, rpc(1));
-        assertThat(stats.getRetryQueued()).isEqualTo(1);
-        assertThat(stats.getResponsesSent()).isZero();
+        assertThat(stats.getBufferedForRetry()).isEqualTo(1);
+        assertThat(stats.getAckedFirstTry()).isZero();
 
         r.flushReplies(c); // reconnect: subsequent publish succeeds -> recovered
-        assertThat(stats.getRecovered()).isEqualTo(1);
-        assertThat(stats.getLost()).isZero();
+        assertThat(stats.getAckedAfterRetry()).isEqualTo(1);
+        assertThat(stats.getUndelivered()).isZero();
         assertThat(c.publishedPayloads).hasSize(2); // first (failed) + retry
     }
 
@@ -112,9 +112,9 @@ class GatewayRpcReplyRetryTest {
         // ttl=0 means now >= expiry at enqueue -> lost immediately, nothing buffered.
         int publishesSoFar = c.publishedPayloads.size();
         r.flushReplies(c);
-        assertThat(stats.getLost()).isEqualTo(1);
-        assertThat(stats.getRecovered()).isZero();
-        assertThat(stats.getRetryQueued()).isZero();
+        assertThat(stats.getUndelivered()).isEqualTo(1);
+        assertThat(stats.getAckedAfterRetry()).isZero();
+        assertThat(stats.getBufferedForRetry()).isZero();
         assertThat(c.publishedPayloads).hasSize(publishesSoFar); // no retry publish
     }
 
@@ -131,8 +131,8 @@ class GatewayRpcReplyRetryTest {
             r.buildHandler(c).onMessage(TOPIC, rpc(i));
         }
 
-        assertThat(stats.getRetryQueued()).isEqualTo(2); // only 2 buffered
-        assertThat(stats.getLost()).isEqualTo(3);        // 3 over-cap dropped
+        assertThat(stats.getBufferedForRetry()).isEqualTo(2); // only 2 buffered
+        assertThat(stats.getUndelivered()).isEqualTo(3);        // 3 over-cap dropped
     }
 
     @Test
@@ -143,15 +143,15 @@ class GatewayRpcReplyRetryTest {
         c.publishOutcomes.add(false); // first publish fails -> buffered, RPC left pending
 
         r.buildHandler(c).onMessage(TOPIC, rpc(1));
-        assertThat(stats.getRetryQueued()).isEqualTo(1);
+        assertThat(stats.getBufferedForRetry()).isEqualTo(1);
 
         // No reconnect / no explicit flush: the drain loop itself must re-send the buffered reply on
         // the (live) client and settle, instead of waiting out maxMs doing nothing.
         GatewayRpcReceiver.DrainResult res = r.drain(50L, 3000L, true);
         assertThat(res.quiesced).isTrue();
         assertThat(res.elapsedMs).isLessThan(3000L);
-        assertThat(stats.getRecovered()).isEqualTo(1);
-        assertThat(stats.getLost()).isZero();
+        assertThat(stats.getAckedAfterRetry()).isEqualTo(1);
+        assertThat(stats.getUndelivered()).isZero();
     }
 
     @Test
@@ -164,11 +164,11 @@ class GatewayRpcReplyRetryTest {
         r.buildHandler(c).onMessage(TOPIC, rpc(1));
         // NO reconnect, NO drain call: the timer alone must re-send on the live channel and recover
         long deadline = System.currentTimeMillis() + 2000L;
-        while (stats.getRecovered() == 0 && System.currentTimeMillis() < deadline) {
+        while (stats.getAckedAfterRetry() == 0 && System.currentTimeMillis() < deadline) {
             Thread.sleep(20);
         }
-        assertThat(stats.getRecovered()).isEqualTo(1);
-        assertThat(stats.getLost()).isZero();
+        assertThat(stats.getAckedAfterRetry()).isEqualTo(1);
+        assertThat(stats.getUndelivered()).isZero();
         assertThat(c.publishedPayloads.size()).isGreaterThanOrEqualTo(2); // original + timer re-send
     }
 
@@ -181,13 +181,13 @@ class GatewayRpcReplyRetryTest {
 
         r.buildHandler(c).onMessage(TOPIC, rpc(1));
         long deadline = System.currentTimeMillis() + 2000L;
-        while (stats.getLost() == 0 && System.currentTimeMillis() < deadline) {
+        while (stats.getUndelivered() == 0 && System.currentTimeMillis() < deadline) {
             Thread.sleep(20);
         }
-        assertThat(stats.getLost()).isEqualTo(1);
-        assertThat(stats.getRecovered()).isZero();
+        assertThat(stats.getUndelivered()).isEqualTo(1);
+        assertThat(stats.getAckedAfterRetry()).isZero();
         // given-up RPC left the outstanding set (pending recoverable = 0) so drain can quiesce
-        assertThat(r.publishSummary(10)).contains("pending=0");
+        assertThat(r.ackSummary(10)).contains("pending=0");
     }
 
     @Test
@@ -202,7 +202,7 @@ class GatewayRpcReplyRetryTest {
         GatewayRpcReceiver.DrainResult res = r.drain(50L, 5000L, true);
         assertThat(res.quiesced).isTrue();               // does NOT burn maxMs waiting on a dead RPC
         assertThat(res.elapsedMs).isLessThan(5000L);
-        assertThat(stats.getLost()).isEqualTo(1);
+        assertThat(stats.getUndelivered()).isEqualTo(1);
     }
 
     @Test
@@ -214,7 +214,7 @@ class GatewayRpcReplyRetryTest {
         r.buildHandler(c).onMessage(TOPIC, rpc(1)); // buffered, client never reconnects
 
         r.finalizeLostReplies();
-        assertThat(stats.getLost()).isEqualTo(1);
+        assertThat(stats.getUndelivered()).isEqualTo(1);
     }
 
     private RetryFakeClient client() {

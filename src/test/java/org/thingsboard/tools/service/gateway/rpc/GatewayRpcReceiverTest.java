@@ -80,24 +80,32 @@ class GatewayRpcReceiverTest {
 
         assertThat(fake.publishedTopics).containsExactly("v1/gateway/rpc");
         assertThat(fake.publishedPayloads.get(0)).contains("\"device\":\"GW1\"").contains("\"id\":5");
-        assertThat(stats.getResponsesSent()).isEqualTo(1);
+        assertThat(stats.getAckedFirstTry()).isEqualTo(1);
         assertThat(stats.getReceived()).isEqualTo(1);
     }
 
     @Test
-    void duplicateDeliveryCountedOnceAndNotReAnswered() throws Exception {
+    void redeliveryIsReAnsweredBestEffortWithoutDoubleCountingTheRpc() throws Exception {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats);
         FakeMqttClient fake = new FakeMqttClient(loop);
         MqttHandler handler = r.buildHandler(fake);
 
-        handler.onMessage("v1/gateway/rpc", rpc("GW1", 5)); // first receipt: answered
-        handler.onMessage("v1/gateway/rpc", rpc("GW1", 5)); // server redelivery of the same RPC
+        handler.onMessage("v1/gateway/rpc", rpc("GW1", 5)); // first receipt: tracked + answered
+        handler.onMessage("v1/gateway/rpc", rpc("GW1", 5)); // server redelivery of the SAME RPC
 
-        assertThat(stats.getReceived()).isEqualTo(2);    // raw counts both deliveries
-        assertThat(stats.getDuplicate()).isEqualTo(1);   // second recognised as a duplicate
-        assertThat(stats.getResponsesSent()).isEqualTo(1); // answered exactly once
-        assertThat(fake.publishedPayloads).hasSize(1);     // no re-publish for the duplicate
+        assertThat(stats.getReceived()).isEqualTo(2);          // raw counts both deliveries
+        assertThat(stats.getRedelivered()).isEqualTo(1);         // second recognised as a redelivery
+        // the redelivery IS re-answered (best-effort) so a reloaded server-side pending completes
+        assertThat(fake.publishedPayloads).hasSize(2);
+        assertThat(fake.publishedPayloads.get(1)).contains("\"device\":\"GW1\"").contains("\"id\":5");
+        assertThat(stats.getRedeliveryReplied()).isEqualTo(1);  // tracked as its own honest signal
+        // but the RPC is answered exactly once — the re-reply does NOT touch sent/recovered/pending
+        assertThat(stats.getAckedFirstTry()).isEqualTo(1);
+        assertThat(stats.getAckedAfterRetry()).isZero();
+        // outstanding untouched by the re-reply -> pending stays 0 -> drain can still quiesce
+        assertThat(r.publishSummary(10)).contains("redeliveryReplied=1");
+        assertThat(r.ackSummary(10)).contains("pending=0");
     }
 
     @Test

@@ -44,17 +44,17 @@ class RpcLatencyStatsTest {
     }
 
     @Test
-    void publishCountersIncrement() {
+    void ackAndPublishCountersIncrement() {
         RpcLatencyStats s = new RpcLatencyStats();
-        s.incResponsesSent();
-        s.incResponsesSent();
-        s.incRecovered();
-        s.incLost();
-        s.incRetryQueued();
-        assertThat(s.getResponsesSent()).isEqualTo(2);
-        assertThat(s.getRecovered()).isEqualTo(1);
-        assertThat(s.getLost()).isEqualTo(1);
-        assertThat(s.getRetryQueued()).isEqualTo(1);
+        s.incAckedFirstTry();
+        s.incAckedFirstTry();
+        s.incAckedAfterRetry();
+        s.incUndelivered();
+        s.incBufferedForRetry();
+        assertThat(s.getAckedFirstTry()).isEqualTo(2);
+        assertThat(s.getAckedAfterRetry()).isEqualTo(1);
+        assertThat(s.getUndelivered()).isEqualTo(1);
+        assertThat(s.getBufferedForRetry()).isEqualTo(1);
     }
 
     @Test
@@ -68,15 +68,15 @@ class RpcLatencyStatsTest {
     }
 
     @Test
-    void receiveSummaryShowsRawDuplicateUniqueAndResetsWindow() {
+    void receiveSummaryShowsRawRedeliveredUniqueAndResetsWindow() {
         RpcLatencyStats s = new RpcLatencyStats();
         s.incReceived(1000L);
         s.incReceived(1000L);
         s.incReceived(1000L);
-        s.incDuplicate(); // one of the three was a redelivery
+        s.incRedelivered(); // one of the three was a server redelivery
         s.recordLatency(150);
         assertThat(s.receiveSummary(10)).isEqualTo(
-                "RPC Receive [window 10s]: received=3, duplicate=1 (unique=2); "
+                "RPC Receive [window 10s]: received=3, redelivered=1 (unique=2); "
                         + "latency avg=150.0 p50=150.0 p95=150.0 p99=150.0 max=150.0 ms");
         // window counters reset; totals persist
         assertThat(s.getReceived()).isZero();
@@ -86,7 +86,7 @@ class RpcLatencyStatsTest {
 
     @Test
     void receiveSummaryOnEmptyDoesNotThrow() {
-        assertThat(new RpcLatencyStats().receiveSummary(10)).contains("received=0, duplicate=0 (unique=0)");
+        assertThat(new RpcLatencyStats().receiveSummary(10)).contains("received=0, redelivered=0 (unique=0)");
     }
 
     @Test
@@ -100,18 +100,46 @@ class RpcLatencyStatsTest {
     }
 
     @Test
-    void publishSummaryShowsWindowAndTotalsWithPending() {
+    void ackSummaryShowsWindowAckedTotalAndPending() {
         RpcLatencyStats s = new RpcLatencyStats();
-        s.incResponsesSent();
-        s.incRecovered();
-        s.incRetryQueued();
-        String line = s.publishSummary(10, 4);
-        assertThat(line).isEqualTo(
-                "RPC Publish [window 10s]: sent=1, recovered=1, lost=0, retryQueued=1 "
-                        + "| totals: answered=2, pending=4, retryQueued=1");
-        // window counters reset, retryQueued total persists
-        assertThat(s.getResponsesSent()).isZero();
-        assertThat(s.publishSummary(10, 0)).contains("retryQueued=0 | totals: answered=2, pending=0, retryQueued=1");
+        s.incAckedFirstTry();
+        s.incAckedAfterRetry();
+        assertThat(s.ackSummary(10, 4)).isEqualTo(
+                "RPC Ack [window 10s]: firstTry=1, afterRetry=1 | totals: acked=2, pending=4");
+        // window counters reset; acked total persists
+        assertThat(s.getAckedFirstTry()).isZero();
+        assertThat(s.ackSummary(10, 0)).contains("firstTry=0, afterRetry=0 | totals: acked=2, pending=0");
+    }
+
+    @Test
+    void publishSummaryShowsTroubleStatesAndRedeliveryReplied() {
+        RpcLatencyStats s = new RpcLatencyStats();
+        s.incBufferedForRetry();
+        s.incUndelivered();
+        s.incRedeliveryReplied();
+        s.incRedeliveryReplied();
+        assertThat(s.publishSummary(10)).isEqualTo(
+                "RPC Publish [window 10s]: bufferedForRetry=1, undelivered=1, redeliveryReplied=2 "
+                        + "| totals: undelivered=1, bufferedForRetry=1, redeliveryReplied=2");
+        // window counters reset, totals persist
+        assertThat(s.getBufferedForRetry()).isZero();
+        assertThat(s.getRedeliveryReplied()).isZero();
+        assertThat(s.publishSummary(10)).contains(
+                "bufferedForRetry=0, undelivered=0, redeliveryReplied=0 "
+                        + "| totals: undelivered=1, bufferedForRetry=1, redeliveryReplied=2");
+    }
+
+    @Test
+    void redeliveryRepliedIsItsOwnCounterAndNotFoldedIntoAcked() {
+        RpcLatencyStats s = new RpcLatencyStats();
+        s.incAckedFirstTry();          // one genuine ack
+        s.incRedeliveryReplied();      // three best-effort re-replies to server redeliveries
+        s.incRedeliveryReplied();
+        s.incRedeliveryReplied();
+        assertThat(s.getRedeliveryReplied()).isEqualTo(3);
+        // acked = firstTry + afterRetry only; redelivery re-replies never inflate it
+        assertThat(s.ackSummary(10, 0)).contains("acked=1");
+        assertThat(s.publishSummary(10)).contains("redeliveryReplied=3");
     }
 
     @Test
@@ -119,11 +147,11 @@ class RpcLatencyStatsTest {
         RpcLatencyStats s = new RpcLatencyStats();
         s.incReceived(1000L);
         s.incReceived(1000L);
-        s.incResponsesSent();
+        s.incAckedFirstTry();
         String ok = s.drainSummary(6200L, true, 1);
         assertThat(ok).isEqualTo(
                 "Gateway RPC drain complete [drained 6.2s, quiesced=true]: received total 2, "
-                        + "answered 1, lost 0, pending 1");
+                        + "acked 1, undelivered 0, pending 1");
         assertThat(s.drainSummary(15000L, false, 0)).contains("drained 15.0s").contains("quiesced=false");
     }
 }

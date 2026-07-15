@@ -17,5 +17,5 @@ package org.thingsboard.tools.service.shared;
 
 /** Canonical stats blocks, in the order they are logged each interval. */
 public enum StatsBlock {
-    CONNECTIONS, GATEWAY_DEVICE_ANNOUNCE, THROUGHPUT, RPC_SUBSCRIPTION, RPC_RECEIVE, RPC_PUBLISH, EPHEMERAL
+    CONNECTIONS, GATEWAY_DEVICE_ANNOUNCE, THROUGHPUT, RPC_SUBSCRIPTION, RPC_RECEIVE, RPC_ACK, RPC_PUBLISH, EPHEMERAL
 }
