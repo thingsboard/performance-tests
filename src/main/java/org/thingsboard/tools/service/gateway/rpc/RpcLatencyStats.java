@@ -20,10 +20,11 @@ import org.apache.commons.math3.stat.descriptive.SynchronizedDescriptiveStatisti
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Gateway RPC counters, reported as four stage lines (subscription / receive / ack / publish). Window
- * counters use {@code getAndSet(0)} deltas; cumulative totals persist for the run. {@code pending}
- * is not held here — it is the outstanding-set size (distinct un-acked RPCs), passed in by the
- * receiver so redeliveries never distort it.
+ * Gateway RPC counters, reported as three lines by MQTT direction: subscription health, inbound
+ * deliveries ({@code RPC In}), and our reply publishes ({@code RPC Out}). Window counters use
+ * {@code getAndSet(0)} deltas; cumulative totals persist for the run. {@code pending} is not held
+ * here — it is the outstanding-set size (distinct un-acked RPCs), passed in by the receiver so
+ * redeliveries never distort it.
  */
 public class RpcLatencyStats {
 
@@ -33,7 +34,7 @@ public class RpcLatencyStats {
     private final AtomicLong received = new AtomicLong();     // raw per-delivery (incl. server redeliveries)
     private final AtomicLong redelivered = new AtomicLong();  // deliveries of an already-known (device,requestId)
 
-    // --- ack: our reply confirmed by a broker PUBACK (window). Both feed acked = ackedFirstTry + ackedAfterRetry. ---
+    // --- ack: our reply confirmed by a broker PUBACK (window). Both feed replyAcked = ackedFirstTry + ackedAfterRetry. ---
     private final AtomicLong ackedFirstTry = new AtomicLong();   // reply acked on the first publish attempt
     private final AtomicLong ackedAfterRetry = new AtomicLong(); // reply acked on a retry (orphan/reconnect re-send)
 
@@ -53,7 +54,6 @@ public class RpcLatencyStats {
     private final AtomicLong ackedFirstTryTotal = new AtomicLong();
     private final AtomicLong ackedAfterRetryTotal = new AtomicLong();
     private final AtomicLong undeliveredTotal = new AtomicLong();
-    private final AtomicLong bufferedForRetryTotal = new AtomicLong();
     private final AtomicLong redeliveryRepliedTotal = new AtomicLong();
     // Wall-clock (ms) of the most recent inbound RPC; the quiescence signal read by drain().
     private volatile long lastInboundMs = 0L;
@@ -78,8 +78,9 @@ public class RpcLatencyStats {
     public void incAckedAfterRetry() { ackedAfterRetry.incrementAndGet(); ackedAfterRetryTotal.incrementAndGet(); }
     /** Reply given up (past TTL / over the retry cap / still buffered at drain end). */
     public void incUndelivered() { undelivered.incrementAndGet(); undeliveredTotal.incrementAndGet(); }
-    /** Reply not acked and buffered to be re-sent (transient — later becomes ackedAfterRetry or undelivered). */
-    public void incBufferedForRetry() { bufferedForRetry.incrementAndGet(); bufferedForRetryTotal.incrementAndGet(); }
+    /** Reply not acked and buffered to be re-sent (transient — later becomes ackedAfterRetry or undelivered;
+     *  window-only, since a cumulative count of a transient state would double-count entries that resolve). */
+    public void incBufferedForRetry() { bufferedForRetry.incrementAndGet(); }
     /** A reply re-published in answer to a server redelivery. Its own diagnostic signal — deliberately
      *  NOT folded into acked: re-answering a redelivery is not a new distinct RPC completed. */
     public void incRedeliveryReplied() { redeliveryReplied.incrementAndGet(); redeliveryRepliedTotal.incrementAndGet(); }
@@ -111,19 +112,19 @@ public class RpcLatencyStats {
     }
 
     /**
-     * Inbound-command line: raw {@code received}, {@code redelivered} (server re-sends of a still-pending
-     * RPC; {@code unique = received − redelivered}), and one-way delivery-latency percentiles. Resets the
-     * histogram. A latency sample landing between the {@code getN()} snapshot and {@code clear()} is
-     * dropped — acceptable for interval metrics.
+     * Inbound line (server → us): raw {@code received}, {@code unique} and {@code redelivered} (server
+     * re-sends of a still-pending RPC; {@code unique = received − redelivered}), and one-way
+     * delivery-latency percentiles. Resets the histogram. A latency sample landing between the
+     * {@code getN()} snapshot and {@code clear()} is dropped — acceptable for interval metrics.
      */
-    public synchronized String receiveSummary(int intervalSec) {
+    public synchronized String inSummary(int intervalSec) {
         long n = latency.getN();
         long rcv = received.getAndSet(0);
         long redel = redelivered.getAndSet(0);
         String line = String.format(
-                "RPC Receive [window %ds]: received=%d, redelivered=%d (unique=%d); "
+                "RPC In [window %ds]: received=%d (unique=%d, redelivered=%d); "
                         + "latency avg=%.1f p50=%.1f p95=%.1f p99=%.1f max=%.1f ms",
-                intervalSec, rcv, redel, rcv - redel,
+                intervalSec, rcv, rcv - redel, redel,
                 n > 0 ? latency.getMean() : 0.0,
                 n > 0 ? latency.getPercentile(50) : 0.0,
                 n > 0 ? latency.getPercentile(95) : 0.0,
@@ -134,31 +135,24 @@ public class RpcLatencyStats {
     }
 
     /**
-     * Reply-ack line: our reply confirmations (both are broker PUBACKs, split only by which attempt
-     * confirmed). Window {@code firstTry}/{@code afterRetry}; cumulative {@code acked = ackedFirstTry +
-     * ackedAfterRetry} (the distinct RPCs we confirmed) and the outstanding-set {@code pending} (passed
-     * in). Outcome identity: {@code unique = acked + pending + undelivered}.
+     * Outbound line (us → server): the full reply lifecycle in one place. Window: our reply publishes that
+     * the broker PUBACK'd on the first attempt ({@code firstTry}) or on a retry ({@code afterRetry}),
+     * best-effort re-replies to server redeliveries ({@code redeliveryReplied}), and the delivery-trouble
+     * states ({@code bufferedForRetry} transient, {@code undelivered} terminal). Totals: cumulative
+     * {@code replyAcked = firstTry + afterRetry} (distinct RPCs whose reply we confirmed — the PUBACK of
+     * OUR reply, distinct from the RPC Subscription SUBACK), the outstanding-set {@code pending} (passed
+     * in), cumulative {@code undelivered}, and cumulative {@code redeliveryReplied} (its own signal —
+     * NEVER folded into {@code replyAcked}, since re-answering a redelivery is not a new distinct RPC).
+     * Outcome identity: {@code unique = replyAcked + pending + undelivered}.
      */
-    public String ackSummary(int intervalSec, long pending) {
+    public String outSummary(int intervalSec, long pending) {
         return String.format(
-                "RPC Ack [window %ds]: firstTry=%d, afterRetry=%d | totals: acked=%d, pending=%d",
-                intervalSec, ackedFirstTry.getAndSet(0), ackedAfterRetry.getAndSet(0),
-                ackedFirstTryTotal.get() + ackedAfterRetryTotal.get(), pending);
-    }
-
-    /**
-     * Reply-publish line: reply-delivery trouble + redelivery re-answers. Window
-     * {@code bufferedForRetry}/{@code undelivered}/{@code redeliveryReplied} plus their run-totals so the
-     * activity stays legible outside the roll window. {@code redeliveryReplied} is deliberately NOT part
-     * of {@code acked} — re-answering a server redelivery is not a new distinct RPC completed, so it never
-     * inflates the outcome counts.
-     */
-    public String publishSummary(int intervalSec) {
-        return String.format(
-                "RPC Publish [window %ds]: bufferedForRetry=%d, undelivered=%d, redeliveryReplied=%d "
-                        + "| totals: undelivered=%d, bufferedForRetry=%d, redeliveryReplied=%d",
-                intervalSec, bufferedForRetry.getAndSet(0), undelivered.getAndSet(0), redeliveryReplied.getAndSet(0),
-                undeliveredTotal.get(), bufferedForRetryTotal.get(), redeliveryRepliedTotal.get());
+                "RPC Out [window %ds]: firstTry=%d, afterRetry=%d, redeliveryReplied=%d, bufferedForRetry=%d, "
+                        + "undelivered=%d | totals: replyAcked=%d, pending=%d, undelivered=%d, redeliveryReplied=%d",
+                intervalSec, ackedFirstTry.getAndSet(0), ackedAfterRetry.getAndSet(0), redeliveryReplied.getAndSet(0),
+                bufferedForRetry.getAndSet(0), undelivered.getAndSet(0),
+                ackedFirstTryTotal.get() + ackedAfterRetryTotal.get(), pending, undeliveredTotal.get(),
+                redeliveryRepliedTotal.get());
     }
 
     /** One-line summary emitted once when the drain phase ends. {@code pending} = outstanding-set size
@@ -166,7 +160,7 @@ public class RpcLatencyStats {
     public String drainSummary(long elapsedMs, boolean quiesced, long pending) {
         return String.format(
                 "Gateway RPC drain complete [drained %.1fs, quiesced=%b]: received total %d, "
-                        + "acked %d, undelivered %d, pending %d",
+                        + "replyAcked %d, undelivered %d, pending %d",
                 elapsedMs / 1000.0, quiesced, receivedTotal.get(),
                 ackedFirstTryTotal.get() + ackedAfterRetryTotal.get(), undeliveredTotal.get(), pending);
     }

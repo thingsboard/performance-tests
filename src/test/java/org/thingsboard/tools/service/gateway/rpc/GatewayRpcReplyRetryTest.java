@@ -187,7 +187,7 @@ class GatewayRpcReplyRetryTest {
         assertThat(stats.getUndelivered()).isEqualTo(1);
         assertThat(stats.getAckedAfterRetry()).isZero();
         // given-up RPC left the outstanding set (pending recoverable = 0) so drain can quiesce
-        assertThat(r.ackSummary(10)).contains("pending=0");
+        assertThat(r.outSummary(10)).contains("pending=0");
     }
 
     @Test

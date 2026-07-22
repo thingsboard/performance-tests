@@ -388,24 +388,21 @@ public class GatewayRpcReceiver {
         }
     }
 
-    // --- stats sources (registered as four StatsBlocks) ---
+    // --- stats sources (registered as three StatsBlocks: subscription / in / out) ---
 
     public String subscriptionSummary(int intervalSec) {
         return stats.subscriptionSummary(intervalSec, unconfirmedSubscriptions.size());
     }
 
-    public String receiveSummary(int intervalSec) {
+    /** Inbound line: subscription-independent delivery counts + latency. */
+    public String inSummary(int intervalSec) {
         outstanding.evictAnsweredOlderThan(System.currentTimeMillis(), replyTtlMs); // bound memory
-        return stats.receiveSummary(intervalSec);
+        return stats.inSummary(intervalSec);
     }
 
-    /** Reply confirmations + the live {@code pending} gauge (outstanding-set size). */
-    public String ackSummary(int intervalSec) {
-        return stats.ackSummary(intervalSec, outstanding.outstandingCount());
-    }
-
-    public String publishSummary(int intervalSec) {
-        return stats.publishSummary(intervalSec);
+    /** Outbound line: the full reply lifecycle + the live {@code pending} gauge (outstanding-set size). */
+    public String outSummary(int intervalSec) {
+        return stats.outSummary(intervalSec, outstanding.outstandingCount());
     }
 
     /**

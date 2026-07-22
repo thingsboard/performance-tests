@@ -104,8 +104,7 @@ class GatewayRpcReceiverTest {
         assertThat(stats.getAckedFirstTry()).isEqualTo(1);
         assertThat(stats.getAckedAfterRetry()).isZero();
         // outstanding untouched by the re-reply -> pending stays 0 -> drain can still quiesce
-        assertThat(r.publishSummary(10)).contains("redeliveryReplied=1");
-        assertThat(r.ackSummary(10)).contains("pending=0");
+        assertThat(r.outSummary(10)).contains("redeliveryReplied=1").contains("pending=0");
     }
 
     @Test

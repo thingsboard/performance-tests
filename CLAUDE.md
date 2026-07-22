@@ -145,8 +145,8 @@ shared by every mode. Each active mode registers only the `StatsBlock`s relevant
 reporter logs every registered block once per interval, in a fixed order, on the shared log scheduler
 (never the test metronome): `CONNECTIONS` for fixed-fleet MQTT gateways/devices (live/target vs.
 disconnects/reconnects), `THROUGHPUT` whenever publishing is active (registered by the shared
-`AbstractAPITest.runApiTests` metronome, so it also covers `HttpDeviceAPITest`), the four RPC lines
-`RPC_SUBSCRIPTION` / `RPC_RECEIVE` / `RPC_ACK` / `RPC_PUBLISH` when `GATEWAY_RPC_ENABLED=true`, and `EPHEMERAL` for
+`AbstractAPITest.runApiTests` metronome, so it also covers `HttpDeviceAPITest`), the three RPC lines
+`RPC_SUBSCRIPTION` / `RPC_IN` / `RPC_OUT` when `GATEWAY_RPC_ENABLED=true`, and `EPHEMERAL` for
 churn-mode gateways. A block that throws is skipped for
 that tick without affecting the others or the schedule. The old per-gateway `TB` `{"msgCount":0}`
 publish is gone — stats reporting is log-only now.
@@ -166,7 +166,7 @@ until inbound RPC has been idle for `GATEWAY_RPC_DRAIN_QUIET_SEC` and no RPC is 
 **recoverable-pending** (or a hard cap `GATEWAY_RPC_DRAIN_MAX_SEC` elapses), so the last burst's two-way
 RPCs are answered instead of being cut off. Because a given-up (lost) RPC leaves the outstanding set,
 drain quiesces promptly instead of burning the cap waiting on a dead RPC. A final `Gateway RPC drain
-complete [...] quiesced=<bool>` line reports received-total/acked/undelivered/pending, and each RPC **given
+complete [...] quiesced=<bool>` line reports received-total/replyAcked/undelivered/pending, and each RPC **given
 up as undelivered** is logged `(device, requestId)` for DB `EXPIRED` correlation.
 
 **Per-unique-RPC accounting + four stat lines.** The server legitimately re-sends a still-pending RPC
@@ -179,19 +179,23 @@ the only thing that completes the reloaded pending is answering the redelivery. 
 behaviour) left it `EXPIRED`. The re-reply is best-effort (QoS 1, no retry buffer/timeout — the server's
 own next redelivery is the retry loop; ignores `GATEWAY_RPC_RESPONSE_DELAY_MS`; `redeliveryReplied` is
 counted only on the PUBACK, so it reflects re-replies that landed) and **never touches the outstanding set** — the outcome counts
-(`acked`/`pending`/`undelivered`) stay driven solely by the first tracked reply's publish lifecycle, so a
+(`replyAcked`/`pending`/`undelivered`) stay driven solely by the first tracked reply's publish lifecycle, so a
 redelivery can neither double-count nor disturb drain. Idempotent server-side (server keeps the first per
 request id). `received` stays the raw per-delivery count; `unique = received − redelivered`. **`pending`
-is the outstanding-set size** (distinct RPCs received but never confirmed acked) — not `received − acked`,
+is the outstanding-set size** (distinct RPCs received but never reply-acked) — not `received − replyAcked`,
 so redeliveries can't poison it; `drain()` quiescence keys off it too. Answered keys are evicted past
 `GATEWAY_RPC_EXPIRY_MS` to bound memory; a definitively-**undelivered** RPC (past TTL or over the retry
 cap) is removed from the outstanding set (so `pending` counts only still-recoverable RPCs and drain can
-quiesce) and recorded for the drain lost-report. Outcome identity: `unique = acked + pending +
-undelivered`. The stats are split into four lines per `STATS_LOG_INTERVAL_SEC`: **`RPC Subscription`**
-(`acked/failed/unconfirmed` — subscribe health), **`RPC Receive`** (`received`, `redelivered`, `unique`,
-latency percentiles), **`RPC Ack`** (`firstTry`/`afterRetry` window + `acked`(=firstTry+afterRetry)/
-`pending` totals — reply PUBACKs), **`RPC Publish`** (`bufferedForRetry`/`undelivered`/`redeliveryReplied`
-window + totals; `redeliveryReplied` is its own signal, **never** folded into `acked`). Roll signature: a
+quiesce) and recorded for the drain lost-report. Outcome identity: `unique = replyAcked + pending +
+undelivered`. The stats are grouped by MQTT direction into three lines per `STATS_LOG_INTERVAL_SEC`:
+**`RPC Subscription`** (`acked/failed/unconfirmed` — SUBACK health of the subscribe), **`RPC In`** (server
+→ us: `received` with `unique`/`redelivered`, latency percentiles), and **`RPC Out`** (us → server, the
+full reply lifecycle in one line: window `firstTry`/`afterRetry` (our reply's PUBACK, first attempt vs
+retry) / `redeliveryReplied` / `bufferedForRetry` (transient) / `undelivered`; totals
+`replyAcked`(=firstTry+afterRetry, the PUBACK of OUR reply/publish-back) / `pending` / `undelivered` /
+`redeliveryReplied`). `redeliveryReplied` is its own signal, **never** folded into `replyAcked`. Note
+`acked` on RPC Subscription (SUBACK) and `replyAcked` on RPC Out (our reply's PUBACK) are distinct. Roll
+signature: a
 **transport** roll shows `afterRetry`/`bufferedForRetry > 0` (our replies failed to leave and were
 re-sent); a **core** roll shows those ≈ 0 but `redelivered`/`redeliveryReplied` high (our replies left
 fine — the server just re-asked).
@@ -201,7 +205,7 @@ is `ToDeviceRpcRequestMsg.getRequestId()` — the **volatile transport int** (pe
 stable RPC UUID (verified in CE `JsonConverter.toGatewayJson` → `toJson(…, true)`; the UUID is not
 forwarded to the gateway). Across a **core-actor migration** that int can be reassigned, so a redelivery
 of the same *logical* RPC may arrive with a new `data.id` and be counted as a fresh `unique` receipt.
-We accept this: client `redelivered`/`unique`/`acked` are transport-request-level, and the **DB stays
+We accept this: client `redelivered`/`unique`/`replyAcked` are transport-request-level, and the **DB stays
 authoritative** for the logical `SUCCESSFUL`/`EXPIRED` split. (Not fixed here: the platform-side "Bucket B"
 gap — a device actor reloads only QUEUED, not SENT/DELIVERED, and matches responses by the non-migration-
 stable `rpcSeq` — needs a core-side fix to reload SENT/DELIVERED and match by the stable RPC UUID.)
