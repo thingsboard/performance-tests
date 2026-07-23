@@ -21,7 +21,7 @@
 
     <groupId>org.thingsboard</groupId>
     <artifactId>performance-tests</artifactId>
-    <version>4.0.1-GW-16</version>
+    <version>4.0.1-GW-17</version>
     <packaging>jar</packaging>
 
     <name>ThingsBoard Performance Tests</name>
