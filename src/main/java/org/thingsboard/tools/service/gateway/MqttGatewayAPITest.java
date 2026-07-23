@@ -40,7 +40,7 @@ import jakarta.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -136,7 +136,9 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     protected int gatewayEndIdx;
 
     // Gateway client -> its sub-device names, for re-announcing sub-devices on reconnect.
-    private final Map<MqttClient, List<String>> gatewayDeviceNames = new HashMap<>();
+    // ConcurrentHashMap (not HashMap): populated on the main thread before start, then read from reconnect
+    // callbacks on netty event-loop threads — safe-publish without relying on incidental happens-before.
+    private final Map<MqttClient, List<String>> gatewayDeviceNames = new ConcurrentHashMap<>();
 
 
     @PostConstruct
@@ -262,7 +264,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
                         rpcDrainQuietSec, maxMs / 1000);
                 GatewayRpcReceiver.DrainResult result = rpcReceiver.drain(quietMs, maxMs, rpcRespond);
                 rpcReceiver.finalizeLostReplies(); // replies still buffered (client never reconnected) are lost
-                rpcReceiver.logOutstanding();      // name the distinct still-unanswered RPCs for DB EXPIRED correlation
+                rpcReceiver.logPending();      // name the distinct still-unanswered RPCs for DB EXPIRED correlation
                 String summary = rpcReceiver.drainSummary(result.elapsedMs, result.quiesced);
                 if (result.quiesced) {
                     log.info(summary);

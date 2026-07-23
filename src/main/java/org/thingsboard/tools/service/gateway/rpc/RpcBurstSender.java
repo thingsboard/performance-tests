@@ -104,7 +104,7 @@ public class RpcBurstSender {
     }
 
     private void fireBurst() {
-        recordBurst(deviceNames.size());
+        recordBurstFired();
         long startedAt = System.currentTimeMillis();
         AtomicInteger ok = new AtomicInteger();
         AtomicInteger failed = new AtomicInteger();
@@ -114,6 +114,7 @@ public class RpcBurstSender {
                 try {
                     restClient.getRestTemplate().postForEntity(ruleEngineUrl, buildBody(MAPPER, commandTemplate, deviceChunk), String.class);
                     ok.incrementAndGet();
+                    recordDispatched(deviceChunk.size()); // count dispatched only after a successful post (D4)
                 } catch (Exception e) {
                     failed.incrementAndGet();
                     log.warn("RPC burst chunk failed ({} devices): {}", deviceChunk.size(), e.getMessage());
@@ -135,8 +136,13 @@ public class RpcBurstSender {
                 deviceNames.size(), ok.get(), failed.get(), elapsed);
     }
 
-    void recordBurst(int deviceCount) {
+    void recordBurstFired() {
         burstsFired.incrementAndGet();
+    }
+
+    /** Devices whose chunk was successfully posted to the rule engine — excludes failed chunks, so
+     *  {@code devicesDispatched} is a true "sent" count if ever used as a baseline (D4). */
+    void recordDispatched(int deviceCount) {
         devicesDispatched.addAndGet(deviceCount);
     }
 

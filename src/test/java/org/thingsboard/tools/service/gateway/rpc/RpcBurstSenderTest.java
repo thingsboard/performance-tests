@@ -80,8 +80,10 @@ class RpcBurstSenderTest {
         RpcBurstSender sender = new RpcBurstSender(
                 null, null, List.of("d1", "d2"), mapper.createObjectNode(),
                 "RpcCalls", 10000, 500, 60, 0);
-        sender.recordBurst(500);
-        sender.recordBurst(500);
+        sender.recordBurstFired();
+        sender.recordDispatched(500);
+        sender.recordBurstFired();
+        sender.recordDispatched(500);
         assertThat(sender.dispatchSummary())
                 .contains("2 bursts fired")
                 .contains("1000 device-RPCs dispatched");

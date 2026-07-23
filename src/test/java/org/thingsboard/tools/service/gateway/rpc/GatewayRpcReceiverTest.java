@@ -85,26 +85,43 @@ class GatewayRpcReceiverTest {
     }
 
     @Test
-    void redeliveryIsReAnsweredBestEffortWithoutDoubleCountingTheRpc() throws Exception {
+    void reusedIdAfterAnswerIsTreatedAsAFreshRpcNotARedelivery() throws Exception {
+        // D1: dedup is in-flight-only. After a core roll the platform rewinds rpcSeq and a NEW RPC reuses
+        // an id we already answered — it must flow through the normal first-receipt path (unique, tracked
+        // reply), NOT be swallowed as a redelivery.
+        RpcLatencyStats stats = new RpcLatencyStats();
+        GatewayRpcReceiver r = receiver(stats);
+        FakeMqttClient fake = new FakeMqttClient(loop); // publishes succeed -> first reply is acked
+        MqttHandler handler = r.buildHandler(fake);
+
+        handler.onMessage("v1/gateway/rpc", rpc("GW1", 5)); // first RPC: answered
+        handler.onMessage("v1/gateway/rpc", rpc("GW1", 5)); // SAME id reused after answer -> a NEW RPC
+
+        assertThat(stats.getReceived()).isEqualTo(2);
+        assertThat(stats.getRedelivered()).isZero();          // in-flight-only dedup -> not a redelivery
+        assertThat(stats.getRedeliveryReplied()).isZero();
+        assertThat(stats.getAckedFirstTry()).isEqualTo(2);    // both answered as fresh, tracked RPCs
+        assertThat(fake.publishedPayloads).hasSize(2);
+        assertThat(r.outSummary(10)).contains("pending=0");
+    }
+
+    @Test
+    void inFlightRedeliveryIsReRepliedAndCountedWhenConfirmed() throws Exception {
+        // A genuine redelivery: the first reply never acked (still PENDING), so the server re-pushing the
+        // same id is an in-flight duplicate -> best-effort re-reply, counted on its PUBACK.
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats);
         FakeMqttClient fake = new FakeMqttClient(loop);
+        fake.publishOutcomes.add(false); // first (tracked) reply hangs -> RPC stays PENDING / in-flight
+        fake.publishOutcomes.add(true);  // the redelivery's re-reply is confirmed
         MqttHandler handler = r.buildHandler(fake);
 
-        handler.onMessage("v1/gateway/rpc", rpc("GW1", 5)); // first receipt: tracked + answered
-        handler.onMessage("v1/gateway/rpc", rpc("GW1", 5)); // server redelivery of the SAME RPC
+        handler.onMessage("v1/gateway/rpc", rpc("GW1", 5)); // first receipt, reply in flight (pending)
+        handler.onMessage("v1/gateway/rpc", rpc("GW1", 5)); // in-flight redelivery (still PENDING)
 
-        assertThat(stats.getReceived()).isEqualTo(2);          // raw counts both deliveries
-        assertThat(stats.getRedelivered()).isEqualTo(1);         // second recognised as a redelivery
-        // the redelivery IS re-answered (best-effort) so a reloaded server-side pending completes
-        assertThat(fake.publishedPayloads).hasSize(2);
-        assertThat(fake.publishedPayloads.get(1)).contains("\"device\":\"GW1\"").contains("\"id\":5");
-        assertThat(stats.getRedeliveryReplied()).isEqualTo(1);  // tracked as its own honest signal
-        // but the RPC is answered exactly once — the re-reply does NOT touch sent/recovered/pending
-        assertThat(stats.getAckedFirstTry()).isEqualTo(1);
-        assertThat(stats.getAckedAfterRetry()).isZero();
-        // outstanding untouched by the re-reply -> pending stays 0 -> drain can still quiesce
-        assertThat(r.outSummary(10)).contains("redeliveryReplied=1").contains("pending=0");
+        assertThat(stats.getRedelivered()).isEqualTo(1);       // still PENDING -> a real redelivery
+        assertThat(stats.getRedeliveryReplied()).isEqualTo(1); // best-effort re-reply confirmed
+        assertThat(stats.getAckedFirstTry()).isZero();         // the tracked first reply never acked
     }
 
     @Test
@@ -253,6 +270,9 @@ class GatewayRpcReceiverTest {
         final List<String> publishedTopics = new ArrayList<>();
         final List<String> publishedPayloads = new ArrayList<>();
         final Deque<Boolean> onOutcomes = new ArrayDeque<>();
+        // Per-publish outcome (polled in order): TRUE = confirmed, FALSE = hang (never completes).
+        // Empty -> fall back to publishHangs / immediate success.
+        final Deque<Boolean> publishOutcomes = new ArrayDeque<>();
         boolean onHangs;
         boolean publishHangs;
         private final EventLoopGroup eventLoop;
@@ -277,7 +297,8 @@ class GatewayRpcReceiverTest {
         public Future<Void> publish(String topic, ByteBuf payload, MqttQoS qos) {
             publishedTopics.add(topic);
             publishedPayloads.add(payload.toString(StandardCharsets.UTF_8));
-            return publishHangs
+            boolean hang = publishHangs || (!publishOutcomes.isEmpty() && !publishOutcomes.poll());
+            return hang
                     ? ImmediateEventExecutor.INSTANCE.newPromise()
                     : ImmediateEventExecutor.INSTANCE.newSucceededFuture(null);
         }

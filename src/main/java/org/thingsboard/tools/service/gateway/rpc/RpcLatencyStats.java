@@ -123,7 +123,9 @@ public class RpcLatencyStats {
         long redel = redelivered.getAndSet(0);
         String line = String.format(
                 "RPC In [window %ds]: received=%d (unique=%d, redelivered=%d); "
-                        + "latency avg=%.1f p50=%.1f p95=%.1f p99=%.1f max=%.1f ms",
+                        // one-way server->gateway delivery latency (receiveTs - sendTs); clock-skew
+                        // dependent between the TB host and this host, NOT round-trip / server-completion.
+                        + "latency(1-way srv->gw) avg=%.1f p50=%.1f p95=%.1f p99=%.1f max=%.1f ms",
                 intervalSec, rcv, rcv - redel, redel,
                 n > 0 ? latency.getMean() : 0.0,
                 n > 0 ? latency.getPercentile(50) : 0.0,

@@ -77,7 +77,7 @@ class RpcLatencyStatsTest {
         s.recordLatency(150);
         assertThat(s.inSummary(10)).isEqualTo(
                 "RPC In [window 10s]: received=3 (unique=2, redelivered=1); "
-                        + "latency avg=150.0 p50=150.0 p95=150.0 p99=150.0 max=150.0 ms");
+                        + "latency(1-way srv->gw) avg=150.0 p50=150.0 p95=150.0 p99=150.0 max=150.0 ms");
         // window counters reset; totals persist
         assertThat(s.getReceived()).isZero();
         assertThat(s.getReceivedTotal()).isEqualTo(3);

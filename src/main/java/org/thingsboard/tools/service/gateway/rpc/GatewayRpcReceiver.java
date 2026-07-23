@@ -24,7 +24,7 @@ import org.thingsboard.mqtt.MqttClient;
 import org.thingsboard.mqtt.MqttHandler;
 import org.thingsboard.tools.service.gateway.EphemeralRetryBackoff;
 import org.thingsboard.tools.service.gateway.rpc.RpcMessageProcessor.ProcessedRpc;
-import org.thingsboard.tools.service.gateway.rpc.RpcOutstandingTracker.RpcKey;
+import org.thingsboard.tools.service.gateway.rpc.RpcPendingTracker.RpcKey;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -66,8 +66,8 @@ public class GatewayRpcReceiver {
     // handlers by (handler, once) record-equality, so re-subscribing with the SAME instance dedups; a
     // fresh handler per resubscribe would register twice and double-deliver every RPC.
     private final Map<MqttClient, MqttHandler> handlers = new ConcurrentHashMap<>();
-    // Per-unique-RPC accounting; pending = outstanding.size(), immune to redelivery duplicates.
-    private final RpcOutstandingTracker outstanding = new RpcOutstandingTracker();
+    // Per-unique-RPC accounting; pending = pendingTracker.size(), immune to redelivery duplicates.
+    private final RpcPendingTracker pendingTracker = new RpcPendingTracker();
     // Clients whose current v1/gateway/rpc subscription is not (yet) SUBACK-confirmed — a live gauge,
     // so a slow-but-real SUBACK is never a false positive (it self-clears whenever the SUBACK lands).
     private final java.util.Set<MqttClient> unconfirmedSubscriptions = ConcurrentHashMap.newKeySet();
@@ -136,21 +136,23 @@ public class GatewayRpcReceiver {
         return (receivedTopic, payload) -> {
             long now = System.currentTimeMillis();
             try {
-                stats.incReceived(now); // raw, every delivery (incl. redeliveries and unparseable)
                 ProcessedRpc r = processor.process(payload, now);
                 if (r == null) {
-                    return CompletableFuture.completedFuture(null); // malformed — cannot key/dedup
+                    // Malformed/unparseable: not counted in received and does NOT refresh the quiescence
+                    // clock, so it can't inflate unique (= received − redelivered) or hold drain open.
+                    return CompletableFuture.completedFuture(null);
                 }
+                stats.incReceived(now); // raw, every well-formed delivery (incl. redeliveries)
                 if (r.reply() != null) {
                     RpcKey key = new RpcKey(r.deviceName(), r.requestId());
-                    if (!outstanding.firstReceipt(key, now)) {
+                    if (!pendingTracker.firstReceipt(key, now)) {
                         // Server REDELIVERY: the core still considers this RPC pending and re-sent it.
                         // Two ways it happens: a transport roll -> reconnect redelivery, OR a core roll ->
                         // the recreated device actor reloads a QUEUED RPC and re-sends it with NO reconnect
                         // and NO buffered reply on our side. Re-publish the reply best-effort so a reloaded
                         // pending is answered instead of expiring (the regression was dropping it here).
                         // Idempotent server-side (QoS 1; an already-completed RPC has no pending and discards
-                        // it). We deliberately do NOT touch the outstanding set (no markAnswered / no
+                        // it). We deliberately do NOT touch the pending set (no markAnswered / no
                         // sent/recovered): the original tracked reply's publish lifecycle stays the single
                         // authority for answered/pending/lost, so this can never double-count or disturb drain.
                         stats.incRedelivered();
@@ -225,7 +227,7 @@ public class GatewayRpcReceiver {
                 // fired (a slow-but-real send). markAnswered is idempotent, so this clears a
                 // false-pending; we only count the ack + cancel the timeout if we win the CAS
                 // (a timed-out reply was already buffered — its later flush would double-count).
-                outstanding.markAnswered(reply.key, System.currentTimeMillis());
+                pendingTracker.markAnswered(reply.key, System.currentTimeMillis());
                 if (settled.compareAndSet(false, true)) {
                     timeout.cancel(false);
                     if (reply.attempts == 1) {
@@ -283,11 +285,11 @@ public class GatewayRpcReceiver {
         publishReply(client, reply);
     }
 
-    /** Terminal give-up for one reply: count it lost and drop its key from the outstanding set so
+    /** Terminal give-up for one reply: count it lost and drop its key from the pending set so
      *  {@code pending} tracks only still-recoverable RPCs and drain can quiesce. */
     private void markReplyLost(BufferedReply reply) {
         stats.incUndelivered();
-        outstanding.markLost(reply.key, System.currentTimeMillis());
+        pendingTracker.markLost(reply.key, System.currentTimeMillis());
     }
 
     /** Re-publish a client's buffered replies now; drop + count lost any already past expiry. Called on
@@ -325,23 +327,23 @@ public class GatewayRpcReceiver {
     }
 
     /** Log every distinct RPC given up as lost, so it can be matched to the DB EXPIRED rows. Any keys
-     *  still merely outstanding (a reply in flight at shutdown) are reported separately. */
-    public void logOutstanding() {
-        List<RpcKey> lost = outstanding.lostKeys();
+     *  still merely pending (a reply in flight at shutdown) are reported separately. */
+    public void logPending() {
+        List<RpcKey> lost = pendingTracker.lostKeys();
         if (!lost.isEmpty()) {
             log.warn("Gateway RPC: {} distinct RPC(s) given up as lost (match against DB EXPIRED):", lost.size());
             for (RpcKey k : lost) {
                 log.warn("  lost RPC: device={} requestId={}", k.deviceName(), k.requestId());
             }
         }
-        List<RpcKey> stillOutstanding = outstanding.outstandingKeys();
-        if (!stillOutstanding.isEmpty()) {
-            log.warn("Gateway RPC: {} distinct RPC(s) still in flight at shutdown (not yet confirmed or lost)", stillOutstanding.size());
+        List<RpcKey> stillPending = pendingTracker.pendingKeys();
+        if (!stillPending.isEmpty()) {
+            log.warn("Gateway RPC: {} distinct RPC(s) still in flight at shutdown (not yet confirmed or lost)", stillPending.size());
         }
     }
 
     /** A reply awaiting (re)publish. {@code expiryMs} = receipt time + the RPC's server-side expiry;
-     *  {@code key} identifies the RPC so its success can clear the outstanding set. */
+     *  {@code key} identifies the RPC so its success can clear the pending set. */
     private static final class BufferedReply {
         final byte[] payload;
         final long expiryMs;
@@ -396,20 +398,20 @@ public class GatewayRpcReceiver {
 
     /** Inbound line: subscription-independent delivery counts + latency. */
     public String inSummary(int intervalSec) {
-        outstanding.evictAnsweredOlderThan(System.currentTimeMillis(), replyTtlMs); // bound memory
+        pendingTracker.evictAnsweredOlderThan(System.currentTimeMillis(), replyTtlMs); // bound memory
         return stats.inSummary(intervalSec);
     }
 
-    /** Outbound line: the full reply lifecycle + the live {@code pending} gauge (outstanding-set size). */
+    /** Outbound line: the full reply lifecycle + the live {@code pending} gauge (pending-set size). */
     public String outSummary(int intervalSec) {
-        return stats.outSummary(intervalSec, outstanding.outstandingCount());
+        return stats.outSummary(intervalSec, pendingTracker.pendingCount());
     }
 
     /**
      * After the load window ends and the burst sender is stopped, wait for the last burst's in-flight
      * RPCs to settle. Observation only — responses flow asynchronously via the publish listener; this
-     * loop watches the outstanding set. Exits early ({@code quiesced=true}) once inbound has been idle
-     * for {@code quietMs} and, when {@code respond} is true, no RPC is still outstanding; or at
+     * loop watches the pending set. Exits early ({@code quiesced=true}) once inbound has been idle
+     * for {@code quietMs} and, when {@code respond} is true, no RPC is still pending; or at
      * {@code maxMs} ({@code quiesced=false}) so it can never hang.
      */
     public DrainResult drain(long quietMs, long maxMs, boolean respond) {
@@ -424,7 +426,7 @@ public class GatewayRpcReceiver {
             }
             long now = System.currentTimeMillis();
             long idle = now - stats.getLastInboundMs();
-            long pending = respond ? outstanding.outstandingCount() : 0;
+            long pending = respond ? pendingTracker.pendingCount() : 0;
             if (idle >= quietMs && pending <= 0) {
                 return new DrainResult(true, now - start);
             }
@@ -444,7 +446,7 @@ public class GatewayRpcReceiver {
     }
 
     public String drainSummary(long elapsedMs, boolean quiesced) {
-        return stats.drainSummary(elapsedMs, quiesced, outstanding.outstandingCount());
+        return stats.drainSummary(elapsedMs, quiesced, pendingTracker.pendingCount());
     }
 
     /**
