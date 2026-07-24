@@ -166,8 +166,9 @@ until inbound RPC has been idle for `GATEWAY_RPC_DRAIN_QUIET_SEC` and no RPC is 
 **recoverable-pending** (or a hard cap `GATEWAY_RPC_DRAIN_MAX_SEC` elapses), so the last burst's two-way
 RPCs are answered instead of being cut off. Because a given-up (lost) RPC leaves the pending set,
 drain quiesces promptly instead of burning the cap waiting on a dead RPC. A final `Gateway RPC drain
-complete [...] quiesced=<bool>` line reports received-total/replyAcked/undelivered/pending, and each RPC **given
-up as undelivered** is logged `(device, requestId)` for DB `EXPIRED` correlation.
+complete [drained Xs, quiesced=<bool>]` line is followed by the two `RPC In [total]` / `RPC Out [total]`
+reconciliation lines, and each RPC **given up as lost** is logged `(device, requestId)` for DB `EXPIRED`
+correlation.
 
 **Per-unique-RPC accounting (in-flight-only dedup).** The server legitimately re-sends a still-pending
 RPC (a **redelivery**), so the same command arrives more than once. `RpcPendingTracker` keys inbound by
@@ -178,33 +179,36 @@ devices across a core roll, so a receipt reusing such an id is a **new RPC**, re
 counted in `unique` (gateway contract §6: dedup in-flight requests, forget an id once answered/expired).
 Safe because the platform never re-publishes an already-answered RPC — the only genuine redelivery is a
 re-pushed unanswered `SENT`, still `PENDING`. A genuine (`PENDING`) redelivery is **re-answered
-best-effort** (`redeliveryReplied`). Re-answering the redelivery
+best-effort** (a re-`publish`, counted `rePublished`). Re-answering the redelivery
 is required, not optional: a **tb-core roll** recreates the device actor, which reloads a QUEUED RPC and
 **re-sends it with the same wire `data.id` but no MQTT reconnect and no buffered reply on our side** — so
 the only thing that completes the reloaded pending is answering the redelivery. Dropping it (the earlier
 behaviour) left it `EXPIRED`. The re-reply is best-effort (QoS 1, no retry buffer/timeout — the server's
-own next redelivery is the retry loop; ignores `GATEWAY_RPC_RESPONSE_DELAY_MS`; `redeliveryReplied` is
-counted only on the PUBACK, so it reflects re-replies that landed) and **never touches the pending set** — the outcome counts
-(`replyAcked`/`pending`/`undelivered`) stay driven solely by the first tracked reply's publish lifecycle, so a
-redelivery can neither double-count nor disturb drain. Idempotent server-side (server keeps the first per
-request id). `received` stays the raw per-delivery count; `unique = received − redelivered`. **`pending`
-is the pending-set size** (distinct RPCs received but never reply-acked) — not `received − replyAcked`,
-so redeliveries can't poison it; `drain()` quiescence keys off it too. Answered keys are evicted past
-`GATEWAY_RPC_EXPIRY_MS` to bound memory; a definitively-**undelivered** RPC (past TTL or over the retry
-cap) is removed from the pending set (so `pending` counts only still-recoverable RPCs and drain can
-quiesce) and recorded for the drain lost-report. Outcome identity: `unique = replyAcked + pending +
-undelivered`. The stats are grouped by MQTT direction into three lines per `STATS_LOG_INTERVAL_SEC`:
-**`RPC Subscription`** (`acked/failed/unconfirmed` — SUBACK health of the subscribe), **`RPC In`** (server
-→ us: `received` with `unique`/`redelivered`, latency percentiles), and **`RPC Out`** (us → server, the
-full reply lifecycle in one line: window `firstTry`/`afterRetry` (our reply's PUBACK, first attempt vs
-retry) / `redeliveryReplied` / `bufferedForRetry` (transient) / `undelivered`; totals
-`replyAcked`(=firstTry+afterRetry, the PUBACK of OUR reply/publish-back) / `pending` / `undelivered` /
-`redeliveryReplied`). `redeliveryReplied` is its own signal, **never** folded into `replyAcked`. Note
-`acked` on RPC Subscription (SUBACK) and `replyAcked` on RPC Out (our reply's PUBACK) are distinct. Roll
-signature: a
-**transport** roll shows `afterRetry`/`bufferedForRetry > 0` (our replies failed to leave and were
-re-sent); a **core** roll shows those ≈ 0 but `redelivered`/`redeliveryReplied` high (our replies left
-fine — the server just re-asked).
+own next redelivery is the retry loop; ignores `GATEWAY_RPC_RESPONSE_DELAY_MS`; `pubAck` is counted only on
+the broker PUBACK) and **never touches the failed/recovered/lost outcome** — those track only the
+first-receipt reply's own lifecycle. The distinct-RPC pending set drives dedup + `drain()` quiescence but
+is **no longer surfaced as a stat**; a definitively-lost reply leaves it (so drain can quiesce) and each
+lost `(device, requestId)` is logged for DB `EXPIRED` correlation. Answered keys are evicted past
+`GATEWAY_RPC_EXPIRY_MS` to bound memory.
+
+**Stats are in MQTT terms, grouped by direction** — three per-interval lines per `STATS_LOG_INTERVAL_SEC`
+plus two `[total]` lines at end of run, and a one-time legend logged when the receiver starts:
+- **`RPC Subscription`** (`subAck / failed / unconfirmed` — SUBSCRIBE/SUBACK health; `unconfirmed` a live gauge).
+- **`RPC In`** (server → us): `publish` = inbound PUBLISHes, split `new` / `redelivered`
+  (`new = publish − redelivered`); one-way `latency(1-way srv->gw)` percentiles (window only; malformed
+  deliveries are excluded and don't refresh the drain clock).
+- **`RPC Out`** (us → server): `publish` = reply PUBLISHes we sent, `pubAck` = confirmed, `failed` = a
+  reply's publish didn't confirm (counted once per reply, on first failure), `rePublished` = re-sends
+  (our failed-reply retries + best-effort answers to redeliveries).
+- **`[total]` at drain**: `RPC In [total]: publish (new, redelivered)` and `RPC Out [total]: publish,
+  pubAck, failed, recovered, lost` — the reconciliation, where **`failed == recovered + lost`** on a
+  settled run (every failed reply-publish ended either recovered by a re-send or terminally lost).
+
+Note the two acks are distinct: `subAck` on RPC Subscription (SUBACK of the subscribe) vs `pubAck` on RPC
+Out (PUBACK of our reply). Roll signature: a **transport** roll shows `RPC Out failed`/`rePublished > 0`
+(our replies orphaned + re-sent) with `CONNECTIONS disconnects > 0`; a **core** roll shows `RPC In
+redelivered` high with `RPC Out failed ≈ 0` and connections flat (our replies left fine — the server just
+re-asked).
 
 **Dedup key is transport-request-level, not logical-RPC-level.** The wire `data.id` the gateway receives
 is `ToDeviceRpcRequestMsg.getRequestId()` — the **transport int** (per-actor `rpcSeq`), *not* a stable RPC
@@ -213,7 +217,7 @@ gateway). The platform (in-flight-recovery work) **persists this int on the `rpc
 past the still-in-flight ids on actor reload, and **rewinds to 0 for a drained device** — so ids get
 **reused** for new RPCs, and the platform relies on the gateway deduping in-flight only and forgetting an
 answered id (§6). That is exactly the `RpcPendingTracker` in-flight-only rule above: a reused id re-opens
-as a fresh `unique` RPC rather than a phantom `redelivered`. Client `redelivered`/`unique`/`replyAcked`
+as a fresh `unique` RPC rather than a phantom `redelivered`. Client `redelivered`/`unique`/`pubAck`
 remain transport-request-level and the **DB stays authoritative** for the logical
 `SUCCESSFUL`/`EXPIRED`/`stuck-DELIVERED` split. Residual (accepted, platform-documented): a very-late reply
 after expiry whose id was reused (ABA) can mis-match — bounded by the shared `expirationTime`; no
@@ -272,7 +276,7 @@ QoS-0/untracked, so a drop mid-reconnect silently lost routing and the RPC `EXPI
 
 Observability: a dedicated `GATEWAY_DEVICE_ANNOUNCE` stats block (`AnnounceStats`, label "Gateway
 device announce") reports `acked / failed / retried / unconfirmed` per window (`unconfirmed` must stay
-0), and the `RPC Subscription` line reports `acked / failed / unconfirmed`. Caveat: a broker ack
+0), and the `RPC Subscription` line reports `subAck / failed / unconfirmed`. Caveat: a broker ack
 (PUBACK/SUBACK) confirms the transport received the op, not that the RPC was ultimately answered before
 server expiry — the authoritative loss signal remains the platform-side `EXPIRED` count.
 

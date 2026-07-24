@@ -20,70 +20,71 @@ import org.apache.commons.math3.stat.descriptive.SynchronizedDescriptiveStatisti
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Gateway RPC counters, reported as three lines by MQTT direction: subscription health, inbound
- * deliveries ({@code RPC In}), and our reply publishes ({@code RPC Out}). Window counters use
- * {@code getAndSet(0)} deltas; cumulative totals persist for the run. {@code pending} is not held
- * here — it is the outstanding-set size (distinct un-acked RPCs), passed in by the receiver so
- * redeliveries never distort it.
+ * Gateway RPC counters, in MQTT terms, reported as three per-interval lines by direction — RPC
+ * Subscription (SUBSCRIBE/SUBACK), RPC In (inbound PUBLISH), RPC Out (our reply PUBLISH + PUBACK) —
+ * plus two {@code [total]} lines at end of run. Per-window counters use {@code getAndSet(0)} deltas;
+ * cumulative totals persist for the run.
+ *
+ * <p>RPC Out lifecycle: every reply {@code publish} either gets a {@code pubAck} or {@code failed}
+ * (didn't confirm) and is re-sent ({@code rePublished}); a failed reply ends the run either
+ * {@code recovered} (a re-send confirmed) or {@code lost} — so {@code failed == recovered + lost} at
+ * drain. The distinct-RPC pending set (used for dedup + drain quiescence) lives in
+ * {@link RpcPendingTracker}; it is no longer surfaced as a stat.
  */
 public class RpcLatencyStats {
 
     private final SynchronizedDescriptiveStatistics latency = new SynchronizedDescriptiveStatistics();
 
-    // --- receive (window) ---
-    private final AtomicLong received = new AtomicLong();     // raw per-delivery (incl. server redeliveries)
-    private final AtomicLong redelivered = new AtomicLong();  // deliveries of an already-known (device,requestId)
-
-    // --- ack: our reply confirmed by a broker PUBACK (window). Both feed replyAcked = ackedFirstTry + ackedAfterRetry. ---
-    private final AtomicLong ackedFirstTry = new AtomicLong();   // reply acked on the first publish attempt
-    private final AtomicLong ackedAfterRetry = new AtomicLong(); // reply acked on a retry (orphan/reconnect re-send)
-
-    // --- publish trouble + redelivery re-answers (window) ---
-    private final AtomicLong bufferedForRetry = new AtomicLong(); // reply not acked -> buffered to re-send (transient)
-    private final AtomicLong undelivered = new AtomicLong();      // reply given up: past TTL / over-cap / drain end
-    private final AtomicLong redeliveryReplied = new AtomicLong(); // best-effort reply re-published to a server redelivery
-
-    // --- subscribe health (window): observe-only, no app retry (netty retransmits; we resubscribe per reconnect).
-    // 'unconfirmed' is NOT a counter here — it is a live gauge (clients not currently SUBACK-confirmed),
-    // passed into subscriptionSummary, so a slow-but-real SUBACK never becomes a false positive. ---
-    private final AtomicLong subscribeAcked = new AtomicLong();       // SUBACK-confirmed (per window)
-    private final AtomicLong subscribeFailed = new AtomicLong();      // future failed (e.g. max retransmissions)
-
-    // --- cumulative totals (never reset) ---
+    // --- RPC In (server -> us): inbound PUBLISH ---
+    private final AtomicLong received = new AtomicLong();      // window; label: publish
+    private final AtomicLong redelivered = new AtomicLong();   // window; a server re-send of a still-pending command
     private final AtomicLong receivedTotal = new AtomicLong();
-    private final AtomicLong ackedFirstTryTotal = new AtomicLong();
-    private final AtomicLong ackedAfterRetryTotal = new AtomicLong();
-    private final AtomicLong undeliveredTotal = new AtomicLong();
-    private final AtomicLong redeliveryRepliedTotal = new AtomicLong();
+    private final AtomicLong redeliveredTotal = new AtomicLong();
     // Wall-clock (ms) of the most recent inbound RPC; the quiescence signal read by drain().
     private volatile long lastInboundMs = 0L;
+
+    // --- RPC Out (us -> server): reply PUBLISH + PUBACK ---
+    private final AtomicLong replyPublished = new AtomicLong(); // window; every reply PUBLISH we sent
+    private final AtomicLong replyPubAcked = new AtomicLong();  // window; reply PUBLISH confirmed by PUBACK
+    private final AtomicLong replyFailed = new AtomicLong();    // window; a reply's publish did not confirm (first failure)
+    private final AtomicLong rePublished = new AtomicLong();    // window; a reply PUBLISH that was a re-send
+    private final AtomicLong replyPublishedTotal = new AtomicLong();
+    private final AtomicLong replyPubAckedTotal = new AtomicLong();
+    private final AtomicLong replyFailedTotal = new AtomicLong();
+    private final AtomicLong recoveredTotal = new AtomicLong(); // a previously-failed reply that a re-send delivered
+    private final AtomicLong lostTotal = new AtomicLong();      // a reply given up (past TTL / over cap / drain end)
+
+    // --- subscribe health (window): observe-only, no app retry. 'unconfirmed' is a live gauge (clients
+    // not currently SUBACK-confirmed), passed into subscriptionSummary — never a false positive. ---
+    private final AtomicLong subscribeAcked = new AtomicLong();
+    private final AtomicLong subscribeFailed = new AtomicLong();
 
     public void recordLatency(long latencyMs) {
         latency.addValue(latencyMs);
     }
 
-    /** Count an inbound RPC (every delivery, even parse failures) and refresh the quiescence timestamp. */
+    /** Count a well-formed inbound RPC PUBLISH and refresh the quiescence timestamp. */
     public void incReceived(long nowMs) {
         received.incrementAndGet();
         receivedTotal.incrementAndGet();
         lastInboundMs = nowMs;
     }
 
-    /** A delivery of a request-id already seen — the server redelivering a still-pending RPC. */
-    public void incRedelivered() { redelivered.incrementAndGet(); }
+    /** A delivery of a request-id already in flight — the server re-sending a still-pending command. */
+    public void incRedelivered() { redelivered.incrementAndGet(); redeliveredTotal.incrementAndGet(); }
 
-    /** Reply acked (PUBACK) on the first publish attempt. */
-    public void incAckedFirstTry() { ackedFirstTry.incrementAndGet(); ackedFirstTryTotal.incrementAndGet(); }
-    /** Reply acked (PUBACK) on a retry, after the first attempt did not confirm. */
-    public void incAckedAfterRetry() { ackedAfterRetry.incrementAndGet(); ackedAfterRetryTotal.incrementAndGet(); }
-    /** Reply given up (past TTL / over the retry cap / still buffered at drain end). */
-    public void incUndelivered() { undelivered.incrementAndGet(); undeliveredTotal.incrementAndGet(); }
-    /** Reply not acked and buffered to be re-sent (transient — later becomes ackedAfterRetry or undelivered;
-     *  window-only, since a cumulative count of a transient state would double-count entries that resolve). */
-    public void incBufferedForRetry() { bufferedForRetry.incrementAndGet(); }
-    /** A reply re-published in answer to a server redelivery. Its own diagnostic signal — deliberately
-     *  NOT folded into acked: re-answering a redelivery is not a new distinct RPC completed. */
-    public void incRedeliveryReplied() { redeliveryReplied.incrementAndGet(); redeliveryRepliedTotal.incrementAndGet(); }
+    /** One reply PUBLISH packet emitted (first send or re-send). */
+    public void incReplyPublished() { replyPublished.incrementAndGet(); replyPublishedTotal.incrementAndGet(); }
+    /** Our reply PUBLISH confirmed by a broker PUBACK. */
+    public void incReplyPubAcked() { replyPubAcked.incrementAndGet(); replyPubAckedTotal.incrementAndGet(); }
+    /** A reply's publish did not confirm — counted once per reply, on its first failure. */
+    public void incReplyFailed() { replyFailed.incrementAndGet(); replyFailedTotal.incrementAndGet(); }
+    /** A reply PUBLISH that was a re-send (our failed-reply retry, or answering a server re-send). Window-only. */
+    public void incRePublished() { rePublished.incrementAndGet(); }
+    /** A previously-failed reply that a re-send finally delivered (confirmed on attempt > 1). */
+    public void incRecovered() { recoveredTotal.incrementAndGet(); }
+    /** A reply given up as never delivered. */
+    public void incLost() { lostTotal.incrementAndGet(); }
     public void incSubscribeAcked() { subscribeAcked.incrementAndGet(); }
     public void incSubscribeFailed() { subscribeFailed.incrementAndGet(); }
 
@@ -93,40 +94,48 @@ public class RpcLatencyStats {
     public double getMax() { return latency.getMax(); }
     public long getReceived() { return received.get(); }
     public long getRedelivered() { return redelivered.get(); }
-    public long getAckedFirstTry() { return ackedFirstTry.get(); }
-    public long getAckedAfterRetry() { return ackedAfterRetry.get(); }
-    public long getUndelivered() { return undelivered.get(); }
-    public long getBufferedForRetry() { return bufferedForRetry.get(); }
-    public long getRedeliveryReplied() { return redeliveryReplied.get(); }
+    public long getReplyPublished() { return replyPublished.get(); }
+    public long getReplyPubAcked() { return replyPubAcked.get(); }
+    public long getReplyFailed() { return replyFailed.get(); }
+    public long getRePublished() { return rePublished.get(); }
+    public long getRecoveredTotal() { return recoveredTotal.get(); }
+    public long getLostTotal() { return lostTotal.get(); }
     public long getLastInboundMs() { return lastInboundMs; }
     public long getReceivedTotal() { return receivedTotal.get(); }
     public long getSubscribeAcked() { return subscribeAcked.get(); }
     public long getSubscribeFailed() { return subscribeFailed.get(); }
 
-    /** {@code v1/gateway/rpc} (re)subscribe health — the RPC delivery channel. {@code unconfirmed} is a
-     *  live gauge (clients whose current subscription is not SUBACK-confirmed), supplied by the caller. */
+    /** One-time key, logged when the RPC receiver starts, so the field names below need no guessing. */
+    public static String legend() {
+        return "RPC stats key — RPC In = commands received (server->gateway); RPC Out = our replies (gateway->server).\n"
+                + "  publish        MQTT PUBLISH count (In: commands in; Out: reply publishes we sent, incl. re-sends)\n"
+                + "  new/redelivered   first-time command / a server re-send of a still-unanswered command\n"
+                + "  pubAck         our reply PUBLISH confirmed by a broker PUBACK\n"
+                + "  failed         our reply PUBLISH did not confirm (orphaned/failed) — will be re-published\n"
+                + "  rePublished    a reply PUBLISH that was a re-send (our failed retry, or answering a server re-send)\n"
+                + "  recovered/lost [total only] a failed reply that a re-send delivered / that was never delivered\n"
+                + "  latency(1-way srv->gw)  receiveTs - sendTs; clock-skew dependent, not round-trip";
+    }
+
+    /** {@code v1/gateway/rpc} (re)subscribe health — SUBACK. {@code unconfirmed} is a live gauge supplied by the caller. */
     public String subscriptionSummary(int intervalSec, long unconfirmed) {
         return String.format(
-                "RPC Subscription [window %ds]: acked=%d, failed=%d, unconfirmed=%d",
+                "RPC Subscription [window %ds]: subAck=%d, failed=%d, unconfirmed=%d",
                 intervalSec, subscribeAcked.getAndSet(0), subscribeFailed.getAndSet(0), unconfirmed);
     }
 
     /**
-     * Inbound line (server → us): raw {@code received}, {@code unique} and {@code redelivered} (server
-     * re-sends of a still-pending RPC; {@code unique = received − redelivered}), and one-way
-     * delivery-latency percentiles. Resets the histogram. A latency sample landing between the
-     * {@code getN()} snapshot and {@code clear()} is dropped — acceptable for interval metrics.
+     * Inbound line (server -> us): {@code publish} = inbound PUBLISHes, split {@code new} / {@code redelivered}
+     * ({@code new = publish - redelivered}), and one-way delivery-latency percentiles. Resets the histogram.
      */
     public synchronized String inSummary(int intervalSec) {
         long n = latency.getN();
-        long rcv = received.getAndSet(0);
+        long pub = received.getAndSet(0);
         long redel = redelivered.getAndSet(0);
         String line = String.format(
-                "RPC In [window %ds]: received=%d (unique=%d, redelivered=%d); "
-                        // one-way server->gateway delivery latency (receiveTs - sendTs); clock-skew
-                        // dependent between the TB host and this host, NOT round-trip / server-completion.
+                "RPC In [window %ds]: publish=%d (new %d, redelivered %d); "
                         + "latency(1-way srv->gw) avg=%.1f p50=%.1f p95=%.1f p99=%.1f max=%.1f ms",
-                intervalSec, rcv, rcv - redel, redel,
+                intervalSec, pub, pub - redel, redel,
                 n > 0 ? latency.getMean() : 0.0,
                 n > 0 ? latency.getPercentile(50) : 0.0,
                 n > 0 ? latency.getPercentile(95) : 0.0,
@@ -136,34 +145,26 @@ public class RpcLatencyStats {
         return line;
     }
 
-    /**
-     * Outbound line (us → server): the full reply lifecycle in one place. Window: our reply publishes that
-     * the broker PUBACK'd on the first attempt ({@code firstTry}) or on a retry ({@code afterRetry}),
-     * best-effort re-replies to server redeliveries ({@code redeliveryReplied}), and the delivery-trouble
-     * states ({@code bufferedForRetry} transient, {@code undelivered} terminal). Totals: cumulative
-     * {@code replyAcked = firstTry + afterRetry} (distinct RPCs whose reply we confirmed — the PUBACK of
-     * OUR reply, distinct from the RPC Subscription SUBACK), the outstanding-set {@code pending} (passed
-     * in), cumulative {@code undelivered}, and cumulative {@code redeliveryReplied} (its own signal —
-     * NEVER folded into {@code replyAcked}, since re-answering a redelivery is not a new distinct RPC).
-     * Outcome identity: {@code unique = replyAcked + pending + undelivered}.
-     */
-    public String outSummary(int intervalSec, long pending) {
+    /** Outbound line (us -> server): reply {@code publish} vs {@code pubAck}, plus {@code failed} and {@code rePublished}. */
+    public String outSummary(int intervalSec) {
         return String.format(
-                "RPC Out [window %ds]: firstTry=%d, afterRetry=%d, redeliveryReplied=%d, bufferedForRetry=%d, "
-                        + "undelivered=%d | totals: replyAcked=%d, pending=%d, undelivered=%d, redeliveryReplied=%d",
-                intervalSec, ackedFirstTry.getAndSet(0), ackedAfterRetry.getAndSet(0), redeliveryReplied.getAndSet(0),
-                bufferedForRetry.getAndSet(0), undelivered.getAndSet(0),
-                ackedFirstTryTotal.get() + ackedAfterRetryTotal.get(), pending, undeliveredTotal.get(),
-                redeliveryRepliedTotal.get());
+                "RPC Out [window %ds]: publish=%d, pubAck=%d, failed=%d, rePublished=%d",
+                intervalSec, replyPublished.getAndSet(0), replyPubAcked.getAndSet(0),
+                replyFailed.getAndSet(0), rePublished.getAndSet(0));
     }
 
-    /** One-line summary emitted once when the drain phase ends. {@code pending} = outstanding-set size
-     *  (distinct un-acked RPCs); reaches 0 on a clean run. */
-    public String drainSummary(long elapsedMs, boolean quiesced, long pending) {
+    /** End-of-run inbound totals. */
+    public String inTotalSummary() {
+        long pub = receivedTotal.get();
+        long redel = redeliveredTotal.get();
+        return String.format("RPC In  [total]: publish=%d (new %d, redelivered %d)", pub, pub - redel, redel);
+    }
+
+    /** End-of-run outbound totals; the reconciliation: {@code failed == recovered + lost} on a settled run. */
+    public String outTotalSummary() {
         return String.format(
-                "Gateway RPC drain complete [drained %.1fs, quiesced=%b]: received total %d, "
-                        + "replyAcked %d, undelivered %d, pending %d",
-                elapsedMs / 1000.0, quiesced, receivedTotal.get(),
-                ackedFirstTryTotal.get() + ackedAfterRetryTotal.get(), undeliveredTotal.get(), pending);
+                "RPC Out [total]: publish=%d, pubAck=%d, failed=%d, recovered=%d, lost=%d",
+                replyPublishedTotal.get(), replyPubAckedTotal.get(), replyFailedTotal.get(),
+                recoveredTotal.get(), lostTotal.get());
     }
 }

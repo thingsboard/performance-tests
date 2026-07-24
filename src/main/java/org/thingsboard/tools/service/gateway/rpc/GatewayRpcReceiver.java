@@ -98,6 +98,7 @@ public class GatewayRpcReceiver {
     }
 
     public void attach(List<MqttClient> clients) {
+        log.info("Gateway RPC stats key:\n{}", RpcLatencyStats.legend());
         for (MqttClient client : clients) {
             subscribe(client);
         }
@@ -186,29 +187,37 @@ public class GatewayRpcReceiver {
      * {@code responseDelayMs} (a redelivery arrives later in the RPC's life, so we answer immediately to
      * stay inside the server expiry). Deliberately lean: a redelivery storm can be >90% of an inbound
      * window, and the server's own next redelivery is the retry loop if this publish is dropped — so we
-     * never build our own retry on top of the server's. {@code redeliveryReplied} is counted only on the
-     * broker PUBACK (consistent with {@code firstTry}/{@code afterRetry}), so it reflects re-replies that
-     * actually landed, not merely attempted; an orphaned/failed re-reply is simply not counted. The reply
-     * was re-rendered from the redelivery's own payload, so it echoes whatever {@code data.id} the current
-     * delivery carried (the id the current device actor expects, even if reassigned across a core
-     * migration). Never touches {@code acked} — it is not a new distinct RPC completed.
+     * never build our own retry on top of the server's. The reply was re-rendered from the redelivery's
+     * own payload, so it echoes whatever {@code data.id} the current delivery carried (the id the current
+     * device actor expects, even if reassigned across a core migration). Counts as a reply {@code publish}
+     * + {@code rePublished} (it's a re-send of a response); its {@code pubAck} is counted only on the broker
+     * PUBACK. It never touches the failed/recovered/lost outcome — those track only the first-receipt
+     * reply's own lifecycle, not this best-effort re-send.
      */
     private void replyToRedelivery(MqttClient client, byte[] reply) {
+        stats.incReplyPublished();
+        stats.incRePublished();
         client.publish(topic, Unpooled.wrappedBuffer(reply), qos).addListener(f -> {
             if (f.isSuccess()) {
-                stats.incRedeliveryReplied();
+                stats.incReplyPubAcked();
             }
         });
     }
 
     /**
-     * Publish (or re-publish) one reply. Success on the broker PUBACK: first attempt counts {@code sent},
-     * a retry counts {@code recovered}, and the RPC is marked answered. If the publish fails OR its
-     * future never completes within {@code ackTimeoutMs} (the netty-mqtt orphan — see TODO), it is
-     * treated as not-confirmed-sent and routed to the retry buffer. Exactly-once via {@code settled}.
+     * Publish (or re-publish) one reply. Every attempt counts a {@code publish} (a re-send also counts
+     * {@code rePublished}). Success on the broker PUBACK counts {@code pubAck}, marks the RPC answered, and
+     * — if this was a retry (attempt > 1) — counts {@code recovered} (a previously-failed reply delivered).
+     * If the publish fails OR its future never completes within {@code ackTimeoutMs} (the netty-mqtt orphan
+     * — see TODO), it is treated as not-confirmed-sent and routed to the retry buffer. Exactly-once via
+     * {@code settled}.
      */
     private void publishReply(MqttClient client, BufferedReply reply) {
         reply.attempts++;
+        stats.incReplyPublished();
+        if (reply.attempts > 1) {
+            stats.incRePublished(); // this publish is a re-send of a reply that didn't confirm before
+        }
         AtomicBoolean settled = new AtomicBoolean();
         Future<Void> f = client.publish(topic, Unpooled.wrappedBuffer(reply.payload), qos);
         // TODO(netty-mqtt): a QoS-1 publish whose bytes flushed before the channel dropped is never
@@ -230,10 +239,9 @@ public class GatewayRpcReceiver {
                 pendingTracker.markAnswered(reply.key, System.currentTimeMillis());
                 if (settled.compareAndSet(false, true)) {
                     timeout.cancel(false);
-                    if (reply.attempts == 1) {
-                        stats.incAckedFirstTry();
-                    } else {
-                        stats.incAckedAfterRetry();
+                    stats.incReplyPubAcked();
+                    if (reply.attempts > 1) {
+                        stats.incRecovered(); // a re-send delivered a reply that had failed before
                     }
                 }
             } else if (settled.compareAndSet(false, true)) {
@@ -247,6 +255,9 @@ public class GatewayRpcReceiver {
      *  timer-driven re-send on the live channel (not only on reconnect/drain), until it confirms or its
      *  TTL passes. Terminal when retry is off, past expiry, or the per-client buffer is full → lost. */
     private void onReplyNotConfirmed(MqttClient client, BufferedReply reply) {
+        if (reply.attempts == 1) {
+            stats.incReplyFailed(); // count 'failed' once per reply, on its first non-confirmation
+        }
         if (!retryEnabled || System.currentTimeMillis() >= reply.expiryMs) {
             markReplyLost(reply);
             return;
@@ -256,7 +267,6 @@ public class GatewayRpcReceiver {
             markReplyLost(reply); // buffer full — give up so it can't grow unbounded
             return;
         }
-        stats.incBufferedForRetry();
         scheduleReplyRetry(client, reply);
     }
 
@@ -288,7 +298,7 @@ public class GatewayRpcReceiver {
     /** Terminal give-up for one reply: count it lost and drop its key from the pending set so
      *  {@code pending} tracks only still-recoverable RPCs and drain can quiesce. */
     private void markReplyLost(BufferedReply reply) {
-        stats.incUndelivered();
+        stats.incLost();
         pendingTracker.markLost(reply.key, System.currentTimeMillis());
     }
 
@@ -402,9 +412,9 @@ public class GatewayRpcReceiver {
         return stats.inSummary(intervalSec);
     }
 
-    /** Outbound line: the full reply lifecycle + the live {@code pending} gauge (pending-set size). */
+    /** Outbound line: reply publish vs pubAck, plus failed / rePublished for this window. */
     public String outSummary(int intervalSec) {
-        return stats.outSummary(intervalSec, pendingTracker.pendingCount());
+        return stats.outSummary(intervalSec);
     }
 
     /**
@@ -445,8 +455,13 @@ public class GatewayRpcReceiver {
         }
     }
 
-    public String drainSummary(long elapsedMs, boolean quiesced) {
-        return stats.drainSummary(elapsedMs, quiesced, pendingTracker.pendingCount());
+    /** End-of-run reconciliation lines (same field names as the per-window lines, tagged {@code [total]}). */
+    public String inTotalSummary() {
+        return stats.inTotalSummary();
+    }
+
+    public String outTotalSummary() {
+        return stats.outTotalSummary();
     }
 
     /**

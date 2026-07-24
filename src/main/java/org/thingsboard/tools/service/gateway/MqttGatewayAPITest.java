@@ -265,12 +265,16 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
                 GatewayRpcReceiver.DrainResult result = rpcReceiver.drain(quietMs, maxMs, rpcRespond);
                 rpcReceiver.finalizeLostReplies(); // replies still buffered (client never reconnected) are lost
                 rpcReceiver.logPending();      // name the distinct still-unanswered RPCs for DB EXPIRED correlation
-                String summary = rpcReceiver.drainSummary(result.elapsedMs, result.quiesced);
+                String drainLine = String.format("Gateway RPC drain complete [drained %.1fs, quiesced=%b]",
+                        result.elapsedMs / 1000.0, result.quiesced);
                 if (result.quiesced) {
-                    log.info(summary);
+                    log.info(drainLine);
                 } else {
-                    log.warn(summary);
+                    log.warn(drainLine);
                 }
+                log.info(rpcReceiver.inTotalSummary());   // RPC In  [total]: publish=… (new …, redelivered …)
+                log.info(rpcReceiver.outTotalSummary());  // RPC Out [total]: publish=…, pubAck=…, failed=…, recovered=…, lost=…
+
             }
         }
     }

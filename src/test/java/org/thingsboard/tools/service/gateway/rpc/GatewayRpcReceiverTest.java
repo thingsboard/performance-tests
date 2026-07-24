@@ -80,7 +80,8 @@ class GatewayRpcReceiverTest {
 
         assertThat(fake.publishedTopics).containsExactly("v1/gateway/rpc");
         assertThat(fake.publishedPayloads.get(0)).contains("\"device\":\"GW1\"").contains("\"id\":5");
-        assertThat(stats.getAckedFirstTry()).isEqualTo(1);
+        assertThat(stats.getReplyPublished()).isEqualTo(1);
+        assertThat(stats.getReplyPubAcked()).isEqualTo(1);
         assertThat(stats.getReceived()).isEqualTo(1);
     }
 
@@ -99,10 +100,10 @@ class GatewayRpcReceiverTest {
 
         assertThat(stats.getReceived()).isEqualTo(2);
         assertThat(stats.getRedelivered()).isZero();          // in-flight-only dedup -> not a redelivery
-        assertThat(stats.getRedeliveryReplied()).isZero();
-        assertThat(stats.getAckedFirstTry()).isEqualTo(2);    // both answered as fresh, tracked RPCs
+        assertThat(stats.getRePublished()).isZero();          // no re-sends: both were first replies
+        assertThat(stats.getReplyPublished()).isEqualTo(2);   // two fresh, tracked reply publishes
+        assertThat(stats.getReplyPubAcked()).isEqualTo(2);    // both confirmed
         assertThat(fake.publishedPayloads).hasSize(2);
-        assertThat(r.outSummary(10)).contains("pending=0");
     }
 
     @Test
@@ -120,8 +121,9 @@ class GatewayRpcReceiverTest {
         handler.onMessage("v1/gateway/rpc", rpc("GW1", 5)); // in-flight redelivery (still PENDING)
 
         assertThat(stats.getRedelivered()).isEqualTo(1);       // still PENDING -> a real redelivery
-        assertThat(stats.getRedeliveryReplied()).isEqualTo(1); // best-effort re-reply confirmed
-        assertThat(stats.getAckedFirstTry()).isZero();         // the tracked first reply never acked
+        assertThat(stats.getReplyPublished()).isEqualTo(2);    // first reply + the re-reply
+        assertThat(stats.getRePublished()).isEqualTo(1);       // the re-reply is a re-send
+        assertThat(stats.getReplyPubAcked()).isEqualTo(1);     // only the re-reply confirmed (first still in flight)
     }
 
     @Test
@@ -136,9 +138,9 @@ class GatewayRpcReceiverTest {
         handler.onMessage("v1/gateway/rpc", rpc("GW1", 5)); // redelivery: re-reply also orphans
 
         assertThat(stats.getRedelivered()).isEqualTo(1);
-        // PUBACK-gated (consistent with firstTry/afterRetry): an unconfirmed re-reply is NOT counted
-        assertThat(stats.getRedeliveryReplied()).isZero();
-        assertThat(stats.getAckedFirstTry()).isZero();
+        assertThat(stats.getRePublished()).isEqualTo(1);   // the re-reply was issued (a re-send)
+        // PUBACK-gated: nothing confirmed (both publishes hang), so pubAck stays 0
+        assertThat(stats.getReplyPubAcked()).isZero();
     }
 
     @Test
@@ -151,7 +153,7 @@ class GatewayRpcReceiverTest {
         assertThat(a.subscribedTopics).containsExactly("v1/gateway/rpc");
         assertThat(b.subscribedTopics).containsExactly("v1/gateway/rpc");
         // both SUBACKed -> acked=2 and the unconfirmed gauge is back to 0
-        assertThat(r.subscriptionSummary(10)).isEqualTo("RPC Subscription [window 10s]: acked=2, failed=0, unconfirmed=0");
+        assertThat(r.subscriptionSummary(10)).isEqualTo("RPC Subscription [window 10s]: subAck=2, failed=0, unconfirmed=0");
     }
 
     @Test
@@ -161,7 +163,7 @@ class GatewayRpcReceiverTest {
         FakeMqttClient fake = new FakeMqttClient(loop);
         fake.onOutcomes.add(false); // SUBACK fails -> not confirmed
         r.resubscribe(fake);
-        assertThat(r.subscriptionSummary(10)).isEqualTo("RPC Subscription [window 10s]: acked=0, failed=1, unconfirmed=1");
+        assertThat(r.subscriptionSummary(10)).isEqualTo("RPC Subscription [window 10s]: subAck=0, failed=1, unconfirmed=1");
     }
 
     @Test
@@ -172,7 +174,7 @@ class GatewayRpcReceiverTest {
         fake.onHangs = true; // SUBACK not yet arrived (models a slow / never-completing subscribe)
         r.resubscribe(fake);
         // gauge shows the client as unconfirmed — no timeout, no false 'failed', one attempt only
-        assertThat(r.subscriptionSummary(10)).isEqualTo("RPC Subscription [window 10s]: acked=0, failed=0, unconfirmed=1");
+        assertThat(r.subscriptionSummary(10)).isEqualTo("RPC Subscription [window 10s]: subAck=0, failed=0, unconfirmed=1");
         assertThat(fake.subscribedTopics).containsExactly("v1/gateway/rpc"); // no retry loop
     }
 
