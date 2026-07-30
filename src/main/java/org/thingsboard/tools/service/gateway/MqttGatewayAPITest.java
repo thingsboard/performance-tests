@@ -117,6 +117,8 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     String rpcSenderQueue;
     @Value("${gateway.rpc.sender.timeoutMs:10000}")
     int rpcSenderTimeoutMs;
+    @Value("${gateway.rpc.sender.mode:BURST}")
+    String rpcSenderMode;
     @Value("${rest.url}")
     String restUrl;
 
@@ -293,7 +295,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         rpcBurstSender = new RpcBurstSender(
                 restClientService.getRestClient(), restUrl, deviceNames, template,
                 rpcSenderQueue, rpcSenderTimeoutMs, rpcSenderChunkSize,
-                rpcSenderIntervalSec, rpcSenderStartDelaySec);
+                rpcSenderIntervalSec, rpcSenderStartDelaySec, RpcBurstSender.Mode.fromConfig(rpcSenderMode));
         rpcBurstSender.start();
     }
 

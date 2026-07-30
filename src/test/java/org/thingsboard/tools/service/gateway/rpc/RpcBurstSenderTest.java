@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class RpcBurstSenderTest {
 
@@ -79,7 +80,7 @@ class RpcBurstSenderTest {
     void dispatchSummaryReportsCumulativeBurstsAndDevices() {
         RpcBurstSender sender = new RpcBurstSender(
                 null, null, List.of("d1", "d2"), mapper.createObjectNode(),
-                "RpcCalls", 10000, 500, 60, 0);
+                "RpcCalls", 10000, 500, 60, 0, RpcBurstSender.Mode.BURST);
         sender.recordBurstFired();
         sender.recordDispatched(500);
         sender.recordBurstFired();
@@ -87,5 +88,38 @@ class RpcBurstSenderTest {
         assertThat(sender.dispatchSummary())
                 .contains("2 bursts fired")
                 .contains("1000 device-RPCs dispatched");
+    }
+
+    @Test
+    void modeFromConfigDefaultsToBurstAndParsesCaseInsensitively() {
+        assertThat(RpcBurstSender.Mode.fromConfig(null)).isEqualTo(RpcBurstSender.Mode.BURST);
+        assertThat(RpcBurstSender.Mode.fromConfig("")).isEqualTo(RpcBurstSender.Mode.BURST);
+        assertThat(RpcBurstSender.Mode.fromConfig("burst")).isEqualTo(RpcBurstSender.Mode.BURST);
+        assertThat(RpcBurstSender.Mode.fromConfig("SPREAD")).isEqualTo(RpcBurstSender.Mode.SPREAD);
+        assertThat(RpcBurstSender.Mode.fromConfig("Spread")).isEqualTo(RpcBurstSender.Mode.SPREAD);
+        // an unknown value is a misconfiguration — fail fast rather than silently pick a mode
+        assertThatThrownBy(() -> RpcBurstSender.Mode.fromConfig("sometimes"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void spreadTickMillisSpacesChunksEvenlyAcrossTheInterval() {
+        assertThat(RpcBurstSender.spreadTickMillis(60_000L, 4)).isEqualTo(15_000L);   // 4 chunks over 60s
+        assertThat(RpcBurstSender.spreadTickMillis(60_000L, 200)).isEqualTo(300L);    // representative scale
+        assertThat(RpcBurstSender.spreadTickMillis(60_000L, 1)).isEqualTo(60_000L);   // single chunk = whole interval
+        assertThat(RpcBurstSender.spreadTickMillis(1_000L, 3)).isEqualTo(333L);       // floor of uneven division
+        assertThat(RpcBurstSender.spreadTickMillis(100L, 1000)).isEqualTo(1L);        // never below 1ms
+    }
+
+    @Test
+    void chunkIndexForTickRotatesCoveringEveryChunkOncePerSweep() {
+        int numChunks = 4;
+        // one full sweep hits every chunk exactly once, in order
+        assertThat(RpcBurstSender.chunkIndexForTick(0, numChunks)).isEqualTo(0);
+        assertThat(RpcBurstSender.chunkIndexForTick(1, numChunks)).isEqualTo(1);
+        assertThat(RpcBurstSender.chunkIndexForTick(3, numChunks)).isEqualTo(3);
+        // the next tick wraps back to the first chunk (start of the next interval's sweep)
+        assertThat(RpcBurstSender.chunkIndexForTick(4, numChunks)).isEqualTo(0);
+        assertThat(RpcBurstSender.chunkIndexForTick(5, numChunks)).isEqualTo(1);
     }
 }

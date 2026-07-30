@@ -41,6 +41,32 @@ import java.util.concurrent.atomic.AtomicLong;
 @Slf4j
 public class RpcBurstSender {
 
+    /** RPC dispatch shape within each interval. */
+    public enum Mode {
+        /** All chunks fired at the interval boundary — a synchronized fleet-wide burst (peak/resilience test). */
+        BURST,
+        /** Chunks staggered evenly across the interval — a steady, sustained per-device cadence. */
+        SPREAD;
+
+        /** Parse GATEWAY_RPC_SENDER_MODE: null/blank -> BURST; case-insensitive; unknown values fail fast. */
+        public static Mode fromConfig(String value) {
+            if (value == null || value.isBlank()) {
+                return BURST;
+            }
+            return Mode.valueOf(value.trim().toUpperCase());
+        }
+    }
+
+    /** SPREAD tick period: the interval divided evenly across its chunks, never below 1ms. */
+    static long spreadTickMillis(long intervalMs, int numChunks) {
+        return Math.max(1L, intervalMs / Math.max(1, numChunks));
+    }
+
+    /** SPREAD chunk selection: rotate through the chunk list so each chunk fires once per sweep. */
+    static int chunkIndexForTick(long tickNumber, int numChunks) {
+        return (int) (tickNumber % numChunks);
+    }
+
     private static final int MAX_FIRE_THREADS = 16;
 
     private final RestClient restClient;
@@ -52,6 +78,7 @@ public class RpcBurstSender {
     private final int chunkSize;
     private final int intervalSec;
     private final int startDelaySec;
+    private final Mode mode;
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private ScheduledExecutorService scheduler;
@@ -59,12 +86,14 @@ public class RpcBurstSender {
     private ScheduledFuture<?> burstFuture;
     private List<List<String>> chunks;
     private String ruleEngineUrl;
+    private long spreadTick;    // SPREAD cursor; advanced only on the single scheduler thread
+    private long spreadTickMs;  // SPREAD inter-chunk period, set in start()
     private final AtomicLong burstsFired = new AtomicLong();
     private final AtomicLong devicesDispatched = new AtomicLong();
 
     public RpcBurstSender(RestClient restClient, String restUrl, List<String> deviceNames,
                           JsonNode commandTemplate, String queue, int timeoutMs, int chunkSize,
-                          int intervalSec, int startDelaySec) {
+                          int intervalSec, int startDelaySec, Mode mode) {
         this.restClient = restClient;
         this.restUrl = restUrl;
         this.deviceNames = deviceNames;
@@ -74,6 +103,7 @@ public class RpcBurstSender {
         this.chunkSize = chunkSize;
         this.intervalSec = intervalSec;
         this.startDelaySec = startDelaySec;
+        this.mode = mode;
     }
 
     public void start() {
@@ -96,11 +126,25 @@ public class RpcBurstSender {
         long intervalMs = intervalSec * 1000L;
         long now = System.currentTimeMillis();
         long minStart = now + startDelaySec * 1000L;
-        long first = nextBoundaryMillis(now, intervalMs, minStart);
-        long initialDelay = first - now;
-        log.info("RPC burst sender: {} devices in {} chunks of {}, every {}s, first burst in {}ms (url {})",
-                deviceNames.size(), chunks.size(), chunkSize, intervalSec, initialDelay, ruleEngineUrl);
-        burstFuture = scheduler.scheduleAtFixedRate(this::fireBurst, initialDelay, intervalMs, TimeUnit.MILLISECONDS);
+        if (mode == Mode.SPREAD) {
+            int numChunks = chunks.size();
+            if (numChunks == 0) {
+                log.warn("RPC spread sender: no devices — nothing to send");
+                return;
+            }
+            spreadTickMs = spreadTickMillis(intervalMs, numChunks);
+            // No boundary alignment: SPREAD deliberately de-synchronizes (one chunk per tick, staggered).
+            long initialDelay = Math.max(0L, minStart - now);
+            log.info("RPC spread sender: {} devices in {} chunks of {}, one chunk every {}ms (full sweep ~{}s), first chunk in {}ms (url {})",
+                    deviceNames.size(), numChunks, chunkSize, spreadTickMs, intervalSec, initialDelay, ruleEngineUrl);
+            burstFuture = scheduler.scheduleAtFixedRate(this::fireNextSpreadChunk, initialDelay, spreadTickMs, TimeUnit.MILLISECONDS);
+        } else {
+            long first = nextBoundaryMillis(now, intervalMs, minStart);
+            long initialDelay = first - now;
+            log.info("RPC burst sender: {} devices in {} chunks of {}, every {}s, first burst in {}ms (url {})",
+                    deviceNames.size(), chunks.size(), chunkSize, intervalSec, initialDelay, ruleEngineUrl);
+            burstFuture = scheduler.scheduleAtFixedRate(this::fireBurst, initialDelay, intervalMs, TimeUnit.MILLISECONDS);
+        }
     }
 
     private void fireBurst() {
@@ -134,6 +178,34 @@ public class RpcBurstSender {
         }
         log.info("RPC burst: devices={}, chunks ok={}, failed={}, elapsed={}ms",
                 deviceNames.size(), ok.get(), failed.get(), elapsed);
+    }
+
+    /**
+     * SPREAD mode: fire ONE chunk per tick, rotating through the chunk list so each chunk is sent once
+     * per sweep (= one interval), staggered rather than all at once. Posts are async (firePool) so a slow
+     * REST call never delays the next tick; a full sweep is counted as one "burst" for the stats.
+     */
+    private void fireNextSpreadChunk() {
+        int numChunks = chunks.size();
+        List<String> deviceChunk = chunks.get(chunkIndexForTick(spreadTick, numChunks));
+        firePool.submit(() -> {
+            long startedAt = System.currentTimeMillis();
+            try {
+                restClient.getRestTemplate().postForEntity(ruleEngineUrl, buildBody(MAPPER, commandTemplate, deviceChunk), String.class);
+                recordDispatched(deviceChunk.size()); // count dispatched only after a successful post (D4)
+                long elapsed = System.currentTimeMillis() - startedAt;
+                if (elapsed > spreadTickMs) {
+                    log.warn("RPC spread chunk post took {}ms > {}ms tick — drip falling behind", elapsed, spreadTickMs);
+                }
+            } catch (Exception e) {
+                log.warn("RPC spread chunk failed ({} devices): {}", deviceChunk.size(), e.getMessage());
+            }
+        });
+        spreadTick++;
+        if (chunkIndexForTick(spreadTick, numChunks) == 0) { // wrapped: a full sweep of all chunks = one interval
+            recordBurstFired();
+            log.info("RPC spread: sweep {} dispatched ({} device-RPCs total so far)", burstsFired.get(), devicesDispatched.get());
+        }
     }
 
     void recordBurstFired() {

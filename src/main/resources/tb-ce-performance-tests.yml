@@ -192,6 +192,7 @@ gateway:
       permitWaitMs: "${GATEWAY_RPC_ANNOUNCE_PERMIT_WAIT_MS:250}" # non-blocking re-queue wait when the cap is saturated (never blocks the event loop)
     sender:
       enabled: "${GATEWAY_RPC_SENDER_ENABLED:false}" # true = this instance fires boundary-aligned rule-engine RPC bursts for its device range (requires gateway.rpc.enabled; use MESSAGES_PER_SECOND=0)
+      mode: "${GATEWAY_RPC_SENDER_MODE:BURST}" # BURST = all chunks at the interval boundary (synchronized fleet-wide burst); SPREAD = chunks staggered evenly across the interval (steady per-device cadence)
       template: "${GATEWAY_RPC_SENDER_TEMPLATE:}" # filesystem path to a {method, params} JSON command body; empty = built-in neutral default
       intervalSec: "${GATEWAY_RPC_SENDER_INTERVAL_SEC:60}" # how often to fire a burst (s). Bursts fire on round clock times (multiples of this, e.g. every whole minute), so separate instances with accurate clocks fire at the same moment without coordinating
       startDelaySec: "${GATEWAY_RPC_SENDER_START_DELAY_SEC:0}" # 0 = auto (next boundary after warmup); >0 = extra settling margin

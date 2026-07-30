@@ -105,7 +105,8 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `GATEWAY_RPC_ACK_BACKOFF_MIN_MS` / `GATEWAY_RPC_ACK_BACKOFF_MAX_MS` | `1000` / `5000` | Jittered-exponential backoff between announce/resubscribe retries. Sized so `MAX_ATTEMPTS × (ACK_TIMEOUT + BACKOFF_MAX)` stays under `GATEWAY_RPC_EXPIRY_MS` |
 | `GATEWAY_RPC_ANNOUNCE_MAX_CONCURRENT` | `1000` | Global in-flight cap on device announces so a reconnect storm cannot self-amplify. Acquired non-blockingly (re-queued on the event loop when saturated — never a blocking acquire) |
 | `GATEWAY_RPC_ANNOUNCE_PERMIT_WAIT_MS` | `250` | Jittered `[1,this]` ms re-queue wait when the announce concurrency cap is saturated |
-| `GATEWAY_RPC_SENDER_ENABLED` | `false` | In-tool load driver: after warmup, fire boundary-aligned rule-engine RPC bursts for this instance's device range. Requires `GATEWAY_RPC_ENABLED`; use `MESSAGES_PER_SECOND=0` |
+| `GATEWAY_RPC_SENDER_ENABLED` | `false` | In-tool load driver: after warmup, fire rule-engine RPC calls for this instance's device range (shape set by `GATEWAY_RPC_SENDER_MODE`). Requires `GATEWAY_RPC_ENABLED`; use `MESSAGES_PER_SECOND=0` for a pure-RPC measurement |
+| `GATEWAY_RPC_SENDER_MODE` | `BURST` | Dispatch shape within each interval. `BURST` = all chunks at the interval boundary (synchronized, clock-aligned fleet-wide burst — the peak/resilience test, e.g. "10K RPCs at once"). `SPREAD` = chunks staggered evenly across the interval (one chunk per `interval/numChunks` tick, rotating) for a steady, sustained per-device cadence rather than a synchronized peak. `SPREAD` deliberately drops the clock-boundary alignment; spread granularity = chunk count (lower `CHUNK_SIZE` → finer) |
 | `GATEWAY_RPC_SENDER_TEMPLATE` | _(empty)_ | Filesystem path to a `{method, params}` JSON command body (the sender appends the chunked `devices[]`); empty = built-in neutral default |
 | `GATEWAY_RPC_SENDER_INTERVAL_SEC` | `60` | Burst cadence (s). Bursts fire on round clock times (multiples of this, e.g. every whole minute), so separate instances with accurate clocks fire together without coordinating |
 | `GATEWAY_RPC_SENDER_START_DELAY_SEC` | `0` | `0` = auto (first burst at the next boundary after warmup); `>0` = extra settling margin |
@@ -288,7 +289,11 @@ persistent gateway mode (same instance receives + measures what it triggers). Af
 `INTERVAL_SEC`, e.g. every whole minute): each instance just waits for the next such time on its own
 clock, so if several instances (one per tenant) run with accurate clocks they all fire at the same
 instant with no coordinator. A single instance / local run simply fires on the next round time and
-repeats. The command body comes from
+repeats. This clock-aligned, all-at-once shape is `GATEWAY_RPC_SENDER_MODE=BURST` (the default — a
+synchronized fleet-wide burst, for peak/resilience testing). `GATEWAY_RPC_SENDER_MODE=SPREAD` instead
+staggers the chunks evenly across the interval (one chunk per `INTERVAL_SEC/numChunks` tick, rotating
+through the chunk list so every device is covered exactly once per interval) and drops the boundary
+alignment — a steady, sustained per-device cadence rather than a synchronized burst. The command body comes from
 `GATEWAY_RPC_SENDER_TEMPLATE` (or a built-in neutral default when empty). It runs on its own dedicated
 executors — isolated from the MQTT event loop and RPC handler executor — so it never starves
 inbound-RPC processing. The chain derives the send-timestamp from the call timeout, so
