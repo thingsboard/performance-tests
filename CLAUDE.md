@@ -107,7 +107,7 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `GATEWAY_RPC_ANNOUNCE_PERMIT_WAIT_MS` | `250` | Jittered `[1,this]` ms re-queue wait when the announce concurrency cap is saturated |
 | `GATEWAY_RPC_SENDER_ENABLED` | `false` | In-tool load driver: after warmup, fire rule-engine RPC calls for this instance's device range (shape set by `GATEWAY_RPC_SENDER_MODE`). Requires `GATEWAY_RPC_ENABLED`; use `MESSAGES_PER_SECOND=0` for a pure-RPC measurement |
 | `GATEWAY_RPC_SENDER_MODE` | `BURST` | Dispatch shape within each interval. `BURST` = all chunks at the interval boundary (synchronized, clock-aligned fleet-wide burst — the peak/resilience test, e.g. "10K RPCs at once"). `SPREAD` = chunks staggered evenly across the interval (one chunk per `interval/numChunks` tick, rotating) for a steady, sustained per-device cadence rather than a synchronized peak. `SPREAD` deliberately drops the clock-boundary alignment; spread granularity = chunk count (lower `CHUNK_SIZE` → finer) |
-| `GATEWAY_RPC_SENDER_TEMPLATE` | _(empty)_ | Filesystem path to a `{method, params}` JSON command body (the sender appends the chunked `devices[]`); empty = built-in neutral default |
+| `GATEWAY_RPC_SENDER_TEMPLATE` | _(empty)_ | Filesystem path to a `{method, params}` JSON command body (the sender appends the chunked `devices[]` as `{name, rpcId}` objects — see below); empty = built-in neutral default |
 | `GATEWAY_RPC_SENDER_INTERVAL_SEC` | `60` | Burst cadence (s). Bursts fire on round clock times (multiples of this, e.g. every whole minute), so separate instances with accurate clocks fire together without coordinating |
 | `GATEWAY_RPC_SENDER_START_DELAY_SEC` | `0` | `0` = auto (first burst at the next boundary after warmup); `>0` = extra settling margin |
 | `GATEWAY_RPC_SENDER_CHUNK_SIZE` | `500` | Devices per rule-engine REST call (under the TBEL 300 KB result limit) |
@@ -298,6 +298,13 @@ alignment — a steady, sustained per-device cadence rather than a synchronized 
 executors — isolated from the MQTT event loop and RPC handler executor — so it never starves
 inbound-RPC processing. The chain derives the send-timestamp from the call timeout, so
 `GATEWAY_RPC_SENDER_TIMEOUT_MS` must match the chain's hardcoded `TIMEOUT_MS`.
+
+**Body contract (tool ↔ rule chain):** the sender emits
+`{method, params, devices: [{name, rpcId}, …]}`, where `rpcId` is a fresh `UUID.randomUUID()` per
+device per fire. A consuming rule chain reads `device.name` (delivery target) and adopts `device.rpcId`
+as the persistent RPC's `requestUUID` (`rpcId == requestUUID`), so the id is **caller-owned** and stable
+for that command's lifetime (internal re-delivery reuses the id already carried in the queued message).
+The tool does not track the generated ids — outcomes are correlated server-side/DB by `rpcId`.
 
 ### Message Generation
 `MessageGenerator` implementations in `service/msg/`. Each returns a `NodeMsg` (Jackson `ObjectNode` +

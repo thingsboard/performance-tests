@@ -20,7 +20,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -57,15 +60,33 @@ class RpcBurstSenderTest {
     }
 
     @Test
-    void buildBodyClonesTemplateAndAddsDevices() throws Exception {
+    void buildBodyClonesTemplateAndAddsDevicesAsObjectsWithRpcId() throws Exception {
         JsonNode template = mapper.readTree("{\"method\":\"doCmd\",\"params\":{\"x\":1}}");
         ObjectNode body = RpcBurstSender.buildBody(mapper, template, List.of("d1", "d2"));
         assertThat(body.get("method").asText()).isEqualTo("doCmd");
         assertThat(body.get("params").get("x").asInt()).isEqualTo(1);
         assertThat(body.get("devices").size()).isEqualTo(2);
-        assertThat(body.get("devices").get(0).asText()).isEqualTo("d1");
+        // devices are objects: { "name": ..., "rpcId": "<uuid>" }
+        JsonNode d0 = body.get("devices").get(0);
+        assertThat(d0.get("name").asText()).isEqualTo("d1");
+        assertThat(UUID.fromString(d0.get("rpcId").asText())).isNotNull();
+        JsonNode d1 = body.get("devices").get(1);
+        assertThat(d1.get("name").asText()).isEqualTo("d2");
+        assertThat(UUID.fromString(d1.get("rpcId").asText())).isNotNull();
         // template must not be mutated
         assertThat(template.has("devices")).isFalse();
+    }
+
+    @Test
+    void buildBodyGeneratesADistinctRpcIdPerDeviceInTheChunk() {
+        ObjectNode body = RpcBurstSender.buildBody(mapper, mapper.createObjectNode(),
+                List.of("d1", "d2", "d3"));
+        JsonNode devices = body.get("devices");
+        Set<String> ids = new HashSet<>();
+        for (JsonNode d : devices) {
+            ids.add(d.get("rpcId").asText());
+        }
+        assertThat(ids).hasSize(3);
     }
 
     @Test

@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -257,12 +258,20 @@ public class RpcBurstSender {
         return rem == 0 ? floor : floor + (intervalMs - rem);
     }
 
-    /** Deep-copy the {method, params} template and append the chunk as a "devices" array. */
+    /**
+     * Deep-copy the {method, params} template and append the chunk as a "devices" array of
+     * {@code {"name": <deviceName>, "rpcId": <uuid>}} objects. The caller-assigned {@code rpcId}
+     * (a fresh {@link UUID} per device per call) lets a consuming rule chain adopt it as the
+     * persistent RPC's {@code requestUUID}, so the id is caller-owned and stable for that command's
+     * lifetime (internal re-delivery reuses the id already carried in the queued message).
+     */
     static ObjectNode buildBody(ObjectMapper mapper, JsonNode template, List<String> deviceChunk) {
         ObjectNode body = (ObjectNode) template.deepCopy();
         ArrayNode devices = body.putArray("devices");
         for (String name : deviceChunk) {
-            devices.add(name);
+            ObjectNode device = devices.addObject();
+            device.put("name", name);
+            device.put("rpcId", UUID.randomUUID().toString());
         }
         return body;
     }
