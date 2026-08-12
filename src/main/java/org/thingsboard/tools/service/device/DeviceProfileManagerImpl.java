@@ -22,6 +22,7 @@ import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.thingsboard.rest.client.RestClient;
 import org.thingsboard.server.common.data.DeviceProfile;
 import org.thingsboard.server.common.data.page.PageLink;
@@ -101,10 +102,29 @@ public class DeviceProfileManagerImpl implements DeviceProfileManager {
                 deviceProfiles.put(name, existedDeviceProfileMap.get(name));
             } else {
                 if (createOnStart) {
-                    DeviceProfile deviceProfileSaved = getRestClient().saveDeviceProfile(deviceProfile);
-                    log.info("Device profile [{}] have been created", name);
+                    DeviceProfile deviceProfileSaved;
+                    try {
+                        deviceProfileSaved = getRestClient().saveDeviceProfile(deviceProfile);
+                        log.info("Device profile [{}] have been created", name);
+                        deviceProfilesCreated.add(deviceProfileSaved);
+                    } catch (HttpClientErrorException.BadRequest e) {
+                        // TOCTOU: another instance (e.g. a sibling shard pod) created this profile between our
+                        // existence check above and this save. Re-fetch and reuse it instead of failing the run.
+                        String body = e.getResponseBodyAsString();
+                        if (body != null && body.contains("already exists")) {
+                            log.info("Device profile [{}] was created concurrently by another instance — reusing it", name);
+                            // No get-by-name endpoint exists, so narrow the paged list with a server-side text
+                            // search. textSearch is a substring match, so still exact-match below (a name that is
+                            // a prefix of another would otherwise slip through).
+                            deviceProfileSaved = getRestClient().getDeviceProfiles(new PageLink(100, 0, name)).getData().stream()
+                                    .filter(p -> name.equals(p.getName()))
+                                    .findFirst()
+                                    .orElseThrow(() -> e);
+                        } else {
+                            throw e;
+                        }
+                    }
                     deviceProfiles.put(name, deviceProfileSaved);
-                    deviceProfilesCreated.add(deviceProfileSaved);
                 } else {
                     throw new RuntimeException("Device profile " + name + " not found, but create on start is not allowed");
                 }
