@@ -144,12 +144,12 @@ class GatewayRpcReceiverTest {
     }
 
     @Test
-    void attachSubscribesEachClientAndClearsUnconfirmedOnAck() {
+    void attachSubscribesEachClientAndClearsUnconfirmedOnAck() throws InterruptedException {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats);
         FakeMqttClient a = new FakeMqttClient(loop);
         FakeMqttClient b = new FakeMqttClient(loop);
-        r.attach(List.of(a, b));
+        r.attach(List.of(a, b), 0);
         assertThat(a.subscribedTopics).containsExactly("v1/gateway/rpc");
         assertThat(b.subscribedTopics).containsExactly("v1/gateway/rpc");
         // both SUBACKed -> acked=2 and the unconfirmed gauge is back to 0
@@ -196,11 +196,11 @@ class GatewayRpcReceiverTest {
     }
 
     @Test
-    void resubscribeReusesTheSameHandlerInstance() {
+    void resubscribeReusesTheSameHandlerInstance() throws InterruptedException {
         RpcLatencyStats stats = new RpcLatencyStats();
         GatewayRpcReceiver r = receiver(stats);
         FakeMqttClient fake = new FakeMqttClient(loop);
-        r.attach(List.of(fake));
+        r.attach(List.of(fake), 0);
         r.resubscribe(fake);
         assertThat(fake.subscribedTopics).containsExactly("v1/gateway/rpc", "v1/gateway/rpc");
         assertThat(fake.subscribedHandlers.get(0)).isSameAs(fake.subscribedHandlers.get(1)); // dedup-safe

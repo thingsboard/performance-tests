@@ -97,10 +97,17 @@ public class GatewayRpcReceiver {
         this.backoffMaxMs = backoffMaxMs;
     }
 
-    public void attach(List<MqttClient> clients) {
+    public void attach(List<MqttClient> clients, int packSize) throws InterruptedException {
         log.info("Gateway RPC stats key:\n{}", RpcLatencyStats.legend());
+        int n = 0;
         for (MqttClient client : clients) {
             subscribe(client);
+            // Spread the SUBSCRIBE exactly like warm-up connects gateways: in packs of packSize with a small
+            // jittered pause, so a cold transport isn't hit by every gateway subscribing in the same instant
+            // (that connect->subscribe->announce transition burst reset established connections).
+            if (packSize > 0 && ++n % packSize == 0) {
+                Thread.sleep(100 + ThreadLocalRandom.current().nextInt(100));
+            }
         }
         log.info("Subscribed {} gateways to RPC topic {}", clients.size(), topic);
     }

@@ -331,7 +331,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
                 future.cause());
     }
 
-    protected void attachRpcReceiver() {
+    protected void attachRpcReceiver() throws InterruptedException {
         ObjectMapper mapper = new ObjectMapper();
         RpcResponseTemplate template = rpcRespond ? RpcResponseTemplate.load(rpcResponseTemplate) : null;
         RpcMessageProcessor processor = new RpcMessageProcessor(mapper, rpcSendTsPath, rpcRespond, template);
@@ -346,7 +346,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         statsReporter().register(StatsBlock.RPC_SUBSCRIPTION, rpcReceiver::subscriptionSummary);
         statsReporter().register(StatsBlock.RPC_IN, rpcReceiver::inSummary);
         statsReporter().register(StatsBlock.RPC_OUT, rpcReceiver::outSummary);
-        rpcReceiver.attach(mqttClients);
+        rpcReceiver.attach(mqttClients, warmUpPackSize);
         // On reconnect, a gateway loses its RPC subscription (cleanSession) and its server-side
         // sub-device routing; restore both so RPC delivery resumes instead of silently dropping.
         // Also flush any replies buffered while the channel was down so they land within the RPC expiry.
