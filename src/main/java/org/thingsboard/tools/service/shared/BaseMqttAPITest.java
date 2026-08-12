@@ -146,7 +146,8 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
 
     public void warmUpDevices() throws InterruptedException {
         log.info("Warming up {} devices...", deviceClients.size());
-        AtomicInteger totalWarmedUpCount = new AtomicInteger();
+        AtomicInteger okCount = new AtomicInteger();
+        AtomicInteger failedCount = new AtomicInteger();
         List<DeviceClient> pack = null;
         for (DeviceClient device : deviceClients) {
             if (pack == null) {
@@ -154,38 +155,51 @@ public abstract class BaseMqttAPITest extends AbstractAPITest {
             }
             pack.add(device);
             if (pack.size() == warmUpPackSize) {
-                sendAndWaitPack(pack, totalWarmedUpCount);
+                sendAndWaitPack(pack, okCount, failedCount);
                 pack = null;
             }
         }
         if (pack != null && !pack.isEmpty()) {
-            sendAndWaitPack(pack, totalWarmedUpCount);
+            sendAndWaitPack(pack, okCount, failedCount);
         }
-        log.info("{} devices have been warmed up successfully!", deviceClients.size());
+        int total = deviceClients.size();
+        int ok = okCount.get();
+        int failed = failedCount.get();
+        int incomplete = total - ok - failed; // futures that never completed (hung past the 10s pack timeout)
+        if (failed == 0 && incomplete == 0) {
+            log.info("{} devices have been warmed up successfully!", ok);
+        } else {
+            // Loud, honest summary: previously this always logged deviceClients.size() as "successfully",
+            // masking announce failures. Never claim success while any device failed or never acked.
+            log.error("Warm-up FINISHED WITH LOSS: {} ok, {} FAILED, {} incomplete (never acked) out of {} devices" +
+                            " — see the per-device 'Error while publishing warm up message' lines above for the cause.",
+                    ok, failed, incomplete, total);
+        }
     }
 
-    private void sendAndWaitPack(List<DeviceClient> pack, AtomicInteger totalWarmedUpCount) throws InterruptedException {
+    private void sendAndWaitPack(List<DeviceClient> pack, AtomicInteger okCount, AtomicInteger failedCount) throws InterruptedException {
         CountDownLatch packLatch = new CountDownLatch(pack.size());
         for (DeviceClient deviceClient : pack) {
             restClientService.getScheduler().submit(() -> {
                 warmUpPublish(deviceClient)
                         .addListener(future -> {
                                     if (future.isSuccess()) {
+                                        okCount.getAndIncrement();
                                         log.debug("Warm up Message was successfully published to device: {}", deviceClient.getDeviceName());
                                     } else {
-                                        log.error("Error while publishing warm up message to device: {}", deviceClient.getDeviceName());
+                                        failedCount.getAndIncrement();
+                                        // Log the ACTUAL cause (PUBACK timeout, connection lost, broker error, ...),
+                                        // not just the device name — this is the only place the reason is available.
+                                        log.error("Error while publishing warm up message to device: {}", deviceClient.getDeviceName(), future.cause());
                                     }
                                     packLatch.countDown();
-                                    totalWarmedUpCount.getAndIncrement();
                                 }
                         );
             });
         }
-        boolean succeeded = packLatch.await(10, TimeUnit.SECONDS);
-        if (succeeded) {
-            log.info("[{}] devices have been warmed up!", totalWarmedUpCount.get());
-        } else {
-            log.error("[{}] devices warmed up failed: {}!", totalWarmedUpCount.get(), packLatch.getCount());
+        if (!packLatch.await(10, TimeUnit.SECONDS)) {
+            log.error("Warm-up pack timed out: {} of {} devices did not complete (no ack, no error) within 10s",
+                    packLatch.getCount(), pack.size());
         }
     }
 
