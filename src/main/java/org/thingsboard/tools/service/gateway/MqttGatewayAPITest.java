@@ -502,7 +502,12 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     /** Schedules this gateway's own periodic batch-telemetry publish (one MQTT publish carrying all of its
      *  sub-devices' next messages, same construction as {@link MqttGatewayBatchAPITest#nextPublishTask}),
      *  independent of every other gateway's timer. No-op when publishing is disabled (MESSAGES_PER_SECOND=0)
-     *  or this gateway has no sub-devices. */
+     *  or this gateway has no sub-devices.
+     *  <p>Period is MPS-derived so STAGGERED's steady-state aggregate matches PHASED's: today's metronome
+     *  does {@code testMessagesPerSecond} gateway-batch publishes/sec by sweeping the whole fleet, i.e.
+     *  each gateway publishes once every {@code entityCount / testMessagesPerSecond} seconds — so each
+     *  independent per-gateway timer here fires on that same period, jittered so the first fires aren't
+     *  synchronized across gateways. */
     private void scheduleGatewayTelemetry(int gwIdx, MqttClient client, String gatewayName, List<String> deviceNames) {
         if (testMessagesPerSecond <= 0 || deviceNames.isEmpty()) {
             return;
@@ -512,7 +517,9 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         logClient.setGatewayName(gatewayName);
         logClient.setDeviceName("batch[" + deviceNames.size() + " devices]");
         AtomicInteger tick = new AtomicInteger();
-        long initialDelayMs = EphemeralSchedule.firstOffsetMillis(new Random(seed + gwIdx), 1000L);
+        int entityCount = gatewayEndIdx - gatewayStartIdx;
+        long periodMs = Math.max(1L, (entityCount * 1000L) / testMessagesPerSecond);
+        long initialJitterMs = EphemeralSchedule.firstOffsetMillis(new Random(seed + gwIdx), periodMs);
         ScheduledFuture<?> timer = restClientService.getScheduler().scheduleAtFixedRate(() -> {
             try {
                 ObjectNode batch = mapper.createObjectNode();
@@ -535,7 +542,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
             } catch (Exception e) {
                 log.warn("STAGGERED telemetry publish failed for gateway [{}]", gatewayName, e);
             }
-        }, initialDelayMs, 1000L, TimeUnit.MILLISECONDS);
+        }, initialJitterMs, periodMs, TimeUnit.MILLISECONDS);
         gatewayTelemetryTimers.add(timer);
     }
 
