@@ -17,6 +17,7 @@ package org.thingsboard.tools.service.gateway;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.mqtt.MqttQoS;
 import io.netty.util.concurrent.Future;
@@ -27,14 +28,18 @@ import org.springframework.stereotype.Service;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.id.IdBased;
 import org.thingsboard.mqtt.MqttClient;
+import org.thingsboard.mqtt.MqttConnectResult;
 import org.thingsboard.tools.service.gateway.rpc.GatewayRpcReceiver;
 import org.thingsboard.tools.service.gateway.rpc.RpcBurstSender;
 import org.thingsboard.tools.service.gateway.rpc.RpcLatencyStats;
 import org.thingsboard.tools.service.gateway.rpc.RpcMessageProcessor;
 import org.thingsboard.tools.service.gateway.rpc.RpcResponseTemplate;
+import org.thingsboard.tools.service.msg.NodeMsg;
 import org.thingsboard.tools.service.mqtt.DeviceClient;
 import org.thingsboard.tools.service.shared.BaseMqttAPITest;
 import org.thingsboard.tools.service.shared.StatsBlock;
+import org.thingsboard.tools.service.shared.onboarding.EntityLifecycle;
+import org.thingsboard.tools.service.shared.onboarding.StaggeredOnboardingEngine;
 
 import jakarta.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
@@ -45,6 +50,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -124,6 +132,22 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
 
     private RpcBurstSender rpcBurstSender;
 
+    // STAGGERED onboarding (onboard.mode=STAGGERED): PHASED (default) never touches any of these.
+    private StaggeredOnboardingEngine onboardingEngine;
+    // Precomputed gateway-index -> name / sub-device-names model, built once by prepareStaggeredModel().
+    // Unlike PHASED's mapDevicesToGatewayClientConnections (which derives the mapping from mqttClients'
+    // connect order, established only after ALL gateways connect), this is index-based so onboard(idx)
+    // can look up its own assignment before any connection exists.
+    private List<String> staggeredGatewayNames;
+    private Map<Integer, List<String>> staggeredGatewayDeviceNames;
+    // Per-gateway telemetry timers started by the STAGGERED path (one per onboarded gateway); cancelled
+    // when the test duration elapses.
+    private final List<ScheduledFuture<?>> gatewayTelemetryTimers = Collections.synchronizedList(new ArrayList<>());
+
+    private boolean staggered() {
+        return "STAGGERED".equalsIgnoreCase(onboardMode);
+    }
+
     @Override
     protected boolean isInboundHandlingEnabled() {
         return rpcEnabled;
@@ -169,6 +193,13 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
 
     @Override
     public void connectGateways() throws InterruptedException {
+        if (staggered()) {
+            // STAGGERED: no bulk connect here. Build the gateway/device name model only; the engine
+            // (driven from runApiTests()) connects + announces + subscribes each gateway on its own
+            // paced schedule.
+            prepareStaggeredModel();
+            return;
+        }
         AtomicInteger totalConnectedCount = new AtomicInteger();
         List<String> pack = null;
         List<String> gatewayNames;
@@ -219,6 +250,36 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         }
     }
 
+    /**
+     * STAGGERED-only: same gateway-name resolution and deviceIdx % gatewayCount assignment as
+     * {@link #mapDevicesToGatewayClientConnections()}, but keyed by gateway INDEX (0-based, local to
+     * this instance's [gatewayStartIdx, gatewayEndIdx)) instead of by connected {@link MqttClient} —
+     * so the assignment exists before any gateway has connected, and {@code onboard(idx)} can look up
+     * its own sub-device names deterministically regardless of connect order/timing.
+     */
+    private void prepareStaggeredModel() {
+        List<String> gatewayNames;
+        if (!gateways.isEmpty()) {
+            gatewayNames = gateways.stream().map(Device::getName).collect(Collectors.toList());
+        } else {
+            gatewayNames = new ArrayList<>();
+            for (int i = gatewayStartIdx; i < gatewayEndIdx; i++) {
+                gatewayNames.add(getToken(true, i));
+            }
+        }
+        this.staggeredGatewayNames = gatewayNames;
+        int gatewayCount = gatewayNames.size();
+        Map<Integer, List<String>> byGatewayIdx = new ConcurrentHashMap<>();
+        for (int i = deviceStartIdx; i < deviceEndIdx; i++) {
+            int deviceIdx = i - deviceStartIdx;
+            int gatewayIdx = deviceIdx % gatewayCount;
+            byGatewayIdx.computeIfAbsent(gatewayIdx, k -> Collections.synchronizedList(new ArrayList<>()))
+                    .add(getToken(false, i));
+        }
+        this.staggeredGatewayDeviceNames = byGatewayIdx;
+        log.info("STAGGERED model prepared: {} gateways, {} devices", gatewayCount, deviceEndIdx - deviceStartIdx);
+    }
+
     /** Re-announce a reconnected gateway's sub-devices so the server re-routes their RPC through it.
      *  Reuses the gateway connect topic and payload used at warm-up. */
     private void reannounceDevices(MqttClient gatewayClient) {
@@ -247,14 +308,81 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     }
 
     @Override
-    public void runApiTests() throws InterruptedException {
-        if (rpcSenderEnabled) {
-            startRpcBurstSender();
+    public void warmUpDevices() throws InterruptedException {
+        if (staggered()) {
+            return; // STAGGERED: announcement happens inside EntityLifecycle.onboard(), driven from runApiTests()
         }
+        super.warmUpDevices();
+    }
+
+    @Override
+    public void runApiTests() throws InterruptedException {
+        if (!staggered()) {
+            if (rpcSenderEnabled) {
+                startRpcBurstSender();
+            }
+            try {
+                super.runApiTests(deviceClients.size());
+            } finally {
+                // Stop firing new bursts BEFORE draining so the tail can settle without fresh inbound.
+                if (rpcBurstSender != null) {
+                    rpcBurstSender.stop();
+                }
+                if (rpcEnabled && rpcReceiver != null) {
+                    long quietMs = rpcDrainQuietSec * 1000L;
+                    long maxMs = GatewayRpcReceiver.resolveDrainMaxMs(
+                            rpcDrainMaxSecConfig, rpcSenderEnabled, rpcSenderTimeoutMs, rpcResponseDelayMs, rpcDrainQuietSec);
+                    log.info("Gateway RPC drain: waiting for in-flight RPCs to settle (quietSec={}, maxSec={})...",
+                            rpcDrainQuietSec, maxMs / 1000);
+                    GatewayRpcReceiver.DrainResult result = rpcReceiver.drain(quietMs, maxMs, rpcRespond);
+                    rpcReceiver.finalizeLostReplies(); // replies still buffered (client never reconnected) are lost
+                    rpcReceiver.logPending();      // name the distinct still-unanswered RPCs for DB EXPIRED correlation
+                    String drainLine = String.format("Gateway RPC drain complete [drained %.1fs, quiesced=%b]",
+                            result.elapsedMs / 1000.0, result.quiesced);
+                    if (result.quiesced) {
+                        log.info(drainLine);
+                    } else {
+                        log.warn(drainLine);
+                    }
+                    log.info(rpcReceiver.inTotalSummary());   // RPC In  [total]: publish=… (new …, redelivered …)
+                    log.info(rpcReceiver.outTotalSummary());  // RPC Out [total]: publish=…, pubAck=…, failed=…, recovered=…, lost=…
+
+                }
+            }
+            return;
+        }
+        runStaggeredApiTests();
+    }
+
+    /**
+     * STAGGERED: ramp gateways in through the engine (each onboard connects + announces + subscribes +
+     * schedules its own telemetry timer — see {@link #connectAnnounceSubscribeAndSchedule(int)}), start
+     * the RPC sender only once the ramp completes (PHASED starts it up-front, before any connection
+     * exists), then hold for the test duration. Reuses the same RPC drain/summary block as the PHASED
+     * {@code finally} above.
+     */
+    private void runStaggeredApiTests() throws InterruptedException {
+        statsReporter().start();
+        if (rpcEnabled) {
+            initRpcReceiver();
+        }
+        onboardingEngine = new StaggeredOnboardingEngine(
+                gatewayLifecycle(), onboardMaxConcurrent, onboardFirstJitterSec, /*schedulerThreads*/ 2, seed);
+        onboardingEngine.start((onboarded, failed) -> {
+            log.info("STAGGERED gateway ramp complete: {} onboarded, {} failed — starting RPC sender", onboarded, failed);
+            if (rpcSenderEnabled) {
+                startRpcBurstSender();   // existing method, unchanged: full device list
+            }
+        });
         try {
-            super.runApiTests(deviceClients.size());
+            Thread.sleep(testDurationInSec * 1000L);
         } finally {
-            // Stop firing new bursts BEFORE draining so the tail can settle without fresh inbound.
+            for (ScheduledFuture<?> timer : gatewayTelemetryTimers) {
+                timer.cancel(false);
+            }
+            if (onboardingEngine != null) {
+                onboardingEngine.stop();
+            }
             if (rpcBurstSender != null) {
                 rpcBurstSender.stop();
             }
@@ -265,8 +393,8 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
                 log.info("Gateway RPC drain: waiting for in-flight RPCs to settle (quietSec={}, maxSec={})...",
                         rpcDrainQuietSec, maxMs / 1000);
                 GatewayRpcReceiver.DrainResult result = rpcReceiver.drain(quietMs, maxMs, rpcRespond);
-                rpcReceiver.finalizeLostReplies(); // replies still buffered (client never reconnected) are lost
-                rpcReceiver.logPending();      // name the distinct still-unanswered RPCs for DB EXPIRED correlation
+                rpcReceiver.finalizeLostReplies();
+                rpcReceiver.logPending();
                 String drainLine = String.format("Gateway RPC drain complete [drained %.1fs, quiesced=%b]",
                         result.elapsedMs / 1000.0, result.quiesced);
                 if (result.quiesced) {
@@ -274,11 +402,141 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
                 } else {
                     log.warn(drainLine);
                 }
-                log.info(rpcReceiver.inTotalSummary());   // RPC In  [total]: publish=… (new …, redelivered …)
-                log.info(rpcReceiver.outTotalSummary());  // RPC Out [total]: publish=…, pubAck=…, failed=…, recovered=…, lost=…
-
+                log.info(rpcReceiver.inTotalSummary());
+                log.info(rpcReceiver.outTotalSummary());
             }
         }
+    }
+
+    private EntityLifecycle gatewayLifecycle() {
+        return new EntityLifecycle() {
+            @Override
+            public int entityCount() {
+                return gatewayEndIdx - gatewayStartIdx;
+            }
+
+            @Override
+            public void onboard(int idx) throws Exception {
+                int gwIdx = gatewayStartIdx + idx;
+                // 1) connect this gateway's client (persistent, autoReconnect via createClient)
+                // 2) subscribe RPC for this client via rpcReceiver (single-client attach) + wire reconnect recovery
+                // 3) announce its sub-devices through deviceAnnouncer.announce(...) (via the inherited warmUpPublish)
+                // 4) schedule this gateway's batch-telemetry timer
+                connectAnnounceSubscribeAndSchedule(gwIdx);
+            }
+        };
+    }
+
+    /**
+     * One STAGGERED gateway's full onboarding step, composed entirely from existing pieces: the same
+     * connect sequence {@link #initClientBlocking} performs for PHASED's bulk connect, the same
+     * subscribe+reconnect wiring {@link #attachClientsToRpc} performs for PHASED's bulk attach, and the
+     * same per-device announce path ({@link #warmUpPublish}) PHASED's warm-up uses. Synchronous per the
+     * {@link EntityLifecycle#onboard} contract: throws on any failure so the engine counts this gateway
+     * as failed rather than onboarded.
+     */
+    private void connectAnnounceSubscribeAndSchedule(int gwIdx) throws Exception {
+        int localIdx = gwIdx - gatewayStartIdx;
+        String gatewayName = staggeredGatewayNames.get(localIdx);
+        List<String> deviceNames = staggeredGatewayDeviceNames.getOrDefault(localIdx, Collections.emptyList());
+
+        // 1) connect (persistent; createClient() applies autoReconnect() same as every other gateway client)
+        MqttClient client = initClientBlocking(gatewayName);
+        mqttClients.add(client);
+        clientNames.put(client, gatewayName);
+
+        // Register this gateway's device group before any reconnect-triggered re-announce can occur.
+        gatewayDeviceNames.put(client, Collections.synchronizedList(new ArrayList<>(deviceNames)));
+        for (String deviceName : deviceNames) {
+            DeviceClient dc = new DeviceClient();
+            dc.setMqttClient(client);
+            dc.setDeviceName(deviceName);
+            dc.setGatewayName(gatewayName);
+            deviceClients.add(dc);
+        }
+
+        // 2) subscribe RPC for this client alone + wire its reconnect recovery (mirrors attachRpcReceiver's
+        // per-client wiring, done here per-gateway instead of once in bulk over mqttClients).
+        if (rpcEnabled) {
+            attachClientsToRpc(Collections.singletonList(client), 0);
+        }
+
+        // 3) announce sub-devices through the same reliable (RPC on) / legacy QoS-0 (RPC off) path warm-up
+        // uses. No timeout here: an announce under retry can legitimately take longer than CONNECT_TIMEOUT;
+        // GatewayDeviceAnnouncer always eventually settles the future (acked or unconfirmed-after-retries).
+        for (String deviceName : deviceNames) {
+            DeviceClient dc = new DeviceClient();
+            dc.setMqttClient(client);
+            dc.setDeviceName(deviceName);
+            warmUpPublish(dc).get();
+        }
+
+        // 4) schedule this gateway's own batch-telemetry timer, starting immediately (its onboarding time
+        // is already spread by the engine's ramp jitter; an extra small per-gateway startup offset avoids
+        // every gateway's tick landing on the exact same millisecond).
+        scheduleGatewayTelemetry(gwIdx, client, gatewayName, deviceNames);
+    }
+
+    /** Blocking connect for one gateway token, identical in behavior to the private {@code initClient} used
+     *  by PHASED's {@code connectDevices} — reconstructed here (rather than reused) only because that method
+     *  is {@code private} in {@link org.thingsboard.tools.service.shared.BaseMqttAPITest}. */
+    private MqttClient initClientBlocking(String token) throws Exception {
+        MqttClient client = createClient(token);
+        Future<MqttConnectResult> connectFuture = connectAsync(client);
+        MqttConnectResult result;
+        try {
+            result = connectFuture.get(CONNECT_TIMEOUT, TimeUnit.SECONDS);
+        } catch (TimeoutException ex) {
+            connectFuture.cancel(true);
+            client.disconnect();
+            throw new RuntimeException(String.format("STAGGERED: timed out connecting gateway [%s]", token), ex);
+        }
+        if (!result.isSuccess()) {
+            connectFuture.cancel(true);
+            client.disconnect();
+            throw new RuntimeException(String.format("STAGGERED: failed to connect gateway [%s]. Result code: %s", token, result.getReturnCode()));
+        }
+        return client;
+    }
+
+    /** Schedules this gateway's own periodic batch-telemetry publish (one MQTT publish carrying all of its
+     *  sub-devices' next messages, same construction as {@link MqttGatewayBatchAPITest#nextPublishTask}),
+     *  independent of every other gateway's timer. No-op when publishing is disabled (MESSAGES_PER_SECOND=0)
+     *  or this gateway has no sub-devices. */
+    private void scheduleGatewayTelemetry(int gwIdx, MqttClient client, String gatewayName, List<String> deviceNames) {
+        if (testMessagesPerSecond <= 0 || deviceNames.isEmpty()) {
+            return;
+        }
+        DeviceClient logClient = new DeviceClient();
+        logClient.setMqttClient(client);
+        logClient.setGatewayName(gatewayName);
+        logClient.setDeviceName("batch[" + deviceNames.size() + " devices]");
+        AtomicInteger tick = new AtomicInteger();
+        long initialDelayMs = EphemeralSchedule.firstOffsetMillis(new Random(seed + gwIdx), 1000L);
+        ScheduledFuture<?> timer = restClientService.getScheduler().scheduleAtFixedRate(() -> {
+            try {
+                ObjectNode batch = mapper.createObjectNode();
+                for (String deviceName : deviceNames) {
+                    NodeMsg nodeMsg = getNextNodeMessage(deviceName, false);
+                    batch.setAll(nodeMsg.getNode());
+                }
+                byte[] data = mapper.writeValueAsBytes(batch);
+                int iteration = tick.incrementAndGet();
+                client.publish(getTestTopic(), Unpooled.wrappedBuffer(data), MqttQoS.AT_MOST_ONCE)
+                        .addListener(f -> {
+                            if (f.isSuccess()) {
+                                totalSuccessPublishedCount.incrementAndGet();
+                                logSuccessTestMessage(iteration, logClient);
+                            } else {
+                                totalFailedPublishedCount.incrementAndGet();
+                                logFailureTestMessage(iteration, logClient, f);
+                            }
+                        });
+            } catch (Exception e) {
+                log.warn("STAGGERED telemetry publish failed for gateway [{}]", gatewayName, e);
+            }
+        }, initialDelayMs, 1000L, TimeUnit.MILLISECONDS);
+        gatewayTelemetryTimers.add(timer);
     }
 
     private void startRpcBurstSender() {
@@ -332,6 +590,14 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     }
 
     protected void attachRpcReceiver() throws InterruptedException {
+        initRpcReceiver();
+        attachClientsToRpc(mqttClients, warmUpPackSize);
+    }
+
+    /** Builds {@code rpcReceiver}/{@code deviceAnnouncer} and registers their stats blocks. Split out of
+     *  {@link #attachRpcReceiver()} (which still does exactly this + the bulk attach below, unchanged)
+     *  so STAGGERED can construct these once, up front, before any gateway has connected. */
+    private void initRpcReceiver() {
         ObjectMapper mapper = new ObjectMapper();
         RpcResponseTemplate template = rpcRespond ? RpcResponseTemplate.load(rpcResponseTemplate) : null;
         RpcMessageProcessor processor = new RpcMessageProcessor(mapper, rpcSendTsPath, rpcRespond, template);
@@ -346,11 +612,18 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         statsReporter().register(StatsBlock.RPC_SUBSCRIPTION, rpcReceiver::subscriptionSummary);
         statsReporter().register(StatsBlock.RPC_IN, rpcReceiver::inSummary);
         statsReporter().register(StatsBlock.RPC_OUT, rpcReceiver::outSummary);
-        rpcReceiver.attach(mqttClients, warmUpPackSize);
+    }
+
+    /** Subscribes the given clients to the RPC topic and wires each one's reconnect recovery. Split out
+     *  of {@link #attachRpcReceiver()} (unchanged for PHASED: called once with {@code mqttClients} +
+     *  {@code warmUpPackSize}) so STAGGERED can call it per-gateway with a singleton list + packSize=0
+     *  (pacing is meaningless for a single client). */
+    private void attachClientsToRpc(List<MqttClient> clients, int packSize) throws InterruptedException {
+        rpcReceiver.attach(clients, packSize);
         // On reconnect, a gateway loses its RPC subscription (cleanSession) and its server-side
         // sub-device routing; restore both so RPC delivery resumes instead of silently dropping.
         // Also flush any replies buffered while the channel was down so they land within the RPC expiry.
-        for (MqttClient client : mqttClients) {
+        for (MqttClient client : clients) {
             setReconnectAction(client, () -> {
                 rpcReceiver.resubscribe(client);
                 reannounceDevices(client);
