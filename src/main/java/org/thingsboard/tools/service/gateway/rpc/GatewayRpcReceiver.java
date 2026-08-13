@@ -71,6 +71,10 @@ public class GatewayRpcReceiver {
     // Clients whose current v1/gateway/rpc subscription is not (yet) SUBACK-confirmed — a live gauge,
     // so a slow-but-real SUBACK is never a false positive (it self-clears whenever the SUBACK lands).
     private final java.util.Set<MqttClient> unconfirmedSubscriptions = ConcurrentHashMap.newKeySet();
+    // The RPC stats legend is one-time ceremony. PHASED calls attach() once (bulk), but STAGGERED calls it
+    // per gateway (singleton list), so without this guard the multi-line legend would repeat ~once per
+    // gateway and flood the log during onboarding. Log it exactly once, on the first attach().
+    private final AtomicBoolean legendLogged = new AtomicBoolean(false);
 
     private static final long DRAIN_POLL_MS = 500L;
 
@@ -98,7 +102,9 @@ public class GatewayRpcReceiver {
     }
 
     public void attach(List<MqttClient> clients, int packSize) throws InterruptedException {
-        log.info("Gateway RPC stats key:\n{}", RpcLatencyStats.legend());
+        if (legendLogged.compareAndSet(false, true)) {
+            log.info("Gateway RPC stats key:\n{}", RpcLatencyStats.legend());
+        }
         int n = 0;
         for (MqttClient client : clients) {
             subscribe(client);
@@ -109,7 +115,12 @@ public class GatewayRpcReceiver {
                 Thread.sleep(100 + ThreadLocalRandom.current().nextInt(100));
             }
         }
-        log.info("Subscribed {} gateways to RPC topic {}", clients.size(), topic);
+        // Only log the batch summary for a true bulk attach (PHASED). STAGGERED attaches one gateway at a
+        // time, so logging here would repeat once per gateway; the STAGGERED ramp-complete line reports the
+        // total instead.
+        if (clients.size() > 1) {
+            log.info("Subscribed {} gateways to RPC topic {}", clients.size(), topic);
+        }
     }
 
     /** Re-issue the RPC-topic subscription for one client after it reconnects (netty-mqtt clears all
