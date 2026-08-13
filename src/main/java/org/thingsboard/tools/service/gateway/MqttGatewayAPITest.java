@@ -397,10 +397,15 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
      * {@code finally} above.
      */
     private void runStaggeredApiTests() throws InterruptedException {
-        statsReporter().start();
+        // Register stats sources BEFORE starting the reporter — StatsReporter.start() snapshots
+        // sources.isEmpty() once at call time; if it's empty then, it logs "no active sources" and never
+        // schedules, so a source registered afterward would never print periodically (matches PHASED's
+        // order: connectGateways()'s attachRpcReceiver()/initRpcReceiver() always runs, via connectGateways(),
+        // before runApiTests() reaches statsReporter().start()).
         if (rpcEnabled) {
             initRpcReceiver();
         }
+        statsReporter().start();
         onboardingEngine = new StaggeredOnboardingEngine(
                 gatewayLifecycle(), onboardMaxConcurrent, onboardFirstJitterSec, /*schedulerThreads*/ 2, seed);
         onboardingEngine.start((onboarded, failed) -> {
