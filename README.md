@@ -129,3 +129,31 @@ docker run -it --rm --network host --name tb-perf-test \
            --env TEST_PAYLOAD_TYPE=SMART_METER \
            thingsboard/tb-ce-performance-test:latest
 ```
+
+## Staggered onboarding mode
+
+The persistent gateway (`TEST_API=gateway`) and direct-device (`TEST_API=device`) modes support two
+onboarding strategies, controlled by `ONBOARD_MODE`:
+
+- **`PHASED`** (default) — today's behavior: connect the whole fleet in packs, warm it up, then run the
+  fixed-rate telemetry metronome. No config change is needed to keep this behavior.
+- **`STAGGERED`** — pace the fleet in one entity (gateway or device) at a time, each at a random offset
+  within a jitter window, capped at a configurable number onboarding concurrently. Each entity starts
+  publishing its own telemetry as soon as *it* onboards (not after the whole fleet finishes), on a cadence
+  derived from `MESSAGES_PER_SECOND` so the steady-state aggregate throughput matches `PHASED`. In gateway
+  mode, if the in-tool RPC burst sender is enabled it starts only once every entity has reached a terminal
+  state (onboarded or failed) — i.e. after the whole fleet has ramped in, not before any connection exists
+  as `PHASED` does.
+
+| Variable | Default | Description |
+|---|---|---|
+| `ONBOARD_MODE` | `PHASED` | `PHASED` or `STAGGERED` (see above) |
+| `ONBOARD_MAX_CONCURRENT` | `200` | `STAGGERED` only: max entities onboarding at once |
+| `ONBOARD_FIRST_JITTER_SEC` | `60` | `STAGGERED` only: each entity's first onboard attempt is scheduled at a random offset in `[0, this)` seconds |
+
+`STAGGERED` currently supports only the combination this feature was built for: gateway mode requires
+`GATEWAY_BATCH=true`, and both gateway and device mode require `ALARMS_PER_SECOND=0`. An unsupported
+combination fails fast at startup with a clear error instead of silently behaving like `PHASED`.
+
+See [`STAGGERED-ONBOARDING-RUNBOOK.md`](./STAGGERED-ONBOARDING-RUNBOOK.md) for a smoke-test procedure
+(exact env + the expected log sequence) and known observability gaps in this mode.
