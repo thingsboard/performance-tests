@@ -22,6 +22,7 @@ import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -53,6 +54,11 @@ public class StaggeredOnboardingEngine {
     private final AtomicInteger terminal = new AtomicInteger();
     private volatile boolean running;
     private volatile RampCompleteCallback onComplete;
+    // Periodic onboarding-progress line (replaces per-entity subscribe/announce log spam under STAGGERED);
+    // cancelled at ramp-complete so the final "Ramp complete: ..." line closes it out.
+    private volatile ScheduledFuture<?> progressTask;
+
+    private static final long PROGRESS_LOG_INTERVAL_SEC = 10L;
 
     public StaggeredOnboardingEngine(EntityLifecycle lifecycle, int maxConcurrentOnboards,
                                      int firstJitterSec, int schedulerThreads, long seed) {
@@ -80,6 +86,15 @@ public class StaggeredOnboardingEngine {
             long offset = EphemeralSchedule.firstOffsetMillis(rng, firstJitterMillis);
             timer.schedule(() -> onboardOne(idx), offset, TimeUnit.MILLISECONDS);
         }
+        this.progressTask = timer.scheduleAtFixedRate(this::logProgress,
+                PROGRESS_LOG_INTERVAL_SEC, PROGRESS_LOG_INTERVAL_SEC, TimeUnit.SECONDS);
+    }
+
+    private void logProgress() {
+        log.info("STAGGERED onboarding progress: {} / {} onboarded, {} in-flight, {} failed",
+                String.format(java.util.Locale.US, "%,d", onboarded.get()),
+                String.format(java.util.Locale.US, "%,d", lifecycle.entityCount()),
+                inFlightCount(), failed.get());
     }
 
     private void onboardOne(int idx) {
@@ -108,6 +123,10 @@ public class StaggeredOnboardingEngine {
     }
 
     private void fireComplete() {
+        ScheduledFuture<?> pt = this.progressTask;
+        if (pt != null) {
+            pt.cancel(false);
+        }
         log.info("Ramp complete: {} onboarded, {} failed", onboarded.get(), failed.get());
         RampCompleteCallback cb = this.onComplete;
         if (cb != null) {
@@ -123,4 +142,5 @@ public class StaggeredOnboardingEngine {
 
     public int onboardedCount() { return onboarded.get(); }
     public int failedCount() { return failed.get(); }
+    public int inFlightCount() { return maxConcurrentOnboards - permits.availablePermits(); }
 }
