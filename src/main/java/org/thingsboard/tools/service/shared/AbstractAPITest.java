@@ -119,6 +119,13 @@ public abstract class AbstractAPITest {
     @Value("${gateway.overwriteActivityTime:false}")
     protected boolean gatewayOverwriteActivityTime;
 
+    @Value("${onboard.mode:PHASED}")
+    protected String onboardMode;
+    @Value("${onboard.maxConcurrent:200}")
+    protected int onboardMaxConcurrent;
+    @Value("${onboard.firstJitterSec:60}")
+    protected int onboardFirstJitterSec;
+
     @Autowired
     @Qualifier("randomTelemetryGenerator")
     protected MessageGenerator tsMsgGenerator;

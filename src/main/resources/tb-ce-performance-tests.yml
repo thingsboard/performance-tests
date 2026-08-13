@@ -200,6 +200,12 @@ gateway:
       queue: "${GATEWAY_RPC_SENDER_QUEUE:RpcCalls}" # rule-engine queue name in the URL
       timeoutMs: "${GATEWAY_RPC_SENDER_TIMEOUT_MS:10000}" # rule-engine call timeout; MUST equal the rule chain's hardcoded TIMEOUT_MS
 
+# Onboarding strategy for the persistent gateway/device modes.
+onboard:
+  mode: "${ONBOARD_MODE:PHASED}"                       # PHASED (default, today's warmup) | STAGGERED
+  maxConcurrent: "${ONBOARD_MAX_CONCURRENT:200}"       # STAGGERED: max entities onboarding at once
+  firstJitterSec: "${ONBOARD_FIRST_JITTER_SEC:60}"     # STAGGERED: each entity's first onboard spread over [0,this)s
+
 customer:
   startIdx: "${CUSTOMER_START_IDX:0}"
   endIdx: "${CUSTOMER_END_IDX:0}"
