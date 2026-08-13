@@ -113,4 +113,30 @@ class StaggeredOnboardingEngineTest {
         assertThat(complete.await(2, TimeUnit.SECONDS)).isTrue();
         engine.stop();
     }
+
+    /**
+     * Guards the ramp-complete-fires-exactly-once contract with a counter, not a {@code
+     * CountDownLatch(1)}: a latch's {@code countDown()} is a silent no-op once it's already at zero, so a
+     * test that only awaits the latch would pass even if the callback fired twice. An {@link
+     * AtomicInteger}, checked after giving a hypothetical duplicate a grace window to land, actually
+     * catches a double-fire.
+     */
+    @Test
+    void rampCompleteFiresExactlyOnce() throws Exception {
+        StubLifecycle stub = new StubLifecycle(50, 0);
+        AtomicInteger completeCalls = new AtomicInteger();
+        CountDownLatch firstComplete = new CountDownLatch(1);
+
+        StaggeredOnboardingEngine engine =
+                new StaggeredOnboardingEngine(stub, 8, 0, 2, 7L);
+        engine.start((onboarded, failed) -> {
+            completeCalls.incrementAndGet();
+            firstComplete.countDown();
+        });
+
+        assertThat(firstComplete.await(10, TimeUnit.SECONDS)).isTrue();
+        Thread.sleep(200); // grace window: let any hypothetical duplicate fire land before asserting
+        assertThat(completeCalls.get()).isEqualTo(1);
+        engine.stop();
+    }
 }

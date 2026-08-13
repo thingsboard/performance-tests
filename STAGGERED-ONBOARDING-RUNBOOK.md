@@ -130,6 +130,16 @@ All lines below are `INFO` unless noted; `%` placeholders are the actual `{}` sl
    RPC In [total]: publish=... (new ..., redelivered ...)
    RPC Out [total]: publish=..., pubAck=..., failed=..., recovered=..., lost=...
    ```
+   If `DURATION_IN_SECONDS` is too short for the ramp to finish (e.g. `ONBOARD_FIRST_JITTER_SEC` +
+   cap-bounded ramp time exceeds it), shutdown instead starts with a `WARN` naming the cause — not every
+   gateway/device onboarded, and (gateway mode) the RPC sender never started:
+   ```
+   STAGGERED: test.duration (90s) elapsed before the onboarding ramp completed — not every gateway may
+   have onboarded, and the RPC sender (if enabled) never started. Consider raising DURATION_IN_SECONDS or
+   lowering ONBOARD_MAX_CONCURRENT/ONBOARD_FIRST_JITTER_SEC.
+   ```
+   Not expected in this runbook's env (90s duration comfortably exceeds the 20s jitter + ramp time for 6
+   gateways at cap 2) — if you see it here, raise `DURATION_IN_SECONDS`.
 
 ## 3. Pass/fail checklist
 
@@ -139,6 +149,9 @@ All lines below are `INFO` unless noted; `%` placeholders are the actual `{}` sl
 - [ ] Per-gateway/device telemetry `DEBUG` lines appear at staggered times, not bunched at one instant.
 - [ ] `Ramp complete: N onboarded, 0 failed` fires only after step 2's timestamp + roughly the jitter/cap-bounded ramp time — not immediately.
 - [ ] `STAGGERED gateway ramp complete: ...` fires immediately after, and `RPC burst sender: <full-device-count> devices ...` (if `GATEWAY_RPC_SENDER_ENABLED=true`) shows the **complete** device range, proving the sender started from the full post-ramp list and only after ramp-complete (there is no earlier `RPC burst sender: ...` line anywhere above it in the log).
+- [ ] No `STAGGERED: test.duration (...) elapsed before the onboarding ramp completed` `WARN` line (it should only appear if `DURATION_IN_SECONDS` is too short for the ramp — not expected with this env's settings).
+- [ ] Periodic `Throughput [window Ns]: publishOk=..., publishFail=..., ~N msg/s ...` lines appear at each `STATS_LOG_INTERVAL_SEC` tick (both gateway and device mode).
+- [ ] Gateway + `GATEWAY_RPC_ENABLED=true`: periodic `RPC Subscription`/`RPC In`/`RPC Out`/`Gateway device announce` lines also appear at each `STATS_LOG_INTERVAL_SEC` tick (not just at shutdown).
 - [ ] Drain + `RPC In [total]` / `RPC Out [total]` lines appear at shutdown (RPC runs only).
 
 ## 4. Known gaps to account for when reading the log (not smoke-test failures)
@@ -146,19 +159,22 @@ All lines below are `INFO` unless noted; `%` placeholders are the actual `{}` sl
 - **No periodic `Connections [window Ns]: live=.../...` line during STAGGERED.** `registerConnectionStats()`
   is only called on the PHASED connect path; STAGGERED's `connectGateways()`/`connectDevices()` return
   early before reaching it (by design — see Task 3/4 notes: the fixed-fleet connections gauge doesn't fit
-  a paced ramp). Don't wait for this line; it will not appear.
-- **Gateway + `GATEWAY_RPC_ENABLED=true`: the periodic `RPC Subscription` / `RPC In` / `RPC Out` /
-  `Gateway device announce` interval lines do not appear during a STAGGERED run.** `runStaggeredApiTests()`
-  calls `statsReporter().start()` *before* `initRpcReceiver()` registers those four blocks
-  (`MqttGatewayAPITest.java`, `statsReporter().start()` a few lines above the `if (rpcEnabled)
-  { initRpcReceiver(); }` that follows it). `StatsReporter.start()` checks `sources.isEmpty()` and, finding
-  it empty at that point, logs `Stats logging: no active sources for this run` and returns without ever
-  scheduling the periodic task — and nothing calls `start()` again afterward, so the four blocks registered
-  moments later are silently never reported for the rest of the run. **This looks like a real ordering
-  defect** (unlike the connections-gauge gap above, these blocks clearly are meant to report — the
-  `register()` calls exist), reported separately rather than fixed here per this task's scope (verification
-  only, no production-code changes). It does **not** lose data: the one-shot drain-time
-  `RPC In [total]` / `RPC Out [total]` lines (step 5/6 above) are logged directly, not through
-  `StatsReporter`, so end-of-run totals are still correct — only the per-`STATS_LOG_INTERVAL_SEC` snapshots
-  during the run are missing. If you need those during the run, that's a sign the ordering bug needs
-  fixing, not that your run is broken.
+  a paced ramp). Don't wait for this line; it will not appear. **This is the only remaining known gap** —
+  it is a deliberate scope boundary, not a defect, and there is no plan to close it (a live-ramp connection
+  gauge would need its own design, not a reuse of the fixed-fleet one).
+
+Two items that used to be listed here have been fixed and no longer apply:
+
+- ~~Gateway `RPC Subscription`/`RPC In`/`RPC Out`/`Gateway device announce` periodic lines don't
+  appear~~ — **fixed** (commit `ea124c2`). `runStaggeredApiTests()` now calls `initRpcReceiver()` (which
+  registers those four blocks) *before* `statsReporter().start()`, matching PHASED's order. The periodic
+  lines print normally now; re-run the smoke test and confirm you see them at each `STATS_LOG_INTERVAL_SEC`
+  tick when `GATEWAY_RPC_ENABLED=true`.
+- ~~No periodic `Throughput [window Ns]: ...` line~~ — **fixed**. Both STAGGERED paths now register
+  `StatsBlock.THROUGHPUT` the same way `AbstractAPITest.runApiTests(int)` does for PHASED (guarded by
+  `MESSAGES_PER_SECOND > 0`), before `statsReporter().start()`. This was actually the more serious of the
+  two gaps for direct-device mode: device STAGGERED registers no other stats block, so before this fix
+  `statsReporter().start()` found an empty source map, logged `Stats logging: no active sources for this
+  run`, and the reporter stayed inert for the entire run — no periodic output of any kind. Confirm the
+  `Throughput [window Ns]: publishOk=..., publishFail=..., ~N msg/s ...` line now appears periodically in
+  both gateway and device STAGGERED runs with `MESSAGES_PER_SECOND > 0`.

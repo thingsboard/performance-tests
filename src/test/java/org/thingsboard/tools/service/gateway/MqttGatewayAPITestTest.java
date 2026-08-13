@@ -15,6 +15,8 @@
  */
 package org.thingsboard.tools.service.gateway;
 
+import io.netty.util.concurrent.ImmediateEventExecutor;
+import io.netty.util.concurrent.Promise;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -171,5 +173,54 @@ class MqttGatewayAPITestTest extends MqttGatewayAPITest {
         gatewayBatchEnabled = true;
         alarmsPerSecond = 0;
         checkStaggeredSupported(); // must not throw
+    }
+
+    // --- onboardConnectedGateway(): commit-on-success-only (no partial-onboarding leak) ---
+
+    @Test
+    void midOnboardFailureLeavesNoEntryInSharedCollections() {
+        gatewayStartIdx = 100;
+        gatewayEndIdx = 101; // single gateway
+
+        MqttClient client = mock(MqttClient.class);
+        // Simulate a mid-onboard failure: the connect step already "succeeded" (this test starts past
+        // it, with an already-"connected" mock client — see onboardConnectedGateway's javadoc), but the
+        // announce step's publish never confirms.
+        Promise<Void> failedAnnounce = ImmediateEventExecutor.INSTANCE.newPromise();
+        failedAnnounce.setFailure(new RuntimeException("simulated announce failure"));
+        when(client.publish(any(), any(), any())).thenReturn(failedAnnounce);
+
+        assertThatThrownBy(() ->
+                onboardConnectedGateway(100, client, "GW00000100", List.of("DW00000000")))
+                .isInstanceOf(Exception.class);
+
+        // The defect this guards: a gateway that fails partway must leave NO trace in any of the shared
+        // collections startRpcBurstSender()/the telemetry scheduler/reconnect recovery read from wholesale
+        // — otherwise a partially-onboarded gateway's un-announced devices would contaminate the RPC
+        // target list.
+        assertThat(mqttClients).isEmpty();
+        assertThat(deviceClients).isEmpty();
+        assertThat(gatewayDeviceNames).isEmpty();
+        assertThat(gatewayTelemetryTimers).isEmpty();
+        verify(client).disconnect();
+    }
+
+    @Test
+    void fullyOnboardedGatewayCommitsAllThreeCollections() throws Exception {
+        gatewayStartIdx = 200;
+        gatewayEndIdx = 201;
+        testMessagesPerSecond = 0; // keep this test focused on the commit, not the telemetry timer
+
+        MqttClient client = mock(MqttClient.class);
+        Promise<Void> ackedAnnounce = ImmediateEventExecutor.INSTANCE.newPromise();
+        ackedAnnounce.setSuccess(null);
+        when(client.publish(any(), any(), any())).thenReturn(ackedAnnounce);
+
+        onboardConnectedGateway(200, client, "GW00000200", List.of("DW00000000", "DW00000001"));
+
+        assertThat(mqttClients).containsExactly(client);
+        assertThat(deviceClients).hasSize(2);
+        assertThat(gatewayDeviceNames.get(client)).containsExactly("DW00000000", "DW00000001");
+        verify(client, never()).disconnect();
     }
 }

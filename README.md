@@ -156,4 +156,5 @@ onboarding strategies, controlled by `ONBOARD_MODE`:
 combination fails fast at startup with a clear error instead of silently behaving like `PHASED`.
 
 See [`STAGGERED-ONBOARDING-RUNBOOK.md`](./STAGGERED-ONBOARDING-RUNBOOK.md) for a smoke-test procedure
-(exact env + the expected log sequence) and known observability gaps in this mode.
+(exact env + the expected log sequence) and the one remaining observability limitation in this mode (no
+live connections gauge during the ramp).

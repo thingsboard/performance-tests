@@ -38,6 +38,7 @@ import org.thingsboard.tools.service.msg.NodeMsg;
 import org.thingsboard.tools.service.mqtt.DeviceClient;
 import org.thingsboard.tools.service.shared.BaseMqttAPITest;
 import org.thingsboard.tools.service.shared.StatsBlock;
+import org.thingsboard.tools.service.shared.ThroughputStats;
 import org.thingsboard.tools.service.shared.onboarding.EntityLifecycle;
 import org.thingsboard.tools.service.shared.onboarding.StaggeredOnboardingEngine;
 
@@ -53,6 +54,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -172,7 +174,8 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     // Gateway client -> its sub-device names, for re-announcing sub-devices on reconnect.
     // ConcurrentHashMap (not HashMap): populated on the main thread before start, then read from reconnect
     // callbacks on netty event-loop threads — safe-publish without relying on incidental happens-before.
-    private final Map<MqttClient, List<String>> gatewayDeviceNames = new ConcurrentHashMap<>();
+    // Package-private (not private): MqttGatewayAPITestTest asserts on this directly (commit-on-success-only).
+    final Map<MqttClient, List<String>> gatewayDeviceNames = new ConcurrentHashMap<>();
 
 
     @PostConstruct
@@ -296,7 +299,8 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
      * Fails fast on an unsupported STAGGERED configuration, instead of silently diverging from it.
      * {@link #scheduleGatewayTelemetry} always publishes a whole-gateway batch (needs {@code
      * gateway.batch=true}) and never injects an alarm (needs {@code test.alarms.aps <= 0}). Deliberately
-     * narrow: STAGGERED currently supports exactly the combination case-a runs.
+     * narrow: STAGGERED currently supports exactly the persistent gateway-batch, no-alarms scenario this
+     * mode targets.
      */
     void checkStaggeredSupported() {
         if (!gatewayBatchEnabled) {
@@ -405,10 +409,19 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         if (rpcEnabled) {
             initRpcReceiver();
         }
+        // Same THROUGHPUT registration AbstractAPITest.runApiTests(int) does for PHASED — otherwise
+        // STAGGERED's per-gateway telemetry timers (which feed the same totalSuccess/totalFailed counters)
+        // have no periodic reporter block at all.
+        if (testMessagesPerSecond > 0) {
+            statsReporter().register(StatsBlock.THROUGHPUT,
+                    new ThroughputStats(totalSuccessPublishedCount, totalFailedPublishedCount)::summaryAndReset);
+        }
         statsReporter().start();
+        AtomicBoolean rampCompleted = new AtomicBoolean(false);
         onboardingEngine = new StaggeredOnboardingEngine(
                 gatewayLifecycle(), onboardMaxConcurrent, onboardFirstJitterSec, /*schedulerThreads*/ 2, seed);
         onboardingEngine.start((onboarded, failed) -> {
+            rampCompleted.set(true);
             log.info("STAGGERED gateway ramp complete: {} onboarded, {} failed — starting RPC sender", onboarded, failed);
             if (rpcSenderEnabled) {
                 startRpcBurstSender();   // existing method, unchanged: full device list
@@ -417,6 +430,12 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
         try {
             Thread.sleep(testDurationInSec * 1000L);
         } finally {
+            if (!rampCompleted.get()) {
+                log.warn("STAGGERED: test.duration ({}s) elapsed before the onboarding ramp completed — "
+                                + "not every gateway may have onboarded, and the RPC sender (if enabled) never started. "
+                                + "Consider raising DURATION_IN_SECONDS or lowering ONBOARD_MAX_CONCURRENT/ONBOARD_FIRST_JITTER_SEC.",
+                        testDurationInSec);
+            }
             for (ScheduledFuture<?> timer : gatewayTelemetryTimers) {
                 timer.cancel(false);
             }
@@ -474,13 +493,8 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
      * subscribe+reconnect wiring {@link #attachClientsToRpc} performs for PHASED's bulk attach — in that
      * order (connect -> announce -> subscribe), per the {@link EntityLifecycle#onboard} contract.
      * Synchronous: throws on any failure so the engine counts this gateway as failed rather than
-     * onboarded.
-     * <p>Nothing is registered into the shared {@code mqttClients}/{@code deviceClients}/
-     * {@code gatewayDeviceNames}/{@code clientNames} collections — which {@link #startRpcBurstSender()},
-     * the telemetry scheduler, and reconnect recovery all read from wholesale — until the ENTIRE sequence
-     * below has succeeded. A gateway that fails partway (e.g. its subscribe throws after announce
-     * succeeded) is closed and left out of every shared collection entirely, so a partial onboarding can
-     * never leak un-announced/un-subscribed devices into the RPC-outcome measurement.
+     * onboarded. The connect step is isolated here; everything after it (the part with a commit-on-success
+     * invariant to preserve) lives in {@link #onboardConnectedGateway}.
      */
     private void connectAnnounceSubscribeAndSchedule(int gwIdx) throws Exception {
         int localIdx = gwIdx - gatewayStartIdx;
@@ -489,6 +503,23 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
 
         // 1) connect (persistent; createClient() applies autoReconnect() same as every other gateway client)
         MqttClient client = initClientBlocking(gatewayName);
+        onboardConnectedGateway(gwIdx, client, gatewayName, deviceNames);
+    }
+
+    /**
+     * Everything after "the client is already connected": announce -> subscribe -> commit-on-success ->
+     * schedule telemetry. Split out of {@link #connectAnnounceSubscribeAndSchedule} purely so the
+     * commit-on-success invariant is unit-testable with a mocked, already-"connected" {@link MqttClient}
+     * (no real broker needed) — the production call site above still invokes this immediately after a
+     * real connect, so behavior is unchanged.
+     * <p>Nothing is registered into the shared {@code mqttClients}/{@code deviceClients}/
+     * {@code gatewayDeviceNames}/{@code clientNames} collections — which {@link #startRpcBurstSender()},
+     * the telemetry scheduler, and reconnect recovery all read from wholesale — until the ENTIRE sequence
+     * below has succeeded. A gateway that fails partway (e.g. its subscribe throws after announce
+     * succeeded) is closed and left out of every shared collection entirely, so a partial onboarding can
+     * never leak un-announced/un-subscribed devices into the RPC-outcome measurement.
+     */
+    void onboardConnectedGateway(int gwIdx, MqttClient client, String gatewayName, List<String> deviceNames) throws Exception {
         try {
             // 2) announce sub-devices through the same reliable (RPC on) / legacy QoS-0 (RPC off) path
             // warm-up uses. No timeout here: an announce under retry can legitimately take longer than

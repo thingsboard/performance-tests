@@ -29,6 +29,8 @@ import org.thingsboard.tools.service.gateway.EphemeralSchedule;
 import org.thingsboard.tools.service.msg.Msg;
 import org.thingsboard.tools.service.mqtt.DeviceClient;
 import org.thingsboard.tools.service.shared.BaseMqttAPITest;
+import org.thingsboard.tools.service.shared.StatsBlock;
+import org.thingsboard.tools.service.shared.ThroughputStats;
 import org.thingsboard.tools.service.shared.onboarding.EntityLifecycle;
 import org.thingsboard.tools.service.shared.onboarding.StaggeredOnboardingEngine;
 
@@ -42,6 +44,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -102,18 +105,36 @@ public class MqttDeviceAPITest extends BaseMqttAPITest implements DeviceAPITest 
     /**
      * STAGGERED: ramp devices in through the engine (each onboard connects and schedules its own
      * telemetry timer — see {@link #connectAndScheduleDevice(int)}), then hold for the test duration.
-     * Direct-device mode has no RPC subscribe step (case-a is gateway-based) — STAGGERED here is
+     * Direct-device mode has no RPC subscribe step (RPC is a gateway-mode concept) — STAGGERED here is
      * telemetry-only, matching what {@link MqttDeviceAPITest} already supports in PHASED.
      */
     private void runStaggeredApiTests() throws InterruptedException {
+        // Register the THROUGHPUT stats source BEFORE starting the reporter (same order + same block
+        // AbstractAPITest.runApiTests(int) uses for PHASED) — StatsReporter.start() snapshots
+        // sources.isEmpty() once at call time and never reschedules if it was empty then, so without this
+        // the reporter would log "no active sources" and stay inert for the whole run (direct-device
+        // STAGGERED registers nothing else).
+        if (testMessagesPerSecond > 0) {
+            statsReporter().register(StatsBlock.THROUGHPUT,
+                    new ThroughputStats(totalSuccessPublishedCount, totalFailedPublishedCount)::summaryAndReset);
+        }
         statsReporter().start();
+        AtomicBoolean rampCompleted = new AtomicBoolean(false);
         onboardingEngine = new StaggeredOnboardingEngine(
                 deviceLifecycle(), onboardMaxConcurrent, onboardFirstJitterSec, /*schedulerThreads*/ 2, seed);
-        onboardingEngine.start((onboarded, failed) ->
-                log.info("STAGGERED device ramp complete: {} onboarded, {} failed", onboarded, failed));
+        onboardingEngine.start((onboarded, failed) -> {
+            rampCompleted.set(true);
+            log.info("STAGGERED device ramp complete: {} onboarded, {} failed", onboarded, failed);
+        });
         try {
             Thread.sleep(testDurationInSec * 1000L);
         } finally {
+            if (!rampCompleted.get()) {
+                log.warn("STAGGERED: test.duration ({}s) elapsed before the onboarding ramp completed — "
+                                + "not every device may have onboarded or started publishing telemetry. "
+                                + "Consider raising DURATION_IN_SECONDS or lowering ONBOARD_MAX_CONCURRENT/ONBOARD_FIRST_JITTER_SEC.",
+                        testDurationInSec);
+            }
             for (ScheduledFuture<?> timer : deviceTelemetryTimers) {
                 timer.cancel(false);
             }
@@ -239,7 +260,7 @@ public class MqttDeviceAPITest extends BaseMqttAPITest implements DeviceAPITest 
      * Fails fast on an unsupported STAGGERED configuration, instead of silently diverging from it.
      * {@link #scheduleDeviceTelemetry} always publishes one plain per-device message and never injects an
      * alarm (needs {@code test.alarms.aps <= 0}). Deliberately narrow: STAGGERED currently supports
-     * exactly the no-alarms combination case-a runs.
+     * exactly the no-alarms scenario this mode targets.
      */
     void checkStaggeredSupported() {
         if (alarmsPerSecond > 0) {
