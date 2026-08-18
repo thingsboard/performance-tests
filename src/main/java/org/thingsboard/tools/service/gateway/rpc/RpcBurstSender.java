@@ -68,8 +68,6 @@ public class RpcBurstSender {
         return (int) (tickNumber % numChunks);
     }
 
-    private static final int MAX_FIRE_THREADS = 16;
-
     private final RestClient restClient;
     private final String restUrl;
     private final List<String> deviceNames;
@@ -80,6 +78,7 @@ public class RpcBurstSender {
     private final int intervalSec;
     private final int startDelaySec;
     private final Mode mode;
+    private final int maxFireThreads;
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private ScheduledExecutorService scheduler;
@@ -94,7 +93,7 @@ public class RpcBurstSender {
 
     public RpcBurstSender(RestClient restClient, String restUrl, List<String> deviceNames,
                           JsonNode commandTemplate, String queue, int timeoutMs, int chunkSize,
-                          int intervalSec, int startDelaySec, Mode mode) {
+                          int intervalSec, int startDelaySec, Mode mode, int maxFireThreads) {
         this.restClient = restClient;
         this.restUrl = restUrl;
         this.deviceNames = deviceNames;
@@ -105,6 +104,7 @@ public class RpcBurstSender {
         this.intervalSec = intervalSec;
         this.startDelaySec = startDelaySec;
         this.mode = mode;
+        this.maxFireThreads = maxFireThreads;
     }
 
     public void start() {
@@ -120,8 +120,10 @@ public class RpcBurstSender {
         ruleEngineUrl = restUrl + "/api/rule-engine/USER/" + userId + "/" + queue + "/" + timeoutMs;
         chunks = chunk(deviceNames, chunkSize);
 
-        int fireThreads = Math.min(Math.max(1, chunks.size()), MAX_FIRE_THREADS);
+        int fireThreads = Math.min(Math.max(1, chunks.size()), Math.max(1, maxFireThreads));
         firePool = Executors.newFixedThreadPool(fireThreads, ThingsBoardThreadFactory.forName("rpc-burst-fire"));
+        log.info("RPC sender fire pool: {} threads (cap {}, chunks {}) — each post blocks a thread until the rule engine replies, so this bounds in-flight submissions",
+                fireThreads, maxFireThreads, chunks.size());
         scheduler = Executors.newSingleThreadScheduledExecutor(ThingsBoardThreadFactory.forName("rpc-burst-sched"));
 
         long intervalMs = intervalSec * 1000L;

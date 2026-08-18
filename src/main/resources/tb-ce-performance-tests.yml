@@ -199,6 +199,7 @@ gateway:
       chunkSize: "${GATEWAY_RPC_SENDER_CHUNK_SIZE:500}" # devices per rule-engine REST call (TBEL result-size bound)
       queue: "${GATEWAY_RPC_SENDER_QUEUE:RpcCalls}" # rule-engine queue name in the URL
       timeoutMs: "${GATEWAY_RPC_SENDER_TIMEOUT_MS:10000}" # rule-engine call timeout; MUST equal the rule chain's hardcoded TIMEOUT_MS
+      fireThreads: "${GATEWAY_RPC_SENDER_FIRE_THREADS:48}" # cap on concurrent chunk posts. Each post blocks its thread until the rule engine replies, so this bounds in-flight submissions: sustained chunk rate is at most fireThreads/postLatency. Raise it if the sender logs that it is falling behind its tick
 
 # Onboarding strategy for the persistent gateway/device modes.
 onboard:
