@@ -27,16 +27,20 @@ import org.thingsboard.server.common.data.User;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
@@ -79,10 +83,13 @@ public class RpcBurstSender {
     private final int startDelaySec;
     private final Mode mode;
     private final int maxFireThreads;
+    private final int maxInFlight;
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private ScheduledExecutorService scheduler;
     private ExecutorService firePool;
+    private HttpClient httpClient;
+    private Semaphore inFlight;
     private ScheduledFuture<?> burstFuture;
     private List<List<String>> chunks;
     private String ruleEngineUrl;
@@ -90,10 +97,14 @@ public class RpcBurstSender {
     private long spreadTickMs;  // SPREAD inter-chunk period, set in start()
     private final AtomicLong burstsFired = new AtomicLong();
     private final AtomicLong devicesDispatched = new AtomicLong();
+    private final AtomicLong postsOk = new AtomicLong();
+    private final AtomicLong postsFailed = new AtomicLong();
+    private final AtomicLong postsDropped = new AtomicLong();
 
     public RpcBurstSender(RestClient restClient, String restUrl, List<String> deviceNames,
                           JsonNode commandTemplate, String queue, int timeoutMs, int chunkSize,
-                          int intervalSec, int startDelaySec, Mode mode, int maxFireThreads) {
+                          int intervalSec, int startDelaySec, Mode mode, int maxFireThreads,
+                          int maxInFlight) {
         this.restClient = restClient;
         this.restUrl = restUrl;
         this.deviceNames = deviceNames;
@@ -105,6 +116,7 @@ public class RpcBurstSender {
         this.startDelaySec = startDelaySec;
         this.mode = mode;
         this.maxFireThreads = maxFireThreads;
+        this.maxInFlight = maxInFlight;
     }
 
     public void start() {
@@ -122,8 +134,17 @@ public class RpcBurstSender {
 
         int fireThreads = Math.min(Math.max(1, chunks.size()), Math.max(1, maxFireThreads));
         firePool = Executors.newFixedThreadPool(fireThreads, ThingsBoardThreadFactory.forName("rpc-burst-fire"));
-        log.info("RPC sender fire pool: {} threads (cap {}, chunks {}) — each post blocks a thread until the rule engine replies, so this bounds in-flight submissions",
-                fireThreads, maxFireThreads, chunks.size());
+        // Submissions are ASYNCHRONOUS: the scheduler hands a chunk to the HTTP client and returns, so the
+        // cadence is never coupled to how long the rule engine takes to reply. The reply is still consumed —
+        // its status feeds ok/failed accounting — it just no longer holds a thread. `inFlight` bounds
+        // outstanding requests so a slow server cannot grow this pod without limit.
+        inFlight = new Semaphore(Math.max(1, maxInFlight));
+        httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(10))
+                .executor(firePool)
+                .build();
+        log.info("RPC sender: async submissions, callback pool {} threads, max in-flight {} ({} chunks of {})",
+                fireThreads, maxInFlight, chunks.size(), chunkSize);
         scheduler = Executors.newSingleThreadScheduledExecutor(ThingsBoardThreadFactory.forName("rpc-burst-sched"));
 
         long intervalMs = intervalSec * 1000L;
@@ -150,64 +171,84 @@ public class RpcBurstSender {
         }
     }
 
+    /**
+     * Submit one chunk without waiting for the reply. The reply is still consumed — its status drives the
+     * ok/failed counters and the slow-post warning — but on the HTTP client's callback thread, so neither
+     * the scheduler nor the caller is held for the round trip. Returns immediately.
+     *
+     * <p>If {@code maxInFlight} outstanding requests are already pending the chunk is DROPPED rather than
+     * queued or blocked on: silently blocking here would re-couple the offered rate to server latency, which
+     * is exactly what this sender must not do. Drops are counted and logged so a shortfall is visible.
+     */
+    private void postChunkAsync(List<String> deviceChunk, String label, long slowThresholdMs) {
+        if (!inFlight.tryAcquire()) {
+            postsDropped.incrementAndGet();
+            log.warn("RPC {} chunk DROPPED ({} devices): {} requests already in flight — the server is not keeping up with the offered rate",
+                    label, deviceChunk.size(), maxInFlight);
+            return;
+        }
+        long startedAt = System.currentTimeMillis();
+        HttpRequest request;
+        try {
+            request = HttpRequest.newBuilder(URI.create(ruleEngineUrl))
+                    .timeout(Duration.ofMillis(timeoutMs))
+                    .header("Content-Type", "application/json")
+                    .header("X-Authorization", "Bearer " + restClient.getToken())
+                    .POST(HttpRequest.BodyPublishers.ofString(
+                            buildBody(MAPPER, commandTemplate, deviceChunk).toString()))
+                    .build();
+        } catch (Exception e) {
+            inFlight.release();
+            postsFailed.incrementAndGet();
+            log.warn("RPC {} chunk could not be built ({} devices): {}", label, deviceChunk.size(), e.getMessage());
+            return;
+        }
+        httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding())
+                .whenComplete((response, error) -> {
+                    inFlight.release();
+                    long elapsed = System.currentTimeMillis() - startedAt;
+                    if (error != null) {
+                        postsFailed.incrementAndGet();
+                        log.warn("RPC {} chunk failed ({} devices) after {}ms: {}", label, deviceChunk.size(), elapsed, error.getMessage());
+                        return;
+                    }
+                    int status = response.statusCode();
+                    if (status >= 200 && status < 300) {
+                        postsOk.incrementAndGet();
+                        recordDispatched(deviceChunk.size()); // count dispatched only on a successful post (D4)
+                    } else {
+                        postsFailed.incrementAndGet();
+                        log.warn("RPC {} chunk rejected ({} devices) after {}ms: HTTP {}", label, deviceChunk.size(), elapsed, status);
+                    }
+                    if (elapsed > slowThresholdMs) {
+                        log.warn("RPC {} chunk reply took {}ms > {}ms — the rule engine is slow to answer (submission rate is unaffected)",
+                                label, elapsed, slowThresholdMs);
+                    }
+                });
+    }
+
     private void fireBurst() {
         recordBurstFired();
-        long startedAt = System.currentTimeMillis();
-        AtomicInteger ok = new AtomicInteger();
-        AtomicInteger failed = new AtomicInteger();
-        List<Future<?>> futures = new ArrayList<>();
         for (List<String> deviceChunk : chunks) {
-            futures.add(firePool.submit(() -> {
-                try {
-                    restClient.getRestTemplate().postForEntity(ruleEngineUrl, buildBody(MAPPER, commandTemplate, deviceChunk), String.class);
-                    ok.incrementAndGet();
-                    recordDispatched(deviceChunk.size()); // count dispatched only after a successful post (D4)
-                } catch (Exception e) {
-                    failed.incrementAndGet();
-                    log.warn("RPC burst chunk failed ({} devices): {}", deviceChunk.size(), e.getMessage());
-                }
-            }));
+            postChunkAsync(deviceChunk, "burst", intervalSec * 1000L);
         }
-        for (Future<?> f : futures) {
-            try {
-                f.get(timeoutMs + 5000L, TimeUnit.MILLISECONDS);
-            } catch (Exception e) {
-                log.warn("RPC burst chunk did not complete in time", e);
-            }
-        }
-        long elapsed = System.currentTimeMillis() - startedAt;
-        if (elapsed > intervalSec * 1000L) {
-            log.warn("RPC burst took {}ms, exceeding the {}s interval — burst cadence will slip", elapsed, intervalSec);
-        }
-        log.info("RPC burst: devices={}, chunks ok={}, failed={}, elapsed={}ms",
-                deviceNames.size(), ok.get(), failed.get(), elapsed);
+        log.info("RPC burst {}: {} chunks submitted ({} devices); ok={} failed={} dropped={} so far",
+                burstsFired.get(), chunks.size(), deviceNames.size(), postsOk.get(), postsFailed.get(), postsDropped.get());
     }
 
     /**
      * SPREAD mode: fire ONE chunk per tick, rotating through the chunk list so each chunk is sent once
-     * per sweep (= one interval), staggered rather than all at once. Posts are async (firePool) so a slow
-     * REST call never delays the next tick; a full sweep is counted as one "burst" for the stats.
+     * per sweep (= one interval), staggered rather than all at once.
      */
     private void fireNextSpreadChunk() {
         int numChunks = chunks.size();
         List<String> deviceChunk = chunks.get(chunkIndexForTick(spreadTick, numChunks));
-        firePool.submit(() -> {
-            long startedAt = System.currentTimeMillis();
-            try {
-                restClient.getRestTemplate().postForEntity(ruleEngineUrl, buildBody(MAPPER, commandTemplate, deviceChunk), String.class);
-                recordDispatched(deviceChunk.size()); // count dispatched only after a successful post (D4)
-                long elapsed = System.currentTimeMillis() - startedAt;
-                if (elapsed > spreadTickMs) {
-                    log.warn("RPC spread chunk post took {}ms > {}ms tick — drip falling behind", elapsed, spreadTickMs);
-                }
-            } catch (Exception e) {
-                log.warn("RPC spread chunk failed ({} devices): {}", deviceChunk.size(), e.getMessage());
-            }
-        });
+        postChunkAsync(deviceChunk, "spread", spreadTickMs);
         spreadTick++;
         if (chunkIndexForTick(spreadTick, numChunks) == 0) { // wrapped: a full sweep of all chunks = one interval
             recordBurstFired();
-            log.info("RPC spread: sweep {} dispatched ({} device-RPCs total so far)", burstsFired.get(), devicesDispatched.get());
+            log.info("RPC spread: sweep {} dispatched ({} device-RPCs total; ok={} failed={} dropped={})",
+                    burstsFired.get(), devicesDispatched.get(), postsOk.get(), postsFailed.get(), postsDropped.get());
         }
     }
 
@@ -222,18 +263,30 @@ public class RpcBurstSender {
     }
 
     String dispatchSummary() {
-        return String.format("RPC burst sender stopped: %d bursts fired, %d device-RPCs dispatched",
-                burstsFired.get(), devicesDispatched.get());
+        return String.format("RPC burst sender stopped: %d bursts fired, %d device-RPCs dispatched (posts ok=%d failed=%d dropped=%d)",
+                burstsFired.get(), devicesDispatched.get(), postsOk.get(), postsFailed.get(), postsDropped.get());
     }
 
     public void stop() {
-        log.info(dispatchSummary());
+        // Stop scheduling first, then give outstanding replies a moment to land so the summary counts them.
         if (burstFuture != null) {
             burstFuture.cancel(true);
         }
         if (scheduler != null) {
             scheduler.shutdownNow();
         }
+        if (inFlight != null) {
+            int outstanding = maxInFlight - inFlight.availablePermits();
+            if (outstanding > 0) {
+                log.info("RPC sender: waiting up to {}ms for {} in-flight posts to complete", timeoutMs, outstanding);
+                try {
+                    inFlight.tryAcquire(maxInFlight, timeoutMs, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+        log.info(dispatchSummary());
         if (firePool != null) {
             firePool.shutdownNow();
         }

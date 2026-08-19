@@ -101,7 +101,7 @@ class RpcBurstSenderTest {
     void dispatchSummaryReportsCumulativeBurstsAndDevices() {
         RpcBurstSender sender = new RpcBurstSender(
                 null, null, List.of("d1", "d2"), mapper.createObjectNode(),
-                "RpcCalls", 10000, 500, 60, 0, RpcBurstSender.Mode.BURST, 48);
+                "RpcCalls", 10000, 500, 60, 0, RpcBurstSender.Mode.BURST, 48, 512);
         sender.recordBurstFired();
         sender.recordDispatched(500);
         sender.recordBurstFired();

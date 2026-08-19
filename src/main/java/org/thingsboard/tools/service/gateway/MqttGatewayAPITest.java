@@ -137,6 +137,8 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
     String rpcSenderMode;
     @Value("${gateway.rpc.sender.fireThreads:48}")
     int rpcSenderFireThreads;
+    @Value("${gateway.rpc.sender.maxInFlight:512}")
+    int rpcSenderMaxInFlight;
     @Value("${rest.url}")
     String restUrl;
 
@@ -651,7 +653,7 @@ public class MqttGatewayAPITest extends BaseMqttAPITest implements GatewayAPITes
                 restClientService.getRestClient(), restUrl, deviceNames, template,
                 rpcSenderQueue, rpcSenderTimeoutMs, rpcSenderChunkSize,
                 rpcSenderIntervalSec, rpcSenderStartDelaySec, RpcBurstSender.Mode.fromConfig(rpcSenderMode),
-                rpcSenderFireThreads);
+                rpcSenderFireThreads, rpcSenderMaxInFlight);
         rpcBurstSender.start();
     }
 
