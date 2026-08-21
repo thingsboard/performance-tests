@@ -113,6 +113,11 @@ All configuration is driven by environment variables mapped in `src/main/resourc
 | `GATEWAY_RPC_SENDER_CHUNK_SIZE` | `500` | Devices per rule-engine REST call (under the TBEL 300 KB result limit) |
 | `GATEWAY_RPC_SENDER_QUEUE` | `RpcCalls` | Rule-engine queue name in the call URL |
 | `GATEWAY_RPC_SENDER_TIMEOUT_MS` | `10000` | Rule-engine call timeout; **must equal the rule chain's hardcoded `TIMEOUT_MS`** (chain derives `sendTs = expirationTime − timeout`) |
+| `GATEWAY_RPC_SENDER_FIRE_THREADS` | `48` | Size of the sender's HTTP-client callback pool (reply handling + accounting). Chunk posts are submitted asynchronously, so this does **not** bound the offered rate — it only sizes reply/callback processing |
+| `GATEWAY_RPC_SENDER_MAX_IN_FLIGHT` | `512` | Cap on outstanding (unanswered) chunk posts, so a slow server cannot grow this pod's memory without bound. Beyond it, chunks are **dropped and counted** rather than blocking the cadence — a non-zero `dropped` count means the server could not absorb the offered rate |
+| `ONBOARD_MODE` | `PHASED` | Onboarding strategy for persistent gateway/device modes: `PHASED` (default — today's bulk warm-up) or `STAGGERED` (paced ramp, see below) |
+| `ONBOARD_MAX_CONCURRENT` | `200` | `STAGGERED` only: max entities onboarding at once (semaphore-bounded) |
+| `ONBOARD_FIRST_JITTER_SEC` | `60` | `STAGGERED` only: each entity's first onboard is spread uniformly over `[0, this)` seconds |
 
 ## Architecture
 
@@ -135,6 +140,22 @@ Concrete executors:
 - `LwM2MClientBaseTestExecutor` → `Lwm2mDeviceAPITest`
 
 The active gateway bean is selected by mutually-exclusive `@ConditionalOnExpression` on `gateway.batch` × `gateway.ephemeral.enabled`. Batch publishing delegates the per-publish decision to a `nextPublishTask` hook on `BaseMqttAPITest`; ephemeral mode drives its own per-gateway cycle scheduler (timing math in `EphemeralSchedule`) instead of the fixed-rate metronome.
+
+**Onboarding strategy (`ONBOARD_MODE`).** How the persistent gateway/device fleet is brought up before
+the load window. `PHASED` (default) is today's behaviour — bulk warm-up connects the whole fleet up
+front. `STAGGERED` paces the ramp via a shared `StaggeredOnboardingEngine` (package
+`service/shared/onboarding/`, driven through an `EntityLifecycle` seam so gateway and direct-device
+modes reuse it): each entity's first onboard is scheduled over `[0, ONBOARD_FIRST_JITTER_SEC)` and at
+most `ONBOARD_MAX_CONCURRENT` onboards run at once, bounded by a `Semaphore` acquired with the same
+non-blocking `tryAcquire`+reschedule discipline as the ephemeral engine (a timer thread never blocks on
+a permit). Ramp-complete fires only when every entity reaches a terminal state (onboarded or failed);
+per-entity subscribe/announce log spam is replaced by a periodic `STAGGERED onboarding progress` line.
+In gateway mode the RPC burst sender (if enabled) starts **only at ramp-complete**, built from the full
+device range — never a partial early list. If `DURATION_IN_SECONDS` elapses before the ramp finishes,
+shutdown logs a `WARN` naming the cause. `STAGGERED` is currently gated (fail-fast
+`checkStaggeredSupported`) to `ALARMS_PER_SECOND=0`, and in gateway mode additionally to
+`GATEWAY_BATCH=true`; otherwise use `PHASED`. There is no per-interval `CONNECTIONS` gauge under
+`STAGGERED` (the fixed-fleet gauge doesn't fit a paced ramp — deliberate scope boundary).
 
 Ephemeral cycle clients never auto-reconnect (the persistent fleet does): every client is created via the shared `BaseMqttAPITest.createClient`, which sets `config.setReconnect(autoReconnect())` — a policy hook that defaults to `true` (persistent gateways/devices re-subscribe on reconnect via `setReconnectAction`) and is overridden to `false` in `MqttGatewayEphemeralAPITest`. Without this, a server-side close mid-cycle (e.g. a `tb-mqtt-transport` roll) races with `finishCycle`'s `disconnect()`: netty-mqtt schedules a reconnect that fires after the disconnect and opens an untracked orphan session, so telemetry connections pile up above baseline for the whole roll. With reconnect off, a dropped cycle is simply counted as a failed publish and the gateway publishes again on its next scheduled cycle (matching the QoS-0 periodic-telemetry model), so connections return to baseline promptly. Consequently `MQTT_RECONNECT_MIN/MAX_DELAY_SEC` has no effect in ephemeral mode.
 
@@ -297,7 +318,12 @@ alignment — a steady, sustained per-device cadence rather than a synchronized 
 `GATEWAY_RPC_SENDER_TEMPLATE` (or a built-in neutral default when empty). It runs on its own dedicated
 executors — isolated from the MQTT event loop and RPC handler executor — so it never starves
 inbound-RPC processing. The chain derives the send-timestamp from the call timeout, so
-`GATEWAY_RPC_SENDER_TIMEOUT_MS` must match the chain's hardcoded `TIMEOUT_MS`.
+`GATEWAY_RPC_SENDER_TIMEOUT_MS` must match the chain's hardcoded `TIMEOUT_MS`. Chunk posts are
+submitted **asynchronously** (the callback pool is `GATEWAY_RPC_SENDER_FIRE_THREADS`), so the offered
+rate is independent of reply latency and a slow rule engine doesn't stall the cadence. Outstanding
+(unanswered) posts are capped at `GATEWAY_RPC_SENDER_MAX_IN_FLIGHT`; beyond the cap a chunk is
+**dropped and counted** rather than blocking — a non-zero `dropped` count is the signal that the server
+couldn't absorb the offered rate.
 
 **Body contract (tool ↔ rule chain):** the sender emits
 `{method, params, devices: [{name, rpcId}, …]}`, where `rpcId` is a fresh `UUID.randomUUID()` per
